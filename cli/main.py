@@ -93,7 +93,7 @@ from core import (
 try:
     from MindForge import __version__
 except ImportError:
-    __version__ = "5.5.9"
+    __version__ = "5.5.10"
 
 # 懒加载 modules：仅在对应命令执行时才导入，大幅加速 CLI 启动
 _modules_cache = {}
@@ -2647,11 +2647,67 @@ def main(argv=None):
 
     p_vacuum = sub.add_parser("vacuum", help="重建 FTS 索引 + 数据库优化（v5.0.6 新增）")
 
+    p_rekey = sub.add_parser(
+        "rekey",
+        help="更换加密密钥 / 升级 KDF 参数（v5.6.0 新增）",
+        description="安全更换加密密码或升级 PBKDF2 迭代次数（60k→600k）。所有加密记忆会被重加密，操作在事务中执行，失败自动回滚。",
+    )
+    p_rekey.add_argument("--old-password", help="旧密码（不传则交互输入）")
+    p_rekey.add_argument("--new-password", help="新密码（不传则交互输入）")
+    p_rekey.add_argument("--iterations", type=int, default=None,
+                         help="新的 PBKDF2 迭代次数（默认使用当前推荐值 600,000）")
+    p_rekey.add_argument("--upgrade-only", action="store_true",
+                         help="仅升级 KDF 参数，密码不变（new-password 可省略）")
+    p_rekey.add_argument("--yes", action="store_true",
+                         help="跳过确认提示（脚本模式用）")
+
+    p_backup = sub.add_parser(
+        "backup",
+        help="创建记忆库完整备份（v5.6.0 新增）",
+        description="打包数据库、密钥文件和配置为单个 ZIP 归档，用于灾备恢复或跨机器迁移。与 export-md 不同，备份是二进制级完整快照。",
+        parents=[json_parser],
+    )
+    p_backup.add_argument("--output", "-o", help="输出 ZIP 路径（默认在 data/ 目录生成带时间戳的文件名）")
+
+    p_backup_restore = sub.add_parser(
+        "backup-restore",
+        help="从备份文件恢复（v5.6.0 新增）",
+        description="从备份 ZIP 恢复数据库和密钥文件。注意：会覆盖目标位置的现有文件。",
+        parents=[json_parser],
+    )
+    p_backup_restore.add_argument("backup_file", help="备份 ZIP 文件路径")
+    p_backup_restore.add_argument("--db-path", help="恢复后的数据库路径（默认使用当前配置）")
+    p_backup_restore.add_argument("--key-file", help="恢复后的密钥文件路径（加密模式必需）")
+    p_backup_restore.add_argument("--force", "-f", action="store_true",
+                                  help="覆盖已存在的文件（危险操作）")
+    p_backup_restore.add_argument("--yes", action="store_true",
+                                  help="跳过确认提示（脚本模式用）")
+
     p_purge_trash = sub.add_parser("purge-trash", help="清空回收站（v5.0.6 新增）")
     p_purge_trash.add_argument("--force", action="store_true",
                                help="确认永久删除（不加则只预览）")
     p_purge_trash.add_argument("--agent", default="cli", help="Agent ID")
     p_purge_trash.add_argument("--session", default="cli", help="会话 ID")
+
+    p_gc = sub.add_parser(
+        "gc",
+        help="记忆衰减/垃圾回收（v5.6.0 新增）",
+        description="执行记忆生命周期管理：计算衰减分数 → 归档低强度记忆 → 清除过期归档。"
+                    "真实记忆系统会忘——长期不召回的记忆降权/归档，防止旧上下文污染新决策。",
+        parents=[json_parser],
+    )
+    p_gc.add_argument("--dry-run", action="store_true",
+                      help="只预览不执行（显示将被归档/删除的记忆数）")
+    p_gc.add_argument("--status", action="store_true",
+                      help="仅查看当前衰减统计，不执行 GC")
+    p_gc.add_argument("--skip-purge", action="store_true",
+                      help="跳过永久删除步骤（保守模式，只归档不删除）")
+    p_gc.add_argument("--policy", choices=["conservative", "balanced", "aggressive"],
+                      default="balanced", help="衰减策略（默认 balanced）")
+    p_gc.add_argument("--archive-threshold", type=float,
+                      help="归档强度阈值（覆盖策略默认值，0.0-1.0）")
+    p_gc.add_argument("--purge-after-days", type=int,
+                      help="归档保留天数（覆盖策略默认值）")
 
     p_analyze = sub.add_parser("analyze", help="记忆深度分析（v5.0.8 新增）")
 
@@ -3327,9 +3383,6 @@ def main(argv=None):
     p_schedule.add_argument("--schedule-id", "-s", help="复习计划 ID（review 时必填）")
     p_schedule.add_argument("--interval", type=float, default=1.0, help="复习间隔天数（create 时使用）")
     p_schedule.add_argument("--limit", "-n", type=int, default=20, help="数量限制")
-
-    p_backup = sub.add_parser("backup", help="备份数据")
-    p_backup.add_argument("--output", default="./data/backup", help="备份目录")
 
     p_export = sub.add_parser("export", help="导出记忆")
     p_export.add_argument("--output", "-o", default="./data/export.json", help="输出文件")
@@ -4871,6 +4924,9 @@ def _main_dispatch(args, parser=None):
         "rename-tag": cmd_rename_tag,
         "rename-cat": cmd_rename_cat,
         "config": cmd_config,
+        "rekey": cmd_rekey,
+        "backup": cmd_backup,
+        "restore": cmd_restore,
         "doctor": cmd_doctor,
         "find": cmd_find,
         "audit": cmd_audit,
@@ -4918,6 +4974,8 @@ def _main_dispatch(args, parser=None):
         "quality": cmd_quality,
         "similar": cmd_similar,
         "backup": cmd_backup,
+        "backup-restore": cmd_backup_restore,
+        "gc": cmd_gc,
         "export": cmd_export,
         "import": cmd_import,
         "compliance": cmd_compliance,
@@ -6009,6 +6067,272 @@ def cmd_config(args):
     return 0
 
 
+def cmd_rekey(args):
+    """更换加密密钥 / 升级 KDF 参数（v5.6.0 新增）"""
+    import getpass
+
+    # 检查是否启用加密
+    from ..core.encryption import get_key_params, PBKDF2_ITERATIONS_CURRENT
+
+    # 先拿到配置判断加密状态
+    config = _build_config(args)
+    if not config.encrypted:
+        print(c("❌ 加密未启用，无法执行 rekey", "red"))
+        return 1
+
+    # 检查密钥文件是否存在
+    key_params = get_key_params(config.key_file)
+    if key_params is None:
+        print(c("❌ 密钥文件不存在，请先初始化 MindForge", "red"))
+        return 1
+
+    # 显示当前状态
+    print(c(f"\n{COLORS['bold']}🔐 加密密钥更换 / KDF 参数升级{COLORS['reset']}", "cyan"))
+    print("=" * 55)
+    print(f"  当前 KDF 算法:    {key_params.algorithm}")
+    print(f"  当前迭代次数:    {key_params.iterations:,}")
+    is_current = key_params.iterations == PBKDF2_ITERATIONS_CURRENT
+    status = c("✅ 已是最新", "green") if is_current else c("⚠️  低于推荐值", "yellow")
+    print(f"  状态:            {status}")
+    print(f"  推荐迭代次数:    {PBKDF2_ITERATIONS_CURRENT:,} (OWASP 2023)")
+    print()
+
+    # 获取旧密码
+    old_password = args.old_password
+    if not old_password:
+        old_password = getpass.getpass("请输入旧密码: ")
+    if not old_password:
+        print(c("❌ 旧密码不能为空", "red"))
+        return 1
+
+    # 获取新密码
+    if args.upgrade_only:
+        new_password = old_password
+        print(c("ℹ️  --upgrade-only 模式：密码不变，仅升级 KDF 参数", "cyan"))
+    else:
+        new_password = args.new_password
+        if not new_password:
+            new_password = getpass.getpass("请输入新密码: ")
+            confirm = getpass.getpass("请再次输入新密码: ")
+            if new_password != confirm:
+                print(c("❌ 两次输入的新密码不一致", "red"))
+                return 1
+        if not new_password:
+            print(c("❌ 新密码不能为空", "red"))
+            return 1
+
+    # 确认提示
+    if not args.yes:
+        target_iters = args.iterations or PBKDF2_ITERATIONS_CURRENT
+        print()
+        print(c("⚠️  此操作将：", "yellow"))
+        print(f"  1. 生成新的加密密钥（{target_iters:,} 次迭代）")
+        print(f"  2. 重加密所有加密记忆（事务保障，失败自动回滚）")
+        print(f"  3. 备份旧密钥文件到 .key.bak")
+        print()
+        print(c(f"{COLORS['bold']}建议操作前先备份数据库！{COLORS['reset']}", "yellow"))
+        try:
+            answer = input("确认继续? [y/N]: ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("\n已取消")
+            return 1
+        if answer not in ("y", "yes"):
+            print("已取消")
+            return 0
+
+    # 执行 rekey
+    print()
+    print(c("🔄 正在验证旧密码...", "cyan"))
+
+    # 通过环境变量传递密码给 _get_memory
+    import os
+    os.environ["MINDFORGE_PASSWORD"] = old_password
+
+    try:
+        cm = _get_memory(args)
+    except SystemExit:
+        print(c("❌ 旧密码验证失败", "red"))
+        return 1
+    except Exception as e:
+        print(c(f"❌ 旧密码验证失败：{e}", "red"))
+        return 1
+
+    try:
+        print(c("🔄 正在生成新密钥并重加密数据...", "cyan"))
+        result = cm.rekey(
+            old_password=old_password,
+            new_password=new_password,
+            new_iterations=args.iterations,
+        )
+        cm.close()
+    except Exception as e:
+        print(c(f"❌ rekey 失败：{e}", "red"))
+        print(c("密钥文件已从备份恢复，数据未受影响", "yellow"))
+        return 1
+
+    # 成功报告
+    print()
+    print(c(f"{COLORS['bold']}✅ rekey 完成！{COLORS['reset']}", "green"))
+    print("=" * 55)
+    print(f"  重加密记忆数:    {result['rekeyed_count']} 条")
+    print(f"  旧迭代次数:      {result['old_iterations']:,}")
+    print(f"  新迭代次数:      {result['new_iterations']:,}")
+    improvement = (
+        (result['new_iterations'] - result['old_iterations']) / result['old_iterations'] * 100
+        if result['old_iterations'] > 0 else 0
+    )
+    print(f"  安全提升:        +{improvement:.0f}%")
+    print(f"  密钥备份:        {result['backup_path']}")
+    print()
+    print(c("💡 建议：确认一切正常后可手动删除 .key.bak 备份文件", "cyan"))
+
+    return 0
+
+
+def cmd_backup(args):
+    """创建记忆库完整备份（v5.6.0 新增）"""
+    cm = _get_memory(args)
+
+    print(c(f"\n💾 创建记忆库备份...", "cyan", ))
+
+    try:
+        result = cm.backup(output_path=args.output)
+        cm.close()
+    except Exception as e:
+        print(c(f"❌ 备份失败：{e}", "red"))
+        return 1
+
+    if _json_mode:
+        _json_out({
+            "ok": True,
+            "path": result["path"],
+            "size_bytes": result["size_bytes"],
+            "size_mb": result["size_mb"],
+            "memory_count": result["memory_count"],
+            "encrypted": result["encrypted"],
+            "version": result["version"],
+        })
+        return 0
+
+    print()
+    print(c("✅ 备份完成！", "green"))
+    print("=" * 50)
+    print(f"  备份文件:    {result['path']}")
+    print(f"  文件大小:    {result['size_mb']} MB ({result['size_bytes']:,} bytes)")
+    print(f"  记忆数量:    {result['memory_count']} 条")
+    print(f"  加密状态:    {'开启 🔐' if result['encrypted'] else '未加密'}")
+    print(f"  程序版本:    v{result['version']}")
+    print()
+    print(c("💡 建议：将备份文件存储到离线/异地位置，确保灾备安全", "cyan"))
+
+    return 0
+
+
+def cmd_backup_restore(args):
+    """从备份文件恢复（v5.6.0 新增）"""
+    from ..core.mindforge import MindForge
+    from ..core.types import MemoryConfig
+
+    backup_file = Path(args.backup_file)
+    if not backup_file.exists():
+        print(c(f"❌ 备份文件不存在: {backup_file}", "red"))
+        return 1
+
+    # 确定目标路径（与 _get_memory 保持一致的默认值逻辑）
+    key_file_path = Path(args.key_file) if args.key_file else Path(args.db_path).parent / ".key"
+    db_path = args.db_path
+    key_file = args.key_file or str(key_file_path)
+
+    # 先读取备份信息用于显示
+    import zipfile
+    try:
+        with zipfile.ZipFile(backup_file, "r") as zf:
+            manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
+    except Exception as e:
+        print(c(f"❌ 无法读取备份文件：{e}", "red"))
+        return 1
+
+    # 显示备份信息
+    print(c("\n📦 备份文件信息", "cyan"))
+    print("=" * 50)
+    print(f"  文件路径:    {backup_file}")
+    print(f"  记忆数量:    {manifest.get('memory_count', '?')} 条")
+    print(f"  加密状态:    {'开启 🔐' if manifest.get('encrypted') else '未加密'}")
+    print(f"  程序版本:    v{manifest.get('mindforge_version', 'unknown')}")
+    print(f"  备份时间:    {manifest.get('created_at_iso', 'unknown')}")
+    print()
+    print(c("恢复目标：", "cyan"))
+    print(f"  数据库:      {db_path}")
+    if manifest.get("encrypted"):
+        print(f"  密钥文件:    {key_file}")
+    print()
+
+    # 警告：覆盖
+    import os as _os
+    target_db = Path(db_path)
+    target_key = Path(key_file) if manifest.get("encrypted") else None
+
+    if target_db.exists():
+        print(c("⚠️  目标数据库文件已存在，将被覆盖！", "yellow"))
+    if target_key and target_key.exists():
+        print(c("⚠️  目标密钥文件已存在，将被覆盖！", "yellow"))
+    if target_db.exists() or (target_key and target_key.exists()):
+        print()
+
+    # 确认提示
+    if not args.yes:
+        print(c("此操作将覆盖目标位置的现有数据，不可撤销！", "yellow"))
+        try:
+            answer = input("确认恢复? [输入 YES 继续]: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\n已取消")
+            return 1
+        if answer != "YES":
+            print("已取消")
+            return 0
+
+    # 执行恢复
+    print()
+    print(c("🔄 正在恢复...", "cyan"))
+
+    try:
+        result = MindForge.restore_backup(
+            str(backup_file),
+            db_path=db_path,
+            key_file=key_file if manifest.get("encrypted") else None,
+            force=True,
+        )
+    except Exception as e:
+        print(c(f"❌ 恢复失败：{e}", "red"))
+        return 1
+
+    if _json_mode:
+        _json_out({
+            "ok": True,
+            "restored_db": result["restored_db"],
+            "restored_key": result["restored_key"],
+            "memory_count": result["memory_count"],
+            "encrypted": result["encrypted"],
+            "backup_version": result["backup_version"],
+            "mindforge_version": result["mindforge_version"],
+        })
+        return 0
+
+    print()
+    print(c("✅ 恢复完成！", "green"))
+    print("=" * 50)
+    print(f"  数据库路径:    {result['restored_db']}")
+    if result["restored_key"]:
+        print(f"  密钥文件:      {result['restored_key']}")
+    print(f"  记忆数量:      {result['memory_count']} 条")
+    print(f"  加密状态:      {'开启 🔐' if result['encrypted'] else '未加密'}")
+    print(f"  备份版本:      v{result['mindforge_version']}")
+    print()
+    print(c("💡 建议：使用 'MindForge config' 或 'MindForge list' 验证恢复结果", "cyan"))
+
+    return 0
+
+
 def cmd_doctor(args):
     """全面诊断数据库（v5.1.8 新增）"""
     cm = _get_memory(args)
@@ -6139,6 +6463,131 @@ def cmd_find(args):
         if entry.tags:
             print(f"   标签: {', '.join('#' + t for t in entry.tags)}")
         print(f"   创建: {format_time(entry.created_at)} | 访问: {entry.access_count}")
+
+    cm.close()
+    return 0
+
+
+def cmd_gc(args):
+    """记忆衰减/垃圾回收（v5.6.0 新增）"""
+    from modules.memory_decay import MemoryDecayEngine, DecayConfig, DecayPolicy
+
+    cm = _get_memory(args)
+
+    policy_map = {
+        "conservative": DecayPolicy.CONSERVATIVE,
+        "balanced": DecayPolicy.BALANCED,
+        "aggressive": DecayPolicy.AGGRESSIVE,
+    }
+    policy = policy_map.get(args.policy, DecayPolicy.BALANCED)
+    config = DecayConfig.from_policy(policy)
+
+    # CLI 参数覆盖策略默认值
+    if args.archive_threshold is not None:
+        config.archive_threshold = args.archive_threshold
+    if args.purge_after_days is not None:
+        config.purge_after_days = args.purge_after_days
+
+    engine = MemoryDecayEngine(storage=cm._storage, config=config)
+
+    # --status: 只看统计
+    if args.status:
+        stats = engine.gc_stats()
+
+        if _json_mode:
+            _json_out(stats)
+            cm.close()
+            return 0
+
+        print(c("\n📊 记忆衰减统计", "cyan"))
+        print("=" * 50)
+        print(f"  策略:          {stats['policy']}")
+        print(f"  总记忆数:      {stats['total_memories']}")
+        print(f"  活跃记忆:      {stats['active_memories']}")
+        print(f"  受保护记忆:    {stats['protected_memories']}")
+        print(f"  归档记忆:      {stats['archived_memories']}")
+        print(f"  低于阈值:      {stats['below_threshold']} 条")
+        print(f"  平均强度:      {stats['avg_strength']}")
+        print(f"  归档阈值:      {config.archive_threshold}")
+        print(f"  保留天数:      {config.purge_after_days}")
+        print()
+        print(c("层级分布:", "yellow"))
+        for layer, count in stats.get("by_layer", {}).items():
+            print(f"  {layer}: {count}")
+
+        cm.close()
+        return 0
+
+    # 执行 GC
+    dry = args.dry_run
+    skip_purge = args.skip_purge
+
+    if dry:
+        print(c("\n🔍 预览 GC 结果（dry-run 模式，不会实际执行）", "cyan"))
+    else:
+        print(c("\n🗑️  执行记忆垃圾回收...", "cyan"))
+
+    report = engine.run_gc(dry_run=dry, skip_purge=skip_purge, actor="cli")
+
+    if _json_mode:
+        _json_out(report)
+        cm.close()
+        return 0
+
+    print("=" * 50)
+    print(f"  策略:          {report['policy']}")
+    print(f"  耗时:          {report['duration_ms']}ms")
+    print()
+
+    ds = report["decay_scores"]
+    print(c("[1/4] 衰减评分", "yellow"))
+    print(f"  扫描记忆:      {ds['scanned']}")
+    print(f"  更新元数据:    {ds['updated']}")
+    print(f"  低于阈值:      {ds['below_threshold']} 条")
+    print(f"  平均强度:      {ds['avg_strength']}")
+    print()
+
+    tc = report["temporary_cleanup"]
+    print(c("[2/4] 临时层时间清理", "yellow"))
+    if dry:
+        print(f"  感官层候选:    {tc.get('sensory_candidates', 0)}")
+        print(f"  短期层候选:    {tc.get('short_term_candidates', 0)}")
+    else:
+        print(f"  感官层归档:    {tc.get('sensory_archived', 0)}")
+        print(f"  短期层归档:    {tc.get('short_term_archived', 0)}")
+    print()
+
+    ad = report["archive_decayed"]
+    print(c("[3/4] 强度归档", "yellow"))
+    print(f"  归档候选:      {ad['candidates']}")
+    print(f"  受保护跳过:    {ad['protected']}")
+    if dry:
+        print(f"  实际归档:      0 (dry-run)")
+    else:
+        print(f"  实际归档:      {ad['archived']}")
+    print()
+
+    pa = report["purge_old_archives"]
+    print(c("[4/4] 过期归档清除", "yellow"))
+    if pa.get("skipped"):
+        print(f"  状态:          已跳过（--skip-purge）")
+    elif dry:
+        print(f"  待清除:        {pa.get('to_purge', 0)} 条")
+    else:
+        print(f"  已删除:        {pa.get('purged', 0)} 条")
+
+    print()
+    if dry:
+        print(c("💡 这是预览结果。去掉 --dry-run 执行实际 GC。", "cyan"))
+    else:
+        total_archived = ad["archived"] + tc.get("sensory_archived", 0) + tc.get("short_term_archived", 0)
+        total_purged = pa.get("purged", 0)
+        if total_archived == 0 and total_purged == 0:
+            print(c("✅ GC 完成，无需归档或删除的记忆。", "green"))
+        else:
+            print(c(f"✅ GC 完成！归档 {total_archived} 条，永久删除 {total_purged} 条。", "green"))
+            if not skip_purge and total_purged > 0:
+                print(c("💡 永久删除的记忆不可恢复。如需保守模式，使用 --skip-purge。", "cyan"))
 
     cm.close()
     return 0

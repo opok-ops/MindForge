@@ -39,7 +39,7 @@ from .encryption import EncryptionEngine, EncryptedBlob, SecurityError
 try:
     from .. import __version__
 except (ImportError, ValueError):
-    __version__ = "5.5.9"
+    __version__ = "5.5.10"
 
 
 # v5.5.7: 检测数据库路径是否位于网络文件系统
@@ -2349,6 +2349,75 @@ class StorageEngine:
 
         out.write_text("\n".join(lines), encoding="utf-8")
         return out
+
+    def rekey_memories(self, old_engine: "EncryptionEngine", new_engine: "EncryptionEngine") -> int:
+        """批量重加密所有加密记忆（密钥更换 / KDF 参数升级用）
+
+        使用旧引擎解密所有加密记忆，再用新引擎重新加密并写回数据库。
+        整个操作在一个事务中完成，失败时完全回滚。
+
+        Args:
+            old_engine: 旧加密引擎（用于解密现有数据）
+            new_engine: 新加密引擎（用于重加密）
+
+        Returns:
+            重加密的记忆条数
+
+        Raises:
+            SecurityError: 解密失败时回滚并抛出
+        """
+        if not self.encrypted:
+            return 0
+
+        conn = self._get_conn()
+
+        # 1. 查出所有加密记忆
+        rows = conn.execute(
+            "SELECT id, ciphertext, nonce, salt FROM memories WHERE encrypted = 1 AND ciphertext IS NOT NULL"
+        ).fetchall()
+
+        if not rows:
+            return 0
+
+        # 2. 在事务中批量重加密
+        try:
+            cursor = conn.cursor()
+            cursor.execute("BEGIN")
+
+            count = 0
+            for row in rows:
+                memory_id = row[0]
+                ciphertext = row[1]
+                nonce = row[2]
+                salt = row[3]
+
+                if not ciphertext or not nonce:
+                    continue
+
+                # 用旧引擎解密
+                old_blob = EncryptedBlob(
+                    ciphertext=ciphertext,
+                    nonce=nonce,
+                    salt=salt or b"",
+                )
+                plaintext = old_engine.decrypt(old_blob)
+
+                # 用新引擎重加密
+                new_blob = new_engine.encrypt(plaintext)
+
+                # 写回
+                cursor.execute(
+                    "UPDATE memories SET ciphertext = ?, nonce = ?, salt = ?, updated_at = ? WHERE id = ?",
+                    (new_blob.ciphertext, new_blob.nonce, new_blob.salt, time.time(), memory_id),
+                )
+                count += 1
+
+            cursor.execute("COMMIT")
+            return count
+
+        except Exception as e:
+            conn.rollback()
+            raise SecurityError(f"重加密失败，已回滚：{e}")
 
     def health_check(self) -> dict:
         """数据库健康检查（v5.0.5 新增）
@@ -6146,6 +6215,16 @@ class StorageEngine:
                 pass
             self._conn_local.conn = None
 
+    def checkpoint(self):
+        """执行 WAL 检查点，确保所有数据落盘（v5.6.0 新增）
+
+        在备份前调用，确保 WAL 文件中的事务完整写入主数据库文件，
+        避免备份时数据不完整。
+        """
+        conn = self._get_conn()
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        conn.commit()
+
     def close(self):
         self._close_conns()
 
@@ -7120,6 +7199,94 @@ class StorageEngine:
                 pass
 
         return {"archived": archived_count, "layer": layer, "max_age_hours": max_age_hours}
+
+    def archive_memories_by_ids(self, memory_ids: List[str],
+                                reason: str = "decayed",
+                                actor: str = "system") -> int:
+        """按记忆 ID 批量归档（v5.6.0 新增：衰减 GC 用）
+
+        将指定的记忆从 memories 表移到 archived_memories 表，
+        用于强度衰减后的自动归档。
+
+        Args:
+            memory_ids: 要归档的记忆 ID 列表
+            reason: 归档原因（decayed/manual/expired）
+            actor: 操作者
+
+        Returns:
+            成功归档的数量
+        """
+        if not memory_ids:
+            return 0
+
+        import uuid as _uuid
+        conn = self._get_conn()
+        now = time.time()
+        archived_count = 0
+
+        for mid in memory_ids:
+            row = conn.execute(
+                "SELECT id, content, category, tags, privacy, importance,"
+                " memory_type, layer, source_session, source_agent, metadata,"
+                " created_at, updated_at"
+                " FROM memories WHERE id = ? AND category != 'trash'",
+                (mid,)
+            ).fetchone()
+            if not row:
+                continue
+
+            try:
+                archive_id = str(_uuid.uuid4())
+                conn.execute(
+                    "INSERT OR REPLACE INTO archived_memories"
+                    " (id, original_id, content, category, tags, privacy,"
+                    " importance, memory_type, layer, source_session,"
+                    " source_agent, metadata, original_created_at,"
+                    " original_updated_at, archived_at, archived_reason)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (archive_id, row["id"], row["content"], row["category"],
+                     row["tags"], row["privacy"], row["importance"],
+                     row["memory_type"], row["layer"], row["source_session"],
+                     row["source_agent"], row["metadata"],
+                     row["created_at"], row["updated_at"], now, reason)
+                )
+                conn.execute(
+                    "UPDATE memories SET category = 'trash',"
+                    " metadata = JSON_SET(metadata, '$.archived_id', ?),"
+                    " updated_at = ? WHERE id = ?",
+                    (archive_id, now, row["id"])
+                )
+                if not self.encrypted:
+                    conn.execute(
+                        "INSERT INTO memory_fts(memory_fts, rowid, content, category, tags)"
+                        " VALUES('delete', (SELECT rowid FROM memories WHERE id = ?), '', '', '')",
+                        (row["id"],)
+                    )
+                conn.execute(
+                    "DELETE FROM memory_embeddings WHERE memory_id = ?",
+                    (row["id"],)
+                )
+                archived_count += 1
+            except Exception:
+                continue
+
+        conn.commit()
+
+        if archived_count > 0:
+            try:
+                conn.execute(
+                    "INSERT INTO audit_log (id, memory_id, action, actor,"
+                    " session_id, details, timestamp)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (str(_uuid.uuid4()), "", "archive_by_decay", actor, "",
+                     json.dumps({"count": archived_count, "reason": reason,
+                                 "memory_ids": memory_ids[:50]}), now)
+                )
+                conn.commit()
+            except Exception:
+                pass
+
+        return archived_count
 
     def list_archived(self, layer: Optional[str] = None,
                       category: Optional[str] = None,

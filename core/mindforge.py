@@ -23,7 +23,14 @@ from .types import (
     DramaStatus,
 )
 from .storage import StorageEngine, MemoryEntry
-from .encryption import EncryptionEngine, init_engine as _init_engine
+from .encryption import (
+    EncryptionEngine,
+    SecurityError,
+    init_engine as _init_engine,
+    rekey_engine as _rekey_engine,
+    get_key_params,
+    PBKDF2_ITERATIONS_CURRENT,
+)
 from .indexer import IndexEngine
 from .query import QueryEngine
 from .embedding import EmbeddingEngine
@@ -32,7 +39,7 @@ from .embedding import EmbeddingEngine
 try:
     from .. import __version__
 except (ImportError, ValueError):
-    __version__ = "5.5.9"
+    __version__ = "5.5.10"
 
 
 # ===== 路径安全校验（v5.2.9 新增：核心层统一防护，防止路径遍历 / 符号链接攻击）=====
@@ -286,6 +293,85 @@ class MindForge:
         else:
             # 更新已有 query engine 的 storage 引用
             self._query.storage = self._storage
+
+    def rekey(self, old_password: str, new_password: str,
+              new_iterations: Optional[int] = None) -> dict:
+        """更换加密密钥（密码变更或 KDF 参数升级）
+
+        安全流程：
+        1. 用旧密码和旧 KDF 参数验证并解密
+        2. 生成新密钥（新密码 + 新 KDF 参数 + 新盐）
+        3. 原子更新密钥文件（带备份）
+        4. 批量重加密所有记忆数据（事务保障，失败回滚）
+
+        Args:
+            old_password: 旧密码
+            new_password: 新密码（可与旧密码相同，仅升级 KDF 参数）
+            new_iterations: 新的 PBKDF2 迭代次数，默认使用当前推荐值
+
+        Returns:
+            dict with keys:
+                - rekeyed_count: 重加密的记忆条数
+                - old_iterations: 旧迭代次数
+                - new_iterations: 新迭代次数
+                - backup_path: 密钥文件备份路径
+
+        Raises:
+            SecurityError: 旧密码错误或重加密失败
+        """
+        if not self.config.encrypted:
+            raise SecurityError("加密未启用，无法执行 rekey")
+
+        if self._pending_encryption:
+            raise SecurityError("加密引擎未初始化，请先调用 init_with_password()")
+
+        # 1. 获取旧参数信息（用于返回报告）
+        old_params = get_key_params(self.config.key_file)
+        old_iterations = old_params.iterations if old_params else 0
+
+        # 2. 更换密钥文件
+        old_engine, new_engine = _rekey_engine(
+            old_password, new_password,
+            key_file=self.config.key_file,
+            new_iterations=new_iterations,
+        )
+
+        new_params = get_key_params(self.config.key_file)
+        new_iterations_val = new_params.iterations if new_params else 0
+
+        # 3. 更新当前实例的加密引擎
+        self._encryption = new_engine
+        if self._storage:
+            self._storage.encryption = new_engine
+
+        # 4. 批量重加密所有记忆
+        count = 0
+        if self._storage:
+            count = self._storage.rekey_memories(old_engine, new_engine)
+
+        return {
+            "rekeyed_count": count,
+            "old_iterations": old_iterations,
+            "new_iterations": new_iterations_val,
+            "backup_path": str(Path(self.config.key_file).with_suffix(".key.bak")),
+        }
+
+    def get_encryption_info(self) -> Optional[dict]:
+        """获取当前加密配置信息
+
+        Returns:
+            加密状态和 KDF 参数 dict，未加密时返回 None
+        """
+        if not self.config.encrypted:
+            return None
+
+        params = get_key_params(self.config.key_file)
+        return {
+            "enabled": True,
+            "algorithm": params.algorithm if params else None,
+            "iterations": params.iterations if params else None,
+            "is_current": (params.iterations == PBKDF2_ITERATIONS_CURRENT) if params else False,
+        }
 
     def add(self,
             content: str,
@@ -969,9 +1055,105 @@ class MindForge:
         """获取审计日志"""
         return self._storage.get_audit_log(memory_id, actor, limit)
 
-    def backup(self, backup_dir: str = "./data/backup"):
-        """备份"""
-        return self._storage.backup(backup_dir)
+    def backup(self, output_path: Optional[str] = None) -> dict:
+        """创建记忆库完整备份（v5.6.0 增强）
+
+        打包 SQLite 数据库、密钥文件和配置到单个 ZIP 归档，
+        用于灾备恢复或跨机器迁移。与 export-md 不同，
+        备份是二进制级别的完整快照（含加密数据）。
+
+        Args:
+            output_path: 输出 ZIP 路径，默认在 data/ 目录下生成带时间戳的文件名
+
+        Returns:
+            dict with keys:
+                - path: 备份文件绝对路径
+                - size_bytes: 文件大小（字节）
+                - size_mb: 文件大小（MB）
+                - memory_count: 备份时的记忆总数
+                - encrypted: 是否加密
+                - created_at: 备份时间戳
+                - version: MindForge 版本
+        """
+        import zipfile
+        import time
+        from datetime import datetime
+
+        db_path = Path(self.config.db_path)
+        if not db_path.exists():
+            raise ValueError(f"数据库文件不存在: {db_path}")
+
+        # 生成默认输出路径
+        if output_path is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_dir = db_path.parent
+            output_path = str(output_dir / f"mindforge_backup_{timestamp}.zip")
+
+        output = Path(output_path)
+        output.parent.mkdir(parents=True, exist_ok=True)
+
+        # 获取记忆总数
+        stats = self._storage.get_stats() if self._storage else {"total": 0}
+        memory_count = stats.get("total", 0)
+
+        # 构建清单
+        manifest = {
+            "backup_version": "1.0",
+            "mindforge_version": __version__,
+            "created_at": time.time(),
+            "created_at_iso": datetime.now().isoformat(),
+            "encrypted": self.config.encrypted,
+            "memory_count": memory_count,
+            "files": {
+                "database": "memory.db",
+                "key_file": ".key" if self.config.encrypted else None,
+                "config": "config.json",
+                "manifest": "manifest.json",
+            },
+        }
+
+        # 构建配置快照
+        config_snapshot = {
+            "db_path": self.config.db_path,
+            "key_file": self.config.key_file,
+            "encrypted": self.config.encrypted,
+            "default_privacy": self.config.default_privacy.value,
+            "default_importance": self.config.default_importance.value,
+            "default_layer": self.config.default_layer.value,
+        }
+
+        # 确保数据库连接已刷新（WAL 模式下确保数据落盘）
+        if self._storage:
+            self._storage.checkpoint()
+
+        # 写入 ZIP
+        with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as zf:
+            # 1. 数据库文件
+            zf.write(db_path, "memory.db")
+
+            # 2. 密钥文件（仅加密模式）
+            if self.config.encrypted:
+                key_path = Path(self.config.key_file)
+                if key_path.exists():
+                    zf.write(key_path, ".key")
+
+            # 3. 配置快照
+            zf.writestr("config.json", json.dumps(config_snapshot, indent=2, ensure_ascii=False))
+
+            # 4. 清单文件
+            zf.writestr("manifest.json", json.dumps(manifest, indent=2, ensure_ascii=False))
+
+        file_size = output.stat().st_size
+
+        return {
+            "path": str(output.resolve()),
+            "size_bytes": file_size,
+            "size_mb": round(file_size / (1024 * 1024), 2),
+            "memory_count": memory_count,
+            "encrypted": self.config.encrypted,
+            "created_at": manifest["created_at"],
+            "version": __version__,
+        }
 
     def export_json(self, output_path: str,
                     category: Optional[str] = None,
@@ -2133,10 +2315,104 @@ class MindForge:
         """列出所有备份（v5.2.0 新增）"""
         return self._storage.list_backups(backup_dir)
 
-    def restore_backup(self, backup_path: str,
-                       create_backup_before: bool = True) -> Dict[str, Any]:
-        """从备份恢复数据库（v5.2.0 新增）"""
-        return self._storage.restore_backup(backup_path, create_backup_before)
+    @staticmethod
+    def restore_backup(backup_path: str, db_path: str,
+                       key_file: Optional[str] = None,
+                       force: bool = False) -> dict:
+        """从备份文件恢复（v5.6.0 增强）
+
+        从 ZIP 备份归档恢复数据库和密钥文件。
+        支持加密和非加密模式的备份恢复。
+
+        Args:
+            backup_path: 备份 ZIP 文件路径
+            db_path: 恢复后的数据库路径
+            key_file: 恢复后的密钥文件路径（加密模式必需）
+            force: 是否覆盖已存在的文件
+
+        Returns:
+            dict with keys:
+                - memory_count: 备份中的记忆数量
+                - encrypted: 是否加密
+                - backup_version: 备份文件版本
+                - mindforge_version: 备份时的 MindForge 版本
+                - restored_db: 数据库文件路径
+                - restored_key: 密钥文件路径（加密模式）
+                - restored_at: 恢复时间戳
+
+        Raises:
+            ValueError: 备份文件损坏或缺失必要文件
+            FileExistsError: 目标文件已存在且 force=False
+        """
+        import zipfile
+        import time
+
+        backup = Path(backup_path)
+        if not backup.exists():
+            raise ValueError(f"备份文件不存在: {backup_path}")
+
+        target_db = Path(db_path)
+        target_key = Path(key_file) if key_file else None
+
+        # 检查目标文件是否已存在
+        if target_db.exists() and not force:
+            raise FileExistsError(
+                f"数据库文件已存在: {target_db}（使用 force=True 覆盖）"
+            )
+        if target_key and target_key.exists() and not force:
+            raise FileExistsError(
+                f"密钥文件已存在: {target_key}（使用 force=True 覆盖）"
+            )
+
+        with zipfile.ZipFile(backup, "r") as zf:
+            # 验证清单
+            if "manifest.json" not in zf.namelist():
+                raise ValueError("备份文件无效：缺少 manifest.json")
+
+            manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
+
+            # 验证数据库文件
+            if "memory.db" not in zf.namelist():
+                raise ValueError("备份文件无效：缺少 memory.db")
+
+            # 加密模式检查密钥文件
+            encrypted = manifest.get("encrypted", False)
+            if encrypted:
+                if ".key" not in zf.namelist():
+                    raise ValueError("备份文件无效：加密模式但缺少 .key 文件")
+                if not target_key:
+                    raise ValueError("加密备份需要指定 key_file 参数")
+
+            # 创建目标目录
+            target_db.parent.mkdir(parents=True, exist_ok=True)
+            if target_key:
+                target_key.parent.mkdir(parents=True, exist_ok=True)
+
+            # 提取数据库
+            with zf.open("memory.db") as src, open(target_db, "wb") as dst:
+                dst.write(src.read())
+
+            # 提取密钥文件
+            restored_key = None
+            if encrypted and target_key:
+                with zf.open(".key") as src, open(target_key, "wb") as dst:
+                    dst.write(src.read())
+                # 限制密钥文件权限
+                import sys
+                if sys.platform != "win32":
+                    import stat
+                    os.chmod(target_key, stat.S_IRUSR | stat.S_IWUSR)
+                restored_key = str(target_key.resolve())
+
+        return {
+            "memory_count": manifest.get("memory_count", 0),
+            "encrypted": encrypted,
+            "backup_version": manifest.get("backup_version", "unknown"),
+            "mindforge_version": manifest.get("mindforge_version", "unknown"),
+            "restored_db": str(target_db.resolve()),
+            "restored_key": restored_key,
+            "restored_at": time.time(),
+        }
 
     def delete_old_backups(self, backup_dir: str = "./data/backups",
                            keep_count: int = 10) -> int:

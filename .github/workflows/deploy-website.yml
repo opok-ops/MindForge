@@ -27,6 +27,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Update sitemap lastmod dates
+        run: |
+          TODAY=$(date +%Y-%m-%d)
+          echo "Updating sitemap lastmod to $TODAY"
+          sed -i "s/<lastmod>[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}<\/lastmod>/<lastmod>$TODAY<\/lastmod>/g" website/sitemap.xml
+          echo "Updated sitemap.xml:"
+          head -20 website/sitemap.xml
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 

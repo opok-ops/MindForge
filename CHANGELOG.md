@@ -2,12 +2,29 @@
 
 All notable changes to MindForge will be documented in this file.
 
-## [Unreleased]
+## [Unreleased] - v5.6.0 候选
+
+### Security
+- **PBKDF2 版本化 KDF 参数（P0 安全债偿还）**：60k → 600k 迭代次数可平滑迁移。密文头存储 `iterations`，解密时按头参数走，新加密使用 600k。提供 `mindforge rekey` 命令一键升级（支持 `--upgrade-only` 仅升级参数不改密码），旧密文自动兼容。密码验证使用 key 文件内存储的加密 token，防止误输密码后批量重加密
+
+### Added
+- **记忆衰减/遗忘引擎（P2 特性）**：`modules/memory_decay.py` 实现基于 Ebbinghaus 遗忘曲线的记忆生命周期管理。三套预设策略（conservative/balanced/aggressive），支持衰减评分 → 强度归档 → 过期清除的完整 GC 周期。`mindforge gc` 命令支持 `--dry-run` 预览、`--status` 统计、`--skip-purge` 保守模式
+- **记忆库备份/恢复（P1）**：`mindforge backup` 创建 ZIP 完整快照（数据库+密钥+配置+清单），`mindforge backup-restore` 从 ZIP 恢复，支持加密模式、force 覆盖
+- **按 ID 批量归档**：`StorageEngine.archive_memories_by_ids()` 支持按强度阈值选择性归档（原有 `auto_archive` 仅支持按时间）
+- **CI sitemap lastmod 自动更新**：部署流程中自动将 sitemap.xml 的 lastmod 更新为当天日期
+- **woff2 字体自托管**：Sora/Inter/JetBrains Mono 的 14 个 woff2 文件本地托管（315KB），Google Fonts 仅保留 Noto Sans SC
+- **测试补盲（P1）**：新增 34 个测试覆盖 skill_extractor（模板渲染/序列化/聚类）、share_conflict（detect_incoming/dismiss/stats/cleanup）、federated_acl（通配符/多操作/filter_peers/规则管理）
+- **衰减/GC 测试**：24 个测试覆盖 DecayConfig 策略、compute_strength 衰减计算、保护规则、归档/删除流程、完整 GC 周期
+
+### Changed
+- CLI 命名修正：备份恢复命令从 `restore`（与回收站恢复冲突）改为 `backup-restore`，保持 `restore` 专用于回收站
+
+## [5.5.10] - 2026-09-08
 
 ### Fixed
 - **XML ParseError not caught**: `import-xml` only caught `(ValueError, TypeError)` but `ET.ParseError` inherits from `SyntaxError`; malformed XML now shows friendly error instead of traceback
 - **serve command bind host**: Web UI mode ignored `--host` and always bound `0.0.0.0`; now respects `--host` (default `127.0.0.1`), matching API mode behavior
-- **pip-audit CI failure**: cryptography 49.0.0 had CVE-2026-69247; bumped minimum to cryptography>=50.0.1 (0 known vulnerabilities)
+- **pip-audit CI red**: cryptography 49.0.0 had CVE-2026-69247; bumped minimum to cryptography>=50.0.1 (0 known vulnerabilities). Also narrowed audit scope to project direct dependencies only (`-r requirements` mode) to eliminate runner pre-installed package CVE noise and the `--strict --skip-editable` interaction bug
 
 ### Added
 - **XXE protection in import-xml**: DOCTYPE/ENTITY declarations are rejected before XML parsing, preventing billion-laughs and external entity attacks
@@ -17,6 +34,10 @@ All notable changes to MindForge will be documented in this file.
 - **PBKDF2 comment corrected**: 60,000 iterations is below OWASP 2023 recommendation of 600,000; comment now accurately reflects the performance tradeoff
 - **setup.py classifiers**: added Python 3.13 (was only in pyproject.toml)
 - **Removed deprecated `MindForge_combined.py`**: 90KB dead code that was marked DEPRECATED; also eliminates bandit scan noise
+- **CI security job**: setuptools and wheel upgraded to latest before pip-audit to clear runner-bundled CVE versions
+
+### Security
+- **CI security gate is now real**: removed `pytest || test_core.py` and `|| true` fallbacks in v5.5.9; CI now genuinely fails red on breakage. All 5 Python versions + security job pass green as of this release
 
 ## [5.5.9] - 2026-09-04
 

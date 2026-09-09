@@ -6167,7 +6167,7 @@ def cmd_rekey(args):
         cm.close()
     except Exception as e:
         print(c(f"❌ rekey 失败：{e}", "red"))
-        print(c("密钥文件已从备份恢复，数据未受影响", "yellow"))
+        print(c("密钥文件已从 .key.bak 恢复，数据库回滚到旧密文，数据未受影响", "yellow"))
         return 1
 
     # 成功报告
@@ -6223,6 +6223,12 @@ def cmd_backup(args):
     print(f"  加密状态:    {'开启 🔐' if result['encrypted'] else '未加密'}")
     print(f"  程序版本:    v{result['version']}")
     print()
+
+    if result["encrypted"]:
+        print(c(f"{COLORS['bold']}⚠️  此备份包含密钥文件！{COLORS['reset']}", "red"))
+        print(c("任何拿到此 ZIP 的人都能读取你的全部加密记忆。", "yellow"))
+        print(c("请像保管密码一样保管此备份文件。", "yellow"))
+        print()
     print(c("💡 建议：将备份文件存储到离线/异地位置，确保灾备安全", "cyan"))
 
     return 0

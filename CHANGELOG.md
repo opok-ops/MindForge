@@ -2,14 +2,15 @@
 
 All notable changes to MindForge will be documented in this file.
 
-## [Unreleased] - v5.6.0 候选
+## [5.6.0] - 2026-09-09
 
 ### Security
 - **PBKDF2 版本化 KDF 参数（P0 安全债偿还）**：60k → 600k 迭代次数可平滑迁移。密文头存储 `iterations`，解密时按头参数走，新加密使用 600k。提供 `mindforge rekey` 命令一键升级（支持 `--upgrade-only` 仅升级参数不改密码），旧密文自动兼容。密码验证使用 key 文件内存储的加密 token，防止误输密码后批量重加密
+- **rekey 失败恢复链完整化**：`rekey_memories` 抛异常时自动恢复 `.key.bak` 到 `.key`，同步恢复新旧引擎和全局引擎引用，确保旧密文 + 旧密钥一致（此前仅回滚数据库事务但密钥文件已换成新的，会导致全部解密失败）
 
 ### Added
 - **记忆衰减/遗忘引擎（P2 特性）**：`modules/memory_decay.py` 实现基于 Ebbinghaus 遗忘曲线的记忆生命周期管理。三套预设策略（conservative/balanced/aggressive），支持衰减评分 → 强度归档 → 过期清除的完整 GC 周期。`mindforge gc` 命令支持 `--dry-run` 预览、`--status` 统计、`--skip-purge` 保守模式
-- **记忆库备份/恢复（P1）**：`mindforge backup` 创建 ZIP 完整快照（数据库+密钥+配置+清单），`mindforge backup-restore` 从 ZIP 恢复，支持加密模式、force 覆盖
+- **记忆库备份/恢复（P1）**：`mindforge backup` 创建 ZIP 完整快照（数据库+密钥+配置+清单），`mindforge backup-restore` 从 ZIP 恢复，支持加密模式、force 覆盖。加密模式下 CLI 明确警告备份包含密钥文件
 - **按 ID 批量归档**：`StorageEngine.archive_memories_by_ids()` 支持按强度阈值选择性归档（原有 `auto_archive` 仅支持按时间）
 - **CI sitemap lastmod 自动更新**：部署流程中自动将 sitemap.xml 的 lastmod 更新为当天日期
 - **woff2 字体自托管**：Sora/Inter/JetBrains Mono 的 14 个 woff2 文件本地托管（315KB），Google Fonts 仅保留 Noto Sans SC

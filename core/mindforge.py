@@ -347,7 +347,24 @@ class MindForge:
         # 4. 批量重加密所有记忆
         count = 0
         if self._storage:
-            count = self._storage.rekey_memories(old_engine, new_engine)
+            try:
+                count = self._storage.rekey_memories(old_engine, new_engine)
+            except Exception:
+                # 重加密失败：恢复旧密钥文件，确保旧密文 + 旧密钥一致
+                import shutil
+                backup_path = Path(self.config.key_file).with_suffix(
+                    Path(self.config.key_file).suffix + ".bak"
+                )
+                if backup_path.exists():
+                    shutil.copy2(backup_path, self.config.key_file)
+                # 恢复引擎引用
+                self._encryption = old_engine
+                if self._storage:
+                    self._storage.encryption = old_engine
+                # 全局引擎也恢复
+                from core.encryption import _set_global_engine
+                _set_global_engine(old_engine)
+                raise
 
         return {
             "rekeyed_count": count,

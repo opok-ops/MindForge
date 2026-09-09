@@ -458,3 +458,9 @@ def get_engine() -> EncryptionEngine:
     if _global_engine is None:
         raise SecurityError("加密引擎未初始化，请先调用 init_engine()")
     return _global_engine
+
+
+def _set_global_engine(engine: EncryptionEngine) -> None:
+    """恢复全局加密引擎（rekey 回滚用）"""
+    global _global_engine
+    _global_engine = engine

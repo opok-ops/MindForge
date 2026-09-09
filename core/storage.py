@@ -39,7 +39,7 @@ from .encryption import EncryptionEngine, EncryptedBlob, SecurityError
 try:
     from .. import __version__
 except (ImportError, ValueError):
-    __version__ = "5.5.10"
+    __version__ = "5.6.0"
 
 
 # v5.5.7: 检测数据库路径是否位于网络文件系统

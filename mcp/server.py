@@ -20,6 +20,11 @@ _PKG_ROOT = Path(__file__).resolve().parent.parent
 if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
 
+try:
+    from MindForge import __version__
+except ImportError:
+    __version__ = "5.6.0"
+
 
 def _import_mindforge():
     """Import MindForge package with fallback for non-editable / direct runs."""
@@ -1013,7 +1018,7 @@ def _handle_initialize(request: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "protocolVersion": "2024-11-05",
         "capabilities": {"tools": {}, "logging": {}},
-        "serverInfo": {"name": "mindforge", "version": "5.5.8"},
+        "serverInfo": {"name": "mindforge", "version": __version__},
     }
 
 

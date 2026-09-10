@@ -1673,6 +1673,9 @@ button {
   color: var(--txt-4);
 }
 .foot-bottom .fb-legal { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }
+.foot-bottom .fb-dev { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+.foot-bottom .fb-dev strong { color: var(--txt-2); font-weight: 600; }
+.foot-bottom .fb-dev a { display: inline-flex; align-items: center; gap: 5px; }
 .foot-bottom a { color: var(--txt-3); }
 .foot-bottom a:hover { color: var(--cy); }
 

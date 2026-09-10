@@ -155,7 +155,7 @@
         </svg>
       </span>
       <span class="brand-name">MindForge</span>
-      <span class="brand-ver" data-ver>v5.5.8</span>
+      <span class="brand-ver" data-ver>v5.6.0</span>
     </a>
 
     <ul class="nav-links">
@@ -209,7 +209,7 @@
   <div class="hero-inner">
     <p class="hero-badge" data-reveal>
       <span class="pulse" aria-hidden="true"></span>
-      <b data-ver>v5.5.8</b>
+      <b data-ver>v5.6.0</b>
       <span>四层记忆架构 · 六路混合检索 · 端侧加密</span>
     </p>
 
@@ -1170,15 +1170,34 @@
     <div class="section-head" data-reveal>
       <span class="tag"><span class="tag-dot" aria-hidden="true"></span>Changelog</span>
       <h2 id="cl-title">每次迭代，<span class="gradient-text">都在进化</span></h2>
-      <p>从 v5.3.3 到 <span data-ver>v5.5.8</span>，功能扩展、安全加固与 Bug 修复的完整轨迹。</p>
+      <p>从 v5.3.3 到 <span data-ver>v5.6.0</span>，功能扩展、安全加固与 Bug 修复的完整轨迹。</p>
     </div>
 
     <div class="cl-list">
       <article class="cl-item is-latest" data-reveal>
         <div class="cl-meta">
-          <span class="cl-ver" data-ver>v5.5.8</span>
-          <span class="cl-date">2026-09-01</span>
+          <span class="cl-ver" data-ver>v5.6.0</span>
+          <span class="cl-date">2026-09-09</span>
           <span class="cl-kind">最新</span>
+        </div>
+        <div class="cl-body">
+          <h4>版本化 KDF · 记忆衰减引擎 · 备份/恢复 · 安全偿还</h4>
+          <ul>
+            <li><b>PBKDF2 版本化 KDF（P0 安全债偿还）</b>：迭代次数 60k → 600k，密文头存储 <code>iterations</code> 实现向后兼容，<code>mindforge rekey</code> 一键平滑迁移，旧密文自动按旧参数解密</li>
+            <li><b>rekey 失败恢复链</b>：<code>rekey_memories</code> 异常时自动恢复 <code>.key.bak</code> + 回滚引擎引用，旧密文与旧密钥始终一致，不会解不开</li>
+            <li><b>记忆衰减/遗忘引擎（P2 特性）</b>：基于 Ebbinghaus 遗忘曲线的三套策略（conservative / balanced / aggressive），<code>mindforge gc</code> 支持 <code>--dry-run</code> 预览、<code>--status</code> 统计、<code>--skip-purge</code> 保守模式。starred / pinned 记忆自动保护不衰减</li>
+            <li><b>记忆库备份/恢复（P1）</b>：<code>mindforge backup</code> 创建 ZIP 完整快照（数据库+密钥+配置+清单），加密模式下 CLI 明确警告备份含密钥文件</li>
+            <li><b>测试补盲</b>：新增 76 个测试覆盖 KDF 版本化、rekey 全链路、skill_extractor / share_conflict / federated_acl 模块、衰减 GC 周期</li>
+            <li><b>CI / SEO 收尾</b>：sitemap lastmod 自动更新、14 个 woff2 字体自托管（315KB）、百度收录 robots.txt + meta 标签</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="cl-item" data-reveal>
+        <div class="cl-meta">
+          <span class="cl-ver">v5.5.8</span>
+          <span class="cl-date">2026-09-01</span>
+          <span class="cl-kind">功能</span>
         </div>
         <div class="cl-body">
           <h4>记忆版本对比 · MCP 参数校验 · Bug 修复</h4>
@@ -1473,7 +1492,7 @@
         </span>
         <div>
           <div class="fb-t">MindForge</div>
-          <p class="fb-s">AI Agent 终身记忆系统<br><span data-ver>v5.5.8</span> · 100% 本地加密 · 零云端依赖</p>
+          <p class="fb-s">AI Agent 终身记忆系统<br><span data-ver>v5.6.0</span> · 100% 本地加密 · 零云端依赖</p>
           <div class="fb-links">
             <a href="https://github.com/opok-ops/MindForge" target="_blank" rel="noopener noreferrer" aria-label="MindForge GitHub 仓库">
               <svg class="icon icon-md icon-fill" aria-hidden="true"><use href="#i-github"/></svg>

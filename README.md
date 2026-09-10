@@ -9,6 +9,8 @@
 [![Version](https://img.shields.io/badge/version-5.6.0-green.svg)](https://github.com/opok-ops/MindForge)
 [![CI](https://github.com/opok-ops/MindForge/actions/workflows/ci.yml/badge.svg)](https://github.com/opok-ops/MindForge/actions/workflows/ci.yml)
 
+> **Developer** · [小顾](https://github.com/opok-ops) · 抖音 [shidianduo3116](https://v.douyin.com/ZIsw2VpuT9o/) · 小红书 [4406811524](https://xhslink.cn/o/3m71WBRPD17)
+
 ---
 
 ## 30 秒快速开始
@@ -954,16 +956,6 @@ context = adapter.get_context("database optimization")
 - v5.0.4: `deduplicate` + `export-md` + Jaccard 相似度
 - v5.0.2: Star 收藏 + 时间范围过滤 + `pip install` 支持
 - v5.0.0: 初始四层架构 + 知识图谱 + 多模态 + 人格化 + 联邦
-
----
-
-## Developer
-
-**小顾** · MindForge 独立开发者
-
-- GitHub：[opok-ops](https://github.com/opok-ops)
-- 抖音：[shidianduo3116](https://v.douyin.com/ZIsw2VpuT9o/)
-- 小红书：[4406811524](https://xhslink.cn/o/3m71WBRPD17)
 
 ---
 

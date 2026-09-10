@@ -222,6 +222,41 @@ class TestProtectionRules(unittest.TestCase):
         is_protected = self.engine._is_protected(updated, now)
         self.assertFalse(is_protected)
 
+    def test_starred_memory_protected(self):
+        """starred 记忆受保护，不归档"""
+        entry = self.storage.add_memory("starred memory", category="test")
+        conn = self.storage._get_conn()
+        conn.execute("UPDATE memories SET starred = 1 WHERE id = ?", (entry.id,))
+        conn.commit()
+
+        updated = self.storage.get_memory(entry.id)
+        self.assertIsNotNone(updated)
+        self.assertTrue(updated.starred)
+
+        now = time.time()
+        # 设置为很久以前，但因为 starred 应受保护
+        updated.created_at = time.time() - 3600 * 200
+        updated.last_accessed_at = time.time() - 3600 * 200
+        is_protected = self.engine._is_protected(updated, now)
+        self.assertTrue(is_protected)
+
+    def test_pinned_memory_protected(self):
+        """pinned 记忆受保护，不归档"""
+        entry = self.storage.add_memory("pinned memory", category="test")
+        conn = self.storage._get_conn()
+        conn.execute("UPDATE memories SET pinned = 1 WHERE id = ?", (entry.id,))
+        conn.commit()
+
+        updated = self.storage.get_memory(entry.id)
+        self.assertIsNotNone(updated)
+        self.assertTrue(updated.pinned)
+
+        now = time.time()
+        updated.created_at = time.time() - 3600 * 200
+        updated.last_accessed_at = time.time() - 3600 * 200
+        is_protected = self.engine._is_protected(updated, now)
+        self.assertTrue(is_protected)
+
 
 class TestArchiveDecayed(unittest.TestCase):
     """归档流程测试"""

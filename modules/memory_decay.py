@@ -64,6 +64,8 @@ class DecayConfig:
     protect_permanent: bool = True     # PERMANENT 层不衰减
     protect_critical: bool = True      # CRITICAL 重要性不衰减
     protect_recent_hours: float = 6.0  # 最近 N 小时内创建的不归档
+    protect_starred: bool = True       # 收藏/starred 记忆不衰减
+    protect_pinned: bool = True        # 置顶/pinned 记忆不衰减
 
     # 临时层额外清理
     sensory_max_age_hours: int = 48    # 感官层超过 N 小时 → 归档
@@ -106,6 +108,8 @@ class DecayConfig:
             "protect_permanent": self.protect_permanent,
             "protect_critical": self.protect_critical,
             "protect_recent_hours": self.protect_recent_hours,
+            "protect_starred": self.protect_starred,
+            "protect_pinned": self.protect_pinned,
             "sensory_max_age_hours": self.sensory_max_age_hours,
             "short_term_max_age_hours": self.short_term_max_age_hours,
         }
@@ -165,6 +169,12 @@ class MemoryDecayEngine:
 
         # CRITICAL 重要性保护
         if self.config.protect_critical and entry.importance == Importance.CRITICAL:
+            return True
+
+        # 收藏/置顶保护
+        if self.config.protect_starred and getattr(entry, "starred", False):
+            return True
+        if self.config.protect_pinned and getattr(entry, "pinned", False):
             return True
 
         # 最近创建的记忆保护

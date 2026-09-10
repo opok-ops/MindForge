@@ -4,4 +4,11 @@
 User-agent: *
 Allow: /
 
+User-agent: Baiduspider
+Allow: /
+Crawl-delay: 1
+
+User-agent: Googlebot
+Allow: /
+
 Sitemap: https://opok-ops.github.io/MindForge/sitemap.xml

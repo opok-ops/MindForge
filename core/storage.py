@@ -1,5 +1,5 @@
 """
-MindForge v5.5.8 存储引擎
+MindForge v5.6.0 存储引擎
 支持四层记忆架构：感官记忆 → 短期记忆 → 长期记忆 → 永久记忆
 """
 
@@ -268,9 +268,10 @@ def _escape_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-# v5.3.3 安全加固 + v5.4.7 M-5 修复：增强 HTML/XSS 消毒
+# v5.3.3 安全加固 + v5.4.7 M-5 修复 + v5.6.1 修复：增强 HTML/XSS 消毒
+# v5.6.1: 匹配未闭合的标签（如 <img onerror=alert(1) 无 >），防止绕过
 _XSS_RE = __import__("re").compile(
-    r'<[^>]*>|javascript:|vbscript:|data:text/html|on(?:error|load|click|mouseover|focus|blur|submit|change|input|keydown|keyup|keypress|dblclick|mousedown|mouseup|mousemove|mouseout|mouseenter|mouseleave|contextmenu|wheel|drag|drop|copy|cut|paste|abort|canplay|ended|pause|play|playing|progress|ratechange|seeked|seeking|stalled|suspend|timeupdate|volumechange|waiting|animationstart|animationend|animationiteration|transitionend|toggle|resize|scroll|storage|message|online|offline|popstate|hashchange|beforeunload|pagehide|pageshow|unload)\s*=|<script|</script|<iframe|</iframe|<object|<embed|<svg|<math|<form|<input|<button|<textarea|<select|<option|<applet|<meta|<link|<base',
+    r'<[a-zA-Z!/?][^>\s]*[^>]*>?|javascript:|vbscript:|data:text/html|on(?:error|load|click|mouseover|focus|blur|submit|change|input|keydown|keyup|keypress|dblclick|mousedown|mouseup|mousemove|mouseout|mouseenter|mouseleave|contextmenu|wheel|drag|drop|copy|cut|paste|abort|canplay|ended|pause|play|playing|progress|ratechange|seeked|seeking|stalled|suspend|timeupdate|volumechange|waiting|animationstart|animationend|animationiteration|transitionend|toggle|resize|scroll|storage|message|online|offline|popstate|hashchange|beforeunload|pagehide|pageshow|unload)\s*=|<script|</script|<iframe|</iframe|<object|<embed|<svg|<math|<form|<input|<button|<textarea|<select|<option|<applet|<meta|<link|<base',
     __import__("re").IGNORECASE
 )
 
@@ -1731,10 +1732,15 @@ class StorageEngine:
             "duration_ms": round(elapsed, 2),
         }
 
+    @_with_rollback
     def purge_trash(self,
                     actor: str = "system",
                     session_id: str = "") -> int:
         """清空回收站，永久删除所有 category='trash' 的记忆（v5.0.6 新增）
+
+        v5.6.1 安全修复：
+        - 添加 @_with_rollback 事务保护，部分失败自动回滚
+        - 审计写入合并到同一事务，避免"操作已提交+审计失败"竞态
 
         软删除（delete_memory(hard_delete=False)）会把 category 改为 'trash'，
         本方法将这些记录彻底删除，并同步清理 FTS 索引。
@@ -1791,11 +1797,11 @@ class StorageEngine:
             except Exception:
                 logger.warning("FTS operation failed", exc_info=True)
 
-        conn.commit()
-        # v5.5.5 fix: 审计日志记录真实隐私级别
+        # v5.6.1 安全修复：审计写入合并到同一事务，避免"操作已提交+审计失败"竞态
         for row in rows:
             self._add_audit("purge", row[0], actor, session_id,
-                             row[5] if row[5] else "")
+                            row[5] if row[5] else "", commit=False)
+        conn.commit()
 
         return len(ids)
 
@@ -1883,9 +1889,10 @@ class StorageEngine:
             else:
                 conn.execute("UPDATE memories SET category = 'trash', updated_at = ? WHERE id = ?",
                              (now, entry_id))
+        # v5.6.1 安全修复：审计写入合并到同一事务，避免"操作已提交+审计失败"竞态
+        self._add_audit("delete", entry_id, actor, session_id, privacy_val,
+                        commit=False)
         conn.commit()
-        # v5.5.5 fix: 审计日志记录真实隐私级别
-        self._add_audit("delete", entry_id, actor, session_id, privacy_val)
         return True
 
     @_with_rollback
@@ -6068,12 +6075,20 @@ class StorageEngine:
         ) for row in rows]
 
     def backup(self, backup_dir: str) -> Path:
-        """备份数据库"""
-        backup_path = Path(backup_dir)
+        """备份数据库
+
+        v5.6.1 安全修复：写入路径经 _safe_path 校验，防止路径遍历写敏感目录。
+        """
+        # v5.6.1 安全加固：写入路径校验（与 restore_backup 对齐）
+        safe_dir = _safe_path(backup_dir, must_exist=False, allow_symlinks=False)
+        backup_path = Path(safe_dir)
         backup_path.mkdir(parents=True, exist_ok=True)
 
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         dest = backup_path / f"memory_backup_{timestamp}.db"
+
+        # 最终文件路径也做一次校验
+        _safe_path(str(dest), must_exist=False, allow_symlinks=False)
 
         import shutil
         shutil.copy2(self.db_path, dest)
@@ -6151,12 +6166,16 @@ class StorageEngine:
         conn.commit()
 
     def _add_audit(self, action: str, memory_id: str, actor: str,
-                   session_id: str, privacy_level: str, details: Optional[dict] = None):
+                   session_id: str, privacy_level: str, details: Optional[dict] = None,
+                   commit: bool = True):
         """添加审计记录
 
         v5.4.2 安全修复：审计写入失败不再静默吞没，改为 logging.error 记录。
         对 delete/purge/grant/revoke 等高敏操作，审计失败时抛出异常（fail-closed），
         防止在无审计记录下完成敏感操作。
+
+        v5.6.0 新增 commit 参数：当 commit=False 时只执行 INSERT 不提交，
+        让调用方在同一个事务中统一 commit，避免审计与数据操作之间的竞态。
         """
         # v5.4.0 安全加固：所有字段控制字符过滤 + 长度限制，防御审计日志污染
         ACTION_WHITELIST = {"add", "update", "delete", "restore", "purge", "export", "import",
@@ -6195,7 +6214,8 @@ class StorageEngine:
                 record_id, action, memory_id, actor, session_id,
                 privacy_level, now, json.dumps(clean_details, ensure_ascii=False)
             ))
-            conn.commit()
+            if commit:
+                conn.commit()
         except sqlite3.Error as e:
             logger.error("审计日志写入失败 action=%s memory_id=%s error=%s", action, memory_id, e)
             if action in HIGH_SENSITIVE_ACTIONS:

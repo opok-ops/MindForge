@@ -38,6 +38,12 @@ from urllib.parse import urlparse, parse_qs
 from collections import defaultdict
 from MindForge import __version__ as MF_VERSION
 
+try:
+    from core.encryption import SecurityError
+except ImportError:
+    class SecurityError(Exception):
+        pass
+
 # 确保项目根目录在 path 中
 _PROJECT_ROOT = Path(__file__).parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
@@ -224,15 +230,23 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self._send_json({"status": "ok"})
 
+    def _check_rate_limit(self) -> bool:
+        """v5.6.1 安全修复：统一限流检查（所有 HTTP 方法共用）。
+        返回 True 表示允许，False 表示已返回 429。
+        """
+        client_ip = self.client_address[0]
+        if not _rate_limiter.check(client_ip):
+            self._send_json({"error": "Rate limit exceeded. Try again later."}, 429)
+            return False
+        return True
+
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
         qs = parse_qs(parsed.query)
 
         # v5.4.7 修复 H-7：速率限制
-        client_ip = self.client_address[0]
-        if not _rate_limiter.check(client_ip):
-            self._send_json({"error": "Rate limit exceeded. Try again later."}, 429)
+        if not self._check_rate_limit():
             return
 
         if path != "/api/health" and not self._check_auth():
@@ -358,6 +372,10 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
 
+        # v5.6.1: 写操作也加限流
+        if not self._check_rate_limit():
+            return
+
         if not self._check_auth():
             return
 
@@ -421,6 +439,10 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
 
+        # v5.6.1: 写操作也加限流
+        if not self._check_rate_limit():
+            return
+
         if not self._check_auth():
             return
 
@@ -459,6 +481,10 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
 
+        # v5.6.1: 写操作也加限流
+        if not self._check_rate_limit():
+            return
+
         if not self._check_auth():
             return
 
@@ -481,20 +507,52 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
         logger.info("%s - %s", self.address_string(), format % args)
 
 
-def start_api_server(mindforge_instance, host="127.0.0.1", port=8080):
+def start_api_server(mindforge_instance, host="127.0.0.1", port=8080,
+                     ssl_certfile: str = "", ssl_keyfile: str = ""):
     """启动 REST API 服务器
 
     Args:
         mindforge_instance: MindForge 实例
         host: 绑定地址
         port: 端口
+        ssl_certfile: TLS 证书文件路径（启用 HTTPS）
+        ssl_keyfile: TLS 私钥文件路径（启用 HTTPS）
+
+    v5.6.1 安全修复：新增 TLS 支持，通过 ssl_certfile / ssl_keyfile 启用 HTTPS，
+    避免 Bearer Token 和记忆数据明文传输。
     """
     MindForgeAPIHandler.mindforge = mindforge_instance
 
+    # v5.6.1 安全修复：非 localhost 绑定且未设置 API Key 时拒绝启动
+    api_key = os.environ.get("MINDFORGE_API_KEY", "")
+    is_localhost = host in ("127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1")
+    if not is_localhost and not api_key:
+        raise SecurityError(
+            "拒绝在非 localhost 地址上启动无认证的 API。"
+            "请设置 MINDFORGE_API_KEY 环境变量，或仅绑定到 127.0.0.1。"
+        )
+
     # P0-003: 使用带并发限制的多线程服务器
     server = BoundedThreadingHTTPServer((host, port), MindForgeAPIHandler)
-    print(f"MindForge REST API serving on http://{host}:{port}")
+
+    # v5.6.1: TLS 支持
+    use_https = bool(ssl_certfile)
+    if use_https:
+        import ssl as _ssl
+        if not ssl_keyfile:
+            ssl_keyfile = ssl_certfile
+        ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_SERVER)
+        ctx.minimum_version = _ssl.TLSVersion.TLSv1_2
+        ctx.load_cert_chain(certfile=ssl_certfile, keyfile=ssl_keyfile)
+        server.socket = ctx.wrap_socket(server.socket, server_side=True)
+        proto = "https"
+    else:
+        proto = "http"
+
+    print(f"MindForge REST API serving on {proto}://{host}:{port}")
     print(f"  Max concurrent threads: {BoundedThreadingHTTPServer.max_threads}")
+    if use_https:
+        print(f"  TLS: enabled (cert: {ssl_certfile})")
     print("  Endpoints: /api/memories, /api/search, /api/stats, /api/health, ...")
     print("  Press Ctrl+C to stop")
 

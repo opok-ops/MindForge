@@ -1823,7 +1823,9 @@ def cmd_serve(args):
         cm = _get_memory(args)
         try:
             from api.server import start_api_server
-            start_api_server(cm, host=args.host, port=args.port)
+            start_api_server(cm, host=args.host, port=args.port,
+                             ssl_certfile=args.ssl_cert,
+                             ssl_keyfile=args.ssl_key)
         except KeyboardInterrupt:
             print("\n服务已停止")
         except (OSError, ValueError) as e:
@@ -3404,6 +3406,11 @@ def main(argv=None):
                           help="启动 REST API 模式（v5.4.6 新增）")
     p_serve.add_argument("--host", default="127.0.0.1",
                           help="绑定地址（默认 127.0.0.1，0.0.0.0 允许外部访问）")
+    # v5.6.1: TLS 参数
+    p_serve.add_argument("--ssl-cert", default="",
+                          help="TLS 证书文件路径（启用 HTTPS，API 模式）")
+    p_serve.add_argument("--ssl-key", default="",
+                          help="TLS 私钥文件路径（默认与证书同文件）")
 
     p_cleanup = sub.add_parser("cleanup", help="清理过期记忆（v5.1.3 新增）")
     p_cleanup.add_argument("--hours", type=int, default=24, help="超过 N 小时的记忆将被清理，默认 24")

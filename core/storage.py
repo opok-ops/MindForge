@@ -1,5 +1,5 @@
 """
-MindForge v5.6.0 存储引擎
+MindForge v5.6.1 存储引擎
 支持四层记忆架构：感官记忆 → 短期记忆 → 长期记忆 → 永久记忆
 """
 
@@ -39,7 +39,7 @@ from .encryption import EncryptionEngine, EncryptedBlob, SecurityError
 try:
     from .. import __version__
 except (ImportError, ValueError):
-    __version__ = "5.6.0"
+    __version__ = "5.6.1"
 
 
 # v5.5.7: 检测数据库路径是否位于网络文件系统

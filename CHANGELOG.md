@@ -2,6 +2,22 @@
 
 All notable changes to MindForge will be documented in this file.
 
+## [5.6.1] - 2026-09-11
+
+### Security (P1)
+- **审计事务竞态修复**：`delete_memory` / `purge_trash` 等写操作的审计日志并入同一事务（`commit=False` + `@_with_rollback`），堵住"数据已提交但审计失败"的竞态窗口
+- **备份路径校验**：`backup()` 写入路径加 `_safe_path` 校验（目录校验 + 最终文件校验），防路径遍历写敏感目录
+- **API TLS 支持**：`start_api_server` 新增 `ssl_certfile` / `ssl_keyfile` 参数，强制 TLSv1.2+；CLI 加 `--ssl-cert` / `--ssl-key` 参数
+
+### Security (P2)
+- **XSS 未闭合标签绕过**：`_XSS_RE` 正则从 `<[^>]*>` 改为 `<[a-zA-Z!/?][^>\s]*[^>]*>?`，匹配无 `>` 的不完整标签（如 `<img onerror=alert(1)`）
+- **API fail-closed 启动**：非 localhost 绑定且未设 `MINDFORGE_API_KEY` 时直接 `raise SecurityError` 拒绝启动
+- **写操作限流**：POST/PUT/DELETE 全部过 `_check_rate_limit()`，此前仅 GET 限流
+- **storage.py docstring 版本**：v5.5.8 → v5.6.1
+
+### Performance (P2)
+- **N+1 写入优化**：新增 `StorageEngine.bulk_update_memory_fields()` 单事务批量更新标量字段（strength/forgetting_score/metadata），字段白名单安全校验。`evolution.update_forgetting_scores` 和 `memory_decay.compute_decay_scores` 从 N 次事务降为 1 次
+
 ## [5.6.0] - 2026-09-09
 
 ### Security

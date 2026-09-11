@@ -23,7 +23,7 @@ if str(_PKG_ROOT) not in sys.path:
 try:
     from MindForge import __version__
 except ImportError:
-    __version__ = "5.6.0"
+    __version__ = "5.6.1"
 
 
 def _import_mindforge():

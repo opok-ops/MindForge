@@ -57,10 +57,15 @@ class MemoryEvolution:
         self._short_term_capacity = 100
 
     def update_forgetting_scores(self):
-        """更新所有记忆的遗忘分数"""
+        """更新所有记忆的遗忘分数
+
+        v5.6.1 性能优化：从逐条 update_memory 改为 bulk_update_memory_fields，
+        减少事务开销和不必要的 FTS/版本历史/审计处理。
+        """
         all_memories = self.storage.list_memories(limit=10000)
         now = time.time()
 
+        bulk_updates = []
         for entry in all_memories:
             elapsed_hours = (now - entry.last_accessed_at) / 3600
             if elapsed_hours < 1:
@@ -74,13 +79,22 @@ class MemoryEvolution:
 
             forgetting_score = 1.0 - new_strength
 
-            self.storage.update_memory(
-                entry_id=entry.id,
-                metadata={
-                    **entry.metadata,
-                    "current_strength": new_strength,
-                    "forgetting_score": forgetting_score,
-                }
+            new_metadata = {
+                **entry.metadata,
+                "current_strength": new_strength,
+                "forgetting_score": forgetting_score,
+            }
+            bulk_updates.append({
+                "id": entry.id,
+                "strength": new_strength,
+                "forgetting_score": forgetting_score,
+                "metadata": new_metadata,
+            })
+
+        if bulk_updates:
+            self.storage.bulk_update_memory_fields(
+                bulk_updates,
+                ["strength", "forgetting_score", "metadata"],
             )
 
     def consolidate(self, agent_id: str = "", session_id: str = "") -> Dict:

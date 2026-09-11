@@ -1545,6 +1545,66 @@ class StorageEngine:
 
         return True
 
+    @_with_rollback
+    def bulk_update_memory_fields(self,
+                                  updates: List[Dict[str, Any]],
+                                  fields: List[str]) -> int:
+        """批量更新记忆字段（v5.6.1 性能优化）
+
+        用于 N+1 场景（如遗忘分数计算、衰减评分），避免逐条调用 update_memory
+        的事务开销和 FTS/加密/版本历史等不必要的处理。
+
+        Args:
+            updates: 每个 dict 包含 "id" 键 + fields 中指定的字段键
+            fields: 要更新的字段名列表（如 ["strength", "forgetting_score", "metadata"]）
+
+        Returns:
+            成功更新的行数
+
+        注意：
+        - 不触发 FTS 刷新、版本历史、审计日志、嵌入向量更新
+        - 仅支持 memories 表中的标量字段
+        - metadata 字段值会自动 JSON 序列化
+        """
+        if not updates or not fields:
+            return 0
+
+        # 安全校验：只允许白名单字段
+        ALLOWED_FIELDS = {
+            "strength", "forgetting_score", "metadata",
+            "consolidation_count", "last_accessed_at", "updated_at",
+        }
+        for f in fields:
+            if f not in ALLOWED_FIELDS:
+                raise ValueError(f"bulk_update_memory_fields: 不支持的字段 '{f}'")
+
+        conn = self._get_conn()
+        now = time.time()
+        count = 0
+
+        set_clause = ", ".join(f"{f} = ?" for f in fields)
+        set_clause += ", updated_at = ?"
+
+        for item in updates:
+            entry_id = item.get("id")
+            if not entry_id:
+                continue
+            params = []
+            for f in fields:
+                val = item.get(f)
+                if f == "metadata" and val is not None:
+                    val = json.dumps(self._sanitize_metadata(val), ensure_ascii=False)
+                params.append(val)
+            params.append(now)
+            params.append(entry_id)
+            cursor = conn.execute(
+                f"UPDATE memories SET {set_clause} WHERE id = ?", params
+            )
+            count += cursor.rowcount
+
+        conn.commit()
+        return count
+
     def adjust_importance(self, entry_id: str, delta: float,
                           actor: str = "", session_id: str = "") -> bool:
         """调整记忆重要性（增量方式，v5.5.6 新增）

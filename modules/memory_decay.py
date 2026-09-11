@@ -209,6 +209,8 @@ class MemoryDecayEngine:
         total_strength = 0.0
         by_layer: Dict[str, int] = {}
 
+        # v5.6.1 性能优化：批量更新替代逐条 update_memory
+        bulk_updates = []
         for entry in entries:
             scanned += 1
             layer_name = entry.layer.value if hasattr(entry.layer, 'value') else str(entry.layer)
@@ -222,16 +224,25 @@ class MemoryDecayEngine:
 
             # 更新元数据中的衰减信息
             if abs(strength - entry.strength) > 0.001:
-                self.storage.update_memory(
-                    entry_id=entry.id,
-                    metadata={
-                        **entry.metadata,
-                        "current_strength": round(strength, 4),
-                        "forgetting_score": round(1.0 - strength, 4),
-                        "decay_updated_at": now,
-                    }
-                )
+                new_metadata = {
+                    **entry.metadata,
+                    "current_strength": round(strength, 4),
+                    "forgetting_score": round(1.0 - strength, 4),
+                    "decay_updated_at": now,
+                }
+                bulk_updates.append({
+                    "id": entry.id,
+                    "strength": round(strength, 4),
+                    "forgetting_score": round(1.0 - strength, 4),
+                    "metadata": new_metadata,
+                })
                 updated += 1
+
+        if bulk_updates:
+            self.storage.bulk_update_memory_fields(
+                bulk_updates,
+                ["strength", "forgetting_score", "metadata"],
+            )
 
         return {
             "scanned": scanned,

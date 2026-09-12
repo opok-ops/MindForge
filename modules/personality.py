@@ -69,10 +69,13 @@ class PersonalityEngine:
             all_memories = self.storage.list_memories(category="user_profile", limit=100)
             for entry in all_memories:
                 try:
-                    data = json.loads(entry.content)
+                    # P3 #29 修复：使用安全 JSON 解析，防深度嵌套栈溢出
+                    data = self.storage._safe_json_loads(entry.content)
+                    if data is None:
+                        continue
                     profile = UserProfile.from_dict(data)
                     self.profiles[profile.user_id] = profile
-                except (json.JSONDecodeError, TypeError):
+                except (json.JSONDecodeError, TypeError, ValueError):
                     pass
         except sqlite3.OperationalError:
             pass
@@ -239,11 +242,14 @@ class PersonalityEngine:
             profile_entry = None
             for entry in existing:
                 try:
-                    data = json.loads(entry.content)
+                    # P3 #29 修复：使用安全 JSON 解析
+                    data = self.storage._safe_json_loads(entry.content)
+                    if data is None:
+                        continue
                     if data.get("user_id") == profile.user_id:
                         profile_entry = entry
                         break
-                except (json.JSONDecodeError, TypeError):
+                except (json.JSONDecodeError, TypeError, ValueError):
                     pass
 
             content = json.dumps(profile.to_dict(), ensure_ascii=False)

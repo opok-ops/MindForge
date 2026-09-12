@@ -509,15 +509,25 @@ class HardwareProfiler:
         # 终极 fallback：假设 4GB
         return 4.0
 
+    _cached_disk_type: Optional[str] = None  # P3 #24 缓存：磁盘类型只测一次
+
     @staticmethod
     def _detect_disk_type() -> str:
-        """检测磁盘类型（SSD/HDD），优先使用 psutil，降级到写入速度测试"""
+        """检测磁盘类型（SSD/HDD），优先使用 psutil，降级到写入速度测试
+
+        P3 #24 优化：结果缓存到类变量，只测一次。此前每次 health_dashboard 调用
+        都写 5MB 临时文件测速，浪费 IO。
+        """
+        if HardwareProfiler._cached_disk_type is not None:
+            return HardwareProfiler._cached_disk_type
+
+        result = "unknown"
         if _HAS_PSUTIL:
             try:
                 # psutil 在部分平台可直接获取磁盘类型
                 for disk in psutil.disk_partitions():
                     try:
-                        usage = psutil.disk_usage(disk.mountpoint)
+                        psutil.disk_usage(disk.mountpoint)
                         # 无法直接从 psutil 获取 SSD/HDD，跳过
                     except Exception:
                         continue
@@ -542,14 +552,12 @@ class HardwareProfiler:
 
             if elapsed > 0:
                 speed_mbps = (5 * 1024 * 1024 / elapsed) / (1024 * 1024)  # MB/s
-                if speed_mbps > 50:
-                    return "ssd"
-                else:
-                    return "hdd"
+                result = "ssd" if speed_mbps > 50 else "hdd"
         except Exception:
             pass
 
-        return "unknown"
+        HardwareProfiler._cached_disk_type = result
+        return result
 
     @staticmethod
     def _classify_performance(cpu_cores: int, memory_gb: float) -> str:

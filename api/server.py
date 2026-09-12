@@ -246,8 +246,10 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
             return None
         raw = self.rfile.read(content_length)
         try:
-            return json.loads(raw.decode("utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError):
+            # P2 #23 修复：外部输入用安全 JSON 解析（深度+大小限制）
+            from core.storage import _safe_json_loads
+            return _safe_json_loads(raw.decode("utf-8"))
+        except (ValueError, json.JSONDecodeError, UnicodeDecodeError):
             return None
 
     def _extract_mem_id(self, path: str, prefix: str = "/api/memories/") -> str:

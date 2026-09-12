@@ -5770,8 +5770,10 @@ def cmd_import_json(args):
 
     try:
         content = input_path.read_text(encoding='utf-8')
-        data = json.loads(content)
-    except (json.JSONDecodeError, OSError, IOError) as e:
+        # P2 #23 修复：外部文件用安全 JSON 解析
+        from core.storage import _safe_json_loads
+        data = _safe_json_loads(content)
+    except (json.JSONDecodeError, ValueError, OSError, IOError) as e:
         print(c(f"\n❌ JSON 解析失败: {e}", "red"))
         return 1
 
@@ -6391,7 +6393,9 @@ def cmd_backup_restore(args):
     import zipfile
     try:
         with zipfile.ZipFile(backup_file, "r") as zf:
-            manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
+            # P2 #23 修复：外部备份文件用安全 JSON 解析
+            from core.storage import _safe_json_loads
+            manifest = _safe_json_loads(zf.read("manifest.json").decode("utf-8"))
     except Exception as e:
         print(c(f"❌ 无法读取备份文件：{e}", "red"))
         return 1

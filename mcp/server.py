@@ -111,7 +111,12 @@ def _read_message() -> Dict[str, Any]:
     raw = sys.stdin.buffer.read(length)
     if not raw:
         raise EOFError("stdin closed")
-    return json.loads(raw.decode("utf-8"))
+    # P2 #23 修复：外部输入用安全 JSON 解析（深度限制）
+    try:
+        from core.storage import _safe_json_loads
+        return _safe_json_loads(raw.decode("utf-8"))
+    except ImportError:
+        return json.loads(raw.decode("utf-8"))
 
 
 def _write_message(payload: Dict[str, Any]) -> None:

@@ -225,10 +225,10 @@ def _filter_unicode_ctrl(s: str) -> str:
     )
 
 
-# v5.4.1 修复：内容长度上限提升为模块级常量，统一作用于
-# add_memory / update_memory / batch_add，堵住此前仅 add_memory
-# 校验导致的超长内容绕过（DoS）问题。
-MAX_CONTENT_LEN = 50000
+# v5.6.2 P1 修复：统一内容长度上限为 1MB（与 mindforge.py add() 一致）。
+# 此前 storage 限 50K 但 MindForge.add() 限 1MB，不一致导致
+# 超长内容在 MindForge 层通过但 storage 层拒绝（或静默截断）。
+MAX_CONTENT_LEN = 1_000_000  # 1MB 字符上限
 
 
 def _validate_content_len(content: Optional[str]) -> None:
@@ -294,13 +294,19 @@ def _sanitize_html(value: str, max_len: int = 10000) -> str:
 
 # v5.3.3 安全加固：敏感操作频率限制器
 class _RateLimiter:
-    """简单的内存频率限制器，防止暴力攻击"""
+    """简单的内存频率限制器，防止暴力攻击
+
+    v5.6.2 P0 修复：加 threading.Lock()，多线程并发下防止
+    RuntimeError: dictionary changed size during iteration。
+    """
 
     def __init__(self):
         self._windows: Dict[str, List[float]] = {}
         # v5.3.5 安全：记录最后清理时间，防止内存泄漏
         self._last_purge: float = time.time()
         self._purge_interval: int = 3600  # 每小时清理一次
+        import threading as _threading
+        self._lock = _threading.Lock()
 
     def check(self, key: str, max_calls: int = 10, window_seconds: int = 60) -> bool:
         """检查是否超过频率限制
@@ -314,23 +320,24 @@ class _RateLimiter:
             True=允许，False=超限
         """
         now = time.time()
-        # v5.3.5 安全：定期清理全部过期条目，防止内存泄漏
-        self._maybe_purge(now)
+        with self._lock:
+            # v5.3.5 安全：定期清理全部过期条目，防止内存泄漏
+            self._maybe_purge(now)
 
-        if key not in self._windows:
-            self._windows[key] = []
+            if key not in self._windows:
+                self._windows[key] = []
 
-        # 清理过期记录
-        self._windows[key] = [t for t in self._windows[key] if now - t < window_seconds]
+            # 清理过期记录
+            self._windows[key] = [t for t in self._windows[key] if now - t < window_seconds]
 
-        if len(self._windows[key]) >= max_calls:
-            return False
+            if len(self._windows[key]) >= max_calls:
+                return False
 
-        self._windows[key].append(now)
-        return True
+            self._windows[key].append(now)
+            return True
 
     def _maybe_purge(self, now: float):
-        """定期清理全表过期条目"""
+        """定期清理全表过期条目（调用方须持锁）"""
         if now - self._last_purge < self._purge_interval:
             return
         self._last_purge = now

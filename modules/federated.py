@@ -28,7 +28,8 @@ class FederatedPeer:
     name: str
     status: PeerStatus = PeerStatus.OFFLINE
     trust_level: float = 0.5
-    public_key: str = ""
+    public_key: str = ""  # 预留：非对称签名公钥（Ed25519 等），不用于 HMAC
+    shared_secret: str = ""  # HMAC 共享密钥，双方必须一致且保密
     last_seen: float = 0.0
     shared_categories: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -385,23 +386,25 @@ class FederatedMemory:
     def _compute_signature(self, data: Dict, peer_id: str) -> str:
         """计算 HMAC-SHA256 签名
 
-        使用 peer 的 public_key 作为 HMAC 密钥，对排序后的 JSON 数据签名。
+        使用 peer 的 shared_secret 作为 HMAC 密钥（必须保密，双方共享）。
+        注意：public_key 不用于 HMAC——公钥是公开的，用它做 HMAC 密钥任何人可伪造。
         """
         peer = self.peers.get(peer_id)
-        if not peer or not peer.public_key:
+        if not peer or not peer.shared_secret:
             return ""
-        key = peer.public_key.encode("utf-8")
+        key = peer.shared_secret.encode("utf-8")
         msg = json.dumps(data, sort_keys=True, ensure_ascii=False).encode("utf-8")
         return hmac.new(key, msg, digestmod=hashlib.sha256).hexdigest()
 
     def _verify_signature(self, data: Dict, signature: str, peer_id: str) -> bool:
         """验证 HMAC-SHA256 签名
 
-        P1-004: fail-closed 安全策略
-        - 无签名时：默认拒绝，仅当 allow_unsigned_peers=True 且节点已注册时允许
+        P0 安全修复：使用 shared_secret（而非 public_key）做 HMAC 密钥。
+        fail-closed 安全策略：
         - 未注册节点：直接拒绝
-        - 无公钥节点：直接拒绝
+        - 无 shared_secret 节点：直接拒绝
         - 签名不匹配：拒绝
+        - 无签名时：仅当 allow_unsigned_peers=True 时允许
         """
         peer = self.peers.get(peer_id)
         if not peer:
@@ -411,8 +414,8 @@ class FederatedMemory:
             # 无签名时仅允许显式配置的未签名节点
             return self.allow_unsigned_peers
 
-        if not peer.public_key:
-            return False  # fail-closed: 无公钥节点直接拒绝
+        if not peer.shared_secret:
+            return False  # fail-closed: 无共享密钥节点直接拒绝
 
         expected = self._compute_signature(data, peer_id)
         if not expected:

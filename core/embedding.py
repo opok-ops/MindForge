@@ -596,22 +596,29 @@ class EmbeddingEngine:
                     requested_backend, requested_model, self._backend_name, self._model_name
                 )
             return
-        self._initialized = True
-        self._backend_name = backend or os.environ.get(
-            "MINDFORGE_EMBEDDING_BACKEND", "sentence_transformers")
-        self._backend: Optional[EmbeddingBackend] = None
-        self._model_name = model_name or os.environ.get(
-            "MINDFORGE_EMBEDDING_MODEL", "")
-        if not self._model_name:
-            if self._backend_name == "openai":
-                self._model_name = "text-embedding-3-small"
-            elif self._backend_name == "ollama":
-                self._model_name = "nomic-embed-text"
-            else:
-                self._model_name = DEFAULT_MODEL
-        self._dimension = DEFAULT_DIMENSION
-        self._load_attempted = False
-        self._available = False
+        try:
+            self._initialized = True
+            self._backend_name = backend or os.environ.get(
+                "MINDFORGE_EMBEDDING_BACKEND", "sentence_transformers")
+            self._backend: Optional[EmbeddingBackend] = None
+            self._model_name = model_name or os.environ.get(
+                "MINDFORGE_EMBEDDING_MODEL", "")
+            if not self._model_name:
+                if self._backend_name == "openai":
+                    self._model_name = "text-embedding-3-small"
+                elif self._backend_name == "ollama":
+                    self._model_name = "nomic-embed-text"
+                else:
+                    self._model_name = DEFAULT_MODEL
+            self._dimension = DEFAULT_DIMENSION
+            self._load_attempted = False
+            self._available = False
+        except Exception:
+            # P1 修复：初始化失败时重置单例，允许后续调用重试
+            # （此前失败后 _instance 已创建但半初始化，后续调用直接拿到坏实例）
+            with EmbeddingEngine._lock:
+                EmbeddingEngine._instance = None
+            raise
 
     @property
     def is_available(self) -> bool:

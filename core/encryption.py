@@ -455,36 +455,43 @@ def rekey_engine(
         new_password, new_salt, iterations=new_iterations
     )
 
-    # 3. 写入新的密钥文件（原子操作前先备份）
-    backup_path = key_path.with_suffix(key_path.suffix + ".bak")
-    if key_path.exists():
-        import shutil
-        shutil.copy2(key_path, backup_path)
+    # 3-4. 写入新密钥文件 + 更新全局引擎（原子临界区）
+    # P0 修复：持 _init_lock 确保 key_file 和 _global_engine 原子切换，
+    # 防止多线程下另一个线程看到新密钥但旧引擎（或反之）的不一致状态。
+    with _init_lock:
+        # 3. 写入新的密钥文件（原子操作前先备份）
+        backup_path = key_path.with_suffix(key_path.suffix + ".bak")
+        if key_path.exists():
+            import shutil
+            shutil.copy2(key_path, backup_path)
 
-    try:
-        _write_key_file(key_path, new_salt, new_kdf_params, new_engine)
-    except Exception:
-        # 写入失败时恢复备份
-        import shutil
-        if backup_path.exists():
-            shutil.copy2(backup_path, key_path)
-        raise
+        try:
+            _write_key_file(key_path, new_salt, new_kdf_params, new_engine)
+        except Exception:
+            # 写入失败时恢复备份
+            import shutil
+            if backup_path.exists():
+                shutil.copy2(backup_path, key_path)
+            raise
 
-    # 4. 更新全局引擎
-    global _global_engine
-    _global_engine = new_engine
+        # 4. 更新全局引擎（在锁内，与 key_file 写入原子）
+        global _global_engine
+        _global_engine = new_engine
 
     return old_engine, new_engine
 
 
 def get_engine() -> EncryptionEngine:
-    """获取全局加密引擎"""
-    if _global_engine is None:
+    """获取全局加密引擎（线程安全读取）"""
+    with _init_lock:
+        engine = _global_engine
+    if engine is None:
         raise SecurityError("加密引擎未初始化，请先调用 init_engine()")
-    return _global_engine
+    return engine
 
 
 def _set_global_engine(engine: EncryptionEngine) -> None:
-    """恢复全局加密引擎（rekey 回滚用）"""
+    """恢复全局加密引擎（rekey 回滚用），线程安全"""
     global _global_engine
-    _global_engine = engine
+    with _init_lock:
+        _global_engine = engine

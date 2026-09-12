@@ -1216,6 +1216,9 @@ class MindForge:
             if self.config.encrypted:
                 key_path = Path(self.config.key_file)
                 if key_path.exists():
+                    # P1 安全修复：校验 key_file 路径在预期位置，防 from_config 加载
+                    # 恶意 JSON 时将系统密钥文件打包进备份（路径遍历）
+                    _safe_path(str(key_path), must_exist=True)
                     zf.write(key_path, ".key")
 
             # 3. 配置快照

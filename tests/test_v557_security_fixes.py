@@ -129,7 +129,7 @@ class TestP1004FederatedFailClosed(unittest.TestCase):
 
         fed = FederatedMemory(local_peer_id="local")
         fed.register_peer("peerA", "节点A", trust_level=0.9)
-        fed.peers["peerA"].public_key = "test_secret_key"
+        fed.peers["peerA"].shared_secret = "test_secret_key"
 
         data = {"content": "测试消息", "version": 1}
         signature = fed._compute_signature(data, "peerA")
@@ -144,22 +144,22 @@ class TestP1004FederatedFailClosed(unittest.TestCase):
 
         fed = FederatedMemory(local_peer_id="local")
         fed.register_peer("peerA", "节点A", trust_level=0.9)
-        fed.peers["peerA"].public_key = "test_secret_key"
+        fed.peers["peerA"].shared_secret = "test_secret_key"
 
         data = {"content": "测试消息"}
         ok = fed._verify_signature(data, "wrong_signature", "peerA")
         self.assertFalse(ok)
 
-    def test_no_public_key_rejected(self):
-        """无公钥节点即使有签名也被拒绝"""
+    def test_no_shared_secret_rejected(self):
+        """无共享密钥节点即使有签名也被拒绝（P0 修复：public_key 不再用于 HMAC）"""
         from modules.federated import FederatedMemory
 
         fed = FederatedMemory(local_peer_id="local")
         fed.register_peer("peerA", "节点A", trust_level=0.9)
-        # peerA 没有 public_key
+        # peerA 没有 shared_secret
 
         ok = fed._verify_signature({"content": "test"}, "some_signature", "peerA")
-        self.assertFalse(ok, "无公钥节点应直接拒绝")
+        self.assertFalse(ok, "无共享密钥节点应直接拒绝")
 
 
 class TestP1007IntentRouterSha256(unittest.TestCase):

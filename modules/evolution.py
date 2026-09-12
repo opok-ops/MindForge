@@ -121,22 +121,23 @@ class MemoryEvolution:
             consolidation_score = (strength + access_factor + importance_factor) / 3.0
 
             if consolidation_score >= self._consolidation_threshold:
+                # P1 修复：合并为单次 update_memory，避免双次非原子操作
+                # （中途崩溃会导致 layer 已升级但 consolidation_count 未 +1）
+                new_count = entry.consolidation_count + 1
                 self.storage.update_memory(
                     entry_id=entry.id,
                     layer=MemoryLayer.LONG_TERM,
+                    consolidation_count=new_count,
                     metadata={
                         **entry.metadata,
                         "consolidated_at": now,
                         "consolidation_score": consolidation_score,
+                        "consolidation_count": new_count,
                     },
                     actor=agent_id,
                     session_id=session_id,
                 )
-                entry.consolidation_count += 1
-                self.storage.update_memory(
-                    entry_id=entry.id,
-                    metadata={**entry.metadata, "consolidation_count": entry.consolidation_count},
-                )
+                entry.consolidation_count = new_count
                 promoted += 1
                 consolidated.append(entry.id)
             elif strength < 0.2 and entry.importance == Importance.LOW:

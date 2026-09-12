@@ -1074,29 +1074,29 @@ class TestContentLengthGuard(unittest.TestCase):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def test_update_memory_rejects_oversized(self):
-        from core.storage import StorageEngine
+        from core.storage import StorageEngine, MAX_CONTENT_LEN
         storage = StorageEngine(db_path=self.db_path)
         entry = storage.add_memory(content="正常内容")
-        oversized = "x" * 50001
+        oversized = "x" * (MAX_CONTENT_LEN + 1)
         with self.assertRaises(ValueError):
             storage.update_memory(entry.id, content=oversized)
 
     def test_batch_add_skips_oversized(self):
-        from core.storage import StorageEngine
+        from core.storage import StorageEngine, MAX_CONTENT_LEN
         storage = StorageEngine(db_path=self.db_path)
         entries = [
             {"content": "正常条目"},
-            {"content": "y" * 50001},  # 超长，应被跳过
+            {"content": "y" * (MAX_CONTENT_LEN + 1)},  # 超长，应被跳过
         ]
         added = storage.batch_add(entries)
         self.assertEqual(added, 1)
         self.assertEqual(storage.count_memories(), 1)
 
     def test_add_memory_still_guarded(self):
-        from core.storage import StorageEngine
+        from core.storage import StorageEngine, MAX_CONTENT_LEN
         storage = StorageEngine(db_path=self.db_path)
         with self.assertRaises(ValueError):
-            storage.add_memory(content="z" * 50001)
+            storage.add_memory(content="z" * (MAX_CONTENT_LEN + 1))
 
 
 # ===== v5.4.2 新增能力测试 =====

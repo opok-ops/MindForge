@@ -105,6 +105,35 @@ class EventBus:
 
     # ===== 订阅/取消订阅 =====
 
+    @staticmethod
+    def _validate_no_ssrf(url: str) -> None:
+        """SSRF 防护：拒绝指向内网/回环/链路本地的 Webhook URL
+
+        阻止探测云元数据服务（169.254.169.254）、本地服务等。
+        """
+        from urllib.parse import urlparse
+        import ipaddress
+
+        parsed = urlparse(url)
+        hostname = parsed.hostname or ""
+
+        # 常见内网主机名
+        if hostname in ("localhost", "loopback", "metadata", "metadata.google.internal"):
+            raise ValueError(f"Webhook URL 禁止指向本地/内网主机: {hostname}")
+
+        # 尝试解析 IP 并检查
+        try:
+            ip = ipaddress.ip_address(hostname)
+        except ValueError:
+            # 不是 IP 地址，是域名 — 运行时再解析（DNS rebinding 风险）
+            # 注册阶段只做基本格式校验，投递前再做 DNS 解析检查
+            return
+
+        # 拒绝内网/私有/回环/链路本地/组播/未指定
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_multicast or ip.is_unspecified or ip.is_reserved):
+            raise ValueError(f"Webhook URL 禁止指向内网 IP: {ip}")
+
     def subscribe(self, event: str, callback: Callable[[Dict[str, Any]], None]) -> None:
         """订阅指定事件
 
@@ -155,6 +184,10 @@ class EventBus:
         url = url.strip()
         if not url.startswith(("http://", "https://")):
             raise ValueError(f"Webhook URL 必须以 http:// 或 https:// 开头: {url!r}")
+
+        # P1 安全修复：SSRF 防护 — 拒绝内网/回环/链路本地地址
+        self._validate_no_ssrf(url)
+
         config = WebhookConfig(
             url=url,
             events=set(events) if events else set(ALL_EVENTS),

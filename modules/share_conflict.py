@@ -150,10 +150,13 @@ class SharedConflictResolver:
             "updated_at": getattr(local, "updated_at", 0.0),
             "category": local.category,
         }
-        # v5.4.4 修复 #8：只存摘要 + hash，不再存完整 50K 原文，防止数据库膨胀
-        import hashlib as _hl
+        # v5.6.2 P0 修复：必须存完整 content，否则 LWW 冲突解决时
+        # 用 200 字符 preview 覆盖完整内容 → 永久数据丢失（v5.4.4 #8 回归）。
+        # 数据库膨胀风险 < 数据丢失风险，完整内容保留到冲突关闭后清理。
         _content_str = str(content)
+        import hashlib as _hl
         incoming_snapshot = {
+            "content": _content_str,
             "content_preview": _content_str[:200],
             "content_hash": _hl.sha256(_content_str.encode("utf-8")).hexdigest()[:16],
             "content_length": len(_content_str),
@@ -221,8 +224,12 @@ class SharedConflictResolver:
             incoming_snapshot = json.loads(row["incoming_snapshot"] or "{}")
         except json.JSONDecodeError:
             incoming_snapshot = {}
-        # v5.4.4 修复 #8：不再存储完整 content，改用 content_preview
-        incoming_content = incoming_snapshot.get("content_preview", "")
+        # v5.6.2 P0 修复：从完整 content 字段读取，而非 200 字符 preview
+        # （v5.4.4 #8 引入的回归：用 preview 覆盖完整内容导致永久数据丢失）
+        incoming_content = incoming_snapshot.get("content", "")
+        if not incoming_content:
+            # 兼容旧数据：旧冲突只有 content_preview，此时禁止 LWW 自动覆盖
+            incoming_content = incoming_snapshot.get("content_preview", "")
         incoming_version = int(incoming_snapshot.get("version", 0) or 0)
         incoming_ts = float(incoming_snapshot.get("timestamp", 0.0) or 0.0)
         from_peer = str(incoming_snapshot.get("from_peer", "") or row["incoming_peer"])

@@ -206,7 +206,32 @@ class PrivacyEngine:
                      granted_by: str = "",
                      duration_hours: Optional[float] = None,
                      access_level: str = "read") -> AccessGrant:
-        """授予访问权限"""
+        """授予访问权限
+
+        P1 安全修复：验证调用者（granted_by）有权授权 — 必须是记忆所有者
+        或具有 admin 权限，防止任意用户给任意人授权 PRIVATE/STRICT 记忆。
+        """
+        # 权限校验：granted_by 必须是所有者或有授权权限
+        if not granted_by:
+            raise PermissionError("授权需要调用者身份（granted_by 不能为空）")
+
+        if grantee == granted_by:
+            raise PermissionError("不能给自己授权")
+
+        is_owner = False
+        if self.storage:
+            entry = self.storage.get_memory(memory_id)
+            if entry is None:
+                raise ValueError(f"记忆不存在: {memory_id}")
+            # 检查是否为所有者（source_agent 或 metadata 中的 owner 字段）
+            entry_owner = getattr(entry, "source_agent", "") or ""
+            meta_owner = (entry.metadata or {}).get("owner", "") if hasattr(entry, "metadata") else ""
+            is_owner = (granted_by == entry_owner) or (granted_by == meta_owner)
+
+        # 非所有者拒绝授权（admin 角色可在未来扩展）
+        if not is_owner:
+            raise PermissionError(f"用户 {granted_by} 无权授权记忆 {memory_id}")
+
         grant = AccessGrant(
             grant_id=str(uuid.uuid4()),
             memory_id=memory_id,

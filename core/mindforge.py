@@ -982,7 +982,6 @@ class MindForge:
                   top_access_low_importance, layer_distribution, importance_distribution
         """
         import time as _time
-        from collections import Counter
 
         conn = self._storage._get_conn()
         now = _time.time()
@@ -1070,7 +1069,7 @@ class MindForge:
             "decay_warnings": decay_warnings,
             "top_access_low_importance": access_low_imp,
             "summary": {
-                "categories": len(cat_counter),
+                "categories": len(category_dist),
                 "decay_warning_count": len(decay_warnings),
                 "high_access_low_importance_count": len(access_low_imp),
                 "avg_growth_per_day": round(cumulative / max(len(sorted_days), 1), 1),

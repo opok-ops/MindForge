@@ -76,6 +76,8 @@ def _log(msg: str) -> None:
 
 def _read_message() -> Dict[str, Any]:
     headers: Dict[str, str] = {}
+    # v5.6.2 安全修复：消息体大小上限（与 REST API 一致，10MB）
+    MAX_CONTENT_LENGTH = 10 * 1024 * 1024
     while True:
         line = sys.stdin.buffer.readline()
         if not line or line in (b"\r\n", b"\n"):
@@ -91,6 +93,9 @@ def _read_message() -> Dict[str, Any]:
         length = int(headers.get("content-length", "0"))
     except ValueError:
         length = 0
+    # v5.6.2 安全修复：拒绝超大消息体，防止内存耗尽 DoS
+    if length > MAX_CONTENT_LENGTH:
+        raise ValueError(f"Content-Length {length} exceeds maximum {MAX_CONTENT_LENGTH}")
     if length <= 0:
         raw = sys.stdin.buffer.readline()
     else:
@@ -567,6 +572,27 @@ def _safe_int(v: Any, default: int = 0, lo: Optional[int] = None, hi: Optional[i
     return iv
 
 
+def _safe_float(v: Any, default: float = 0.0, lo: Optional[float] = None, hi: Optional[float] = None) -> float:
+    """Safely coerce arbitrary input to float, with optional range clamping.
+
+    v5.6.2 安全修复：拒绝 inf/nan 等非法值，防止异常输入直达底层。
+    """
+    if v is None or v == "":
+        return default
+    try:
+        fv = float(v)
+    except (ValueError, TypeError):
+        return default
+    import math
+    if math.isnan(fv) or math.isinf(fv):
+        return default
+    if lo is not None and fv < lo:
+        fv = lo
+    if hi is not None and fv > hi:
+        fv = hi
+    return fv
+
+
 def _clean(v: Any) -> Any:
     if isinstance(v, dict):
         return {str(k): _clean(x) for k, x in v.items()}
@@ -646,7 +672,7 @@ def h_memory_search(mf, args: Dict[str, Any]) -> Dict[str, Any]:
     res = mf.search(
         query=str(args["query"]),
         max_results=_safe_int(args.get("max_results", 5), 5, 1, 100),
-        min_relevance=float(args.get("min_relevance", 0.0)),
+        min_relevance=_safe_float(args.get("min_relevance", 0.0), 0.0, 0.0, 1.0),
         categories=categories,
         agent_id=args.get("agent_id") or "",
         use_embedding=use_emb,
@@ -1108,7 +1134,8 @@ def serve_forever(db_path: Optional[str] = None, key_file: Optional[str] = None)
             tb = traceback.format_exc(limit=6)
             _log(f"handler error {method}: {e}\n{tb}")
             if rid is not None:
-                _respond_error(msg, code=-32000, message=str(e), data=tb)
+                # v5.6.2 安全修复：不向客户端返回堆栈跟踪，仅服务端日志记录
+                _respond_error(msg, code=-32000, message="Internal server error")
 
 
 def main(argv: Optional[List[str]] = None) -> int:

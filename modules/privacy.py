@@ -62,11 +62,17 @@ SENSITIVE_KEYWORDS = [
 class PrivacyEngine:
     """隐私引擎"""
 
+    # v5.6.2 安全修复：2FA 验证会话有效期（5 分钟）
+    _2FA_VERIFY_WINDOW = 300  # 秒
+
     def __init__(self, storage: StorageEngine):
         self.storage = storage
         self._grants: Dict[str, List[AccessGrant]] = {}
         # v5.3.3 安全修复：二次验证令牌存储（替代始终返回 True 的漏洞）
-        self._second_factor_tokens: Dict[str, str] = {}
+        # v5.6.2 安全修复：存储 token hash，用于验证码比对（不明文驻留）
+        self._second_factor_token_hashes: Dict[str, str] = {}
+        # v5.6.2 安全修复：记录已通过 2FA 验证的会话（actor -> 验证时间戳）
+        self._verified_2fa_sessions: Dict[str, float] = {}
         # v5.4.2 安全修复：持久化 grants 和 2FA tokens 到 SQLite，重启不丢失
         self._init_persistence()
         self._load_persisted_data()
@@ -112,10 +118,10 @@ class PrivacyEngine:
                 if row[1] not in self._grants:
                     self._grants[row[1]] = []
                 self._grants[row[1]].append(grant)
-            # 2FA tokens 不加载明文（仅保留 actor 列表，令牌需重新注册）
-            token_rows = conn.execute("SELECT actor FROM second_factor_tokens").fetchall()
+            # v5.6.2 安全修复：加载 token_hash（而非空字符串），重启后验证码仍可验证
+            token_rows = conn.execute("SELECT actor, token_hash FROM second_factor_tokens").fetchall()
             for row in token_rows:
-                self._second_factor_tokens[row[0]] = ""  # 标记已注册，但令牌需重新验证
+                self._second_factor_token_hashes[row[0]] = row[1]
         except sqlite3.Error as e:
             logger.error("隐私持久化数据加载失败: %s", e)
 
@@ -258,31 +264,33 @@ class PrivacyEngine:
         return False
 
     def _verify_second_factor(self, actor: str) -> bool:
-        """二次验证（v5.3.3 安全修复：不再无条件返回 True）
+        """二次验证（v5.6.2 安全修复：基于会话的验证，而非仅检查注册）
 
-        STRICT 级别记忆需要二次验证。此前该方法始终返回 True，导致 STRICT 级别
-        与 PRIVATE 级别提供相同的保护，形成安全漏洞。
+        STRICT 级别记忆需要二次验证。此前该方法仅检查 token 是否存在（truthy），
+        导致只要注册过 2FA 就直接放行，形同虚设。
 
-        v5.3.3 修复：
-        - 不再无条件放行
-        - 如果未配置二次验证令牌，则拒绝访问（默认安全）
-        - 如果已配置令牌且匹配，则放行
-        - 未注册的 actor 一律拒绝
+        v5.6.2 修复：
+        - 检查 actor 是否在验证会话窗口内（默认 5 分钟）
+        - 未注册 2FA 的 actor 一律拒绝
+        - 注册过但未验证的 actor 也拒绝（需先调用 verify_second_factor_with_code）
+        - 验证会话过期后需重新验证
         """
         if not actor:
             return False
-        # 检查是否已为该 actor 注册二次验证令牌
-        token = self._second_factor_tokens.get(actor)
-        if not token:
-            # 未注册二次验证 = 拒绝（默认安全策略）
+        # 检查是否已注册 2FA
+        if actor not in self._second_factor_token_hashes:
             return False
-        # 令牌验证通过（令牌由 verify_second_factor_with_code 设置）
+        # 检查是否在验证会话有效期内
+        verified_at = self._verified_2fa_sessions.get(actor, 0)
+        if time.time() - verified_at > self._2FA_VERIFY_WINDOW:
+            return False
         return True
 
     def register_second_factor(self, actor: str, token: str) -> bool:
         """注册二次验证令牌（v5.3.3 新增）
 
         v5.4.2 安全加固：令牌以 SHA-256 hash 存储，不明文持久化。
+        v5.6.2 安全加固：内存中也只存 hash，不明文驻留。
 
         Args:
             actor: 需要二次验证的用户/Agent
@@ -293,9 +301,9 @@ class PrivacyEngine:
         """
         if not actor or not token:
             return False
-        self._second_factor_tokens[actor] = token
-        # v5.4.2：持久化 hash 到 SQLite（不明文存储）
         token_hash = hashlib.sha256(token.encode()).hexdigest()
+        self._second_factor_token_hashes[actor] = token_hash
+        # v5.4.2：持久化 hash 到 SQLite（不明文存储）
         try:
             conn = self.storage._get_conn()
             conn.execute(
@@ -310,6 +318,10 @@ class PrivacyEngine:
     def verify_second_factor_with_code(self, actor: str, code: str) -> bool:
         """使用验证码进行二次验证（v5.3.3 新增）
 
+        v5.6.2 安全修复：
+        - 使用 hash 比对而非明文比对
+        - 验证通过后记录到验证会话，_verify_second_factor 在窗口内放行
+
         Args:
             actor: 用户/Agent ID
             code: 验证码
@@ -319,11 +331,16 @@ class PrivacyEngine:
         """
         if not actor or not code:
             return False
-        token = self._second_factor_tokens.get(actor)
-        if not token:
+        token_hash = self._second_factor_token_hashes.get(actor)
+        if not token_hash:
             return False
-        # 使用 hmac.compare_digest 防止时序攻击
-        return hmac.compare_digest(str(token), str(code))
+        # 使用 hmac.compare_digest 防止时序攻击（比较 hash 值）
+        code_hash = hashlib.sha256(code.encode()).hexdigest()
+        ok = hmac.compare_digest(token_hash, code_hash)
+        if ok:
+            # 验证通过，记录会话时间戳
+            self._verified_2fa_sessions[actor] = time.time()
+        return ok
 
     def generate_compliance_report(self) -> dict:
         """生成合规报告"""
@@ -347,7 +364,7 @@ class PrivacyEngine:
             "public_memories": by_privacy.get("PUBLIC", 0),
             "active_grants": sum(len(g) for g in self._grants.values()),
             "total_access_events": access_count,
-            "compliance_status": "PASS" if private_count >= 0 else "REVIEW",
+            "compliance_status": "PASS" if private_count == 0 else "REVIEW",
             "by_privacy": by_privacy,
             "encryption_enabled": self.storage.encrypted,
             "audit_log_entries": len(audit_log),

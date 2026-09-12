@@ -193,7 +193,11 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _read_body(self):
-        content_length = int(self.headers.get("Content-Length", 0))
+        # v5.6.2 安全修复：Content-Length 非数值时返回 None，不抛异常
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+        except (ValueError, TypeError):
+            return None
         if content_length == 0:
             # v5.5.3 fix: 返回 None 让调用方统一处理错误响应，避免双重写入
             return None
@@ -201,11 +205,30 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
         if content_length > MAX_BODY_SIZE:
             self._send_json({"error": f"Request body too large (max {MAX_BODY_SIZE // 1024 // 1024}MB)"}, 413)
             return None
+        if content_length < 0:
+            return None
         raw = self.rfile.read(content_length)
         try:
             return json.loads(raw.decode("utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError):
             return None
+
+    def _extract_mem_id(self, path: str, prefix: str = "/api/memories/") -> str:
+        """从路径中安全提取记忆 ID（v5.6.2 安全修复：防路径遍历/注入）
+
+        拒绝包含路径分隔符、空字节、超长值等可疑输入。
+        """
+        if not path.startswith(prefix):
+            return ""
+        mem_id = path[len(prefix):]
+        # v5.6.2 安全校验：拒绝路径遍历字符、空字节、过长 ID
+        if not mem_id or len(mem_id) > 128:
+            return ""
+        if "\x00" in mem_id or "/" in mem_id or "\\" in mem_id:
+            return ""
+        if ".." in mem_id:
+            return ""
+        return mem_id
 
     def _check_auth(self):
         """验证 Bearer Token（通过 MINDFORGE_API_KEY 环境变量配置）"""
@@ -228,6 +251,9 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
         return False
 
     def do_OPTIONS(self):
+        # v5.6.2 安全修复：OPTIONS 也走限流，防止 CORS Preflight DoS
+        if not self._check_rate_limit():
+            return
         self._send_json({"status": "ok"})
 
     def _check_rate_limit(self) -> bool:
@@ -326,7 +352,10 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                 self._send_json({"memories": memories, "total": len(memories), "limit": limit, "offset": offset})
 
             elif path.startswith("/api/memories/"):
-                mem_id = path.split("/api/memories/")[1]
+                mem_id = self._extract_mem_id(path)
+                if not mem_id:
+                    self._send_json({"error": "Invalid memory ID"}, 400)
+                    return
                 entry = self.mindforge.get(mem_id)
                 if entry:
                     self._send_json(entry.to_dict() if hasattr(entry, "to_dict") else vars(entry))
@@ -457,7 +486,10 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                 return
 
             if path.startswith("/api/memories/"):
-                mem_id = path.split("/api/memories/")[1]
+                mem_id = self._extract_mem_id(path)
+                if not mem_id:
+                    self._send_json({"error": "Invalid memory ID"}, 400)
+                    return
                 success = self.mindforge.update(
                     memory_id=mem_id,
                     content=body.get("content"),
@@ -490,7 +522,10 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
 
         try:
             if path.startswith("/api/memories/"):
-                mem_id = path.split("/api/memories/")[1]
+                mem_id = self._extract_mem_id(path)
+                if not mem_id:
+                    self._send_json({"error": "Invalid memory ID"}, 400)
+                    return
                 success = self.mindforge.delete(mem_id)
                 if success:
                     self._send_json({"status": "deleted", "id": mem_id})

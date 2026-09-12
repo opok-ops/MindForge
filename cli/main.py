@@ -89,6 +89,7 @@ from core import (
     MemoryType,
     MemoryLayer,
 )
+from core.mindforge import _safe_path
 
 try:
     from MindForge import __version__
@@ -1103,24 +1104,30 @@ def cmd_export_md(args):
 
 
 def _generate_dashboard_html(dashboard: dict) -> str:
-    """生成健康仪表盘 HTML 报告（v5.4.6 新增）"""
+    """生成健康仪表盘 HTML 报告（v5.4.6 新增）
+
+    v5.6.2 安全修复：所有动态内容使用 html.escape() 转义，防止存储型 XSS。
+    """
+    def _e(s: object) -> str:
+        return html.escape(str(s))
+
     growth_rows = ""
     for point in dashboard.get("growth_curve", [])[-15:]:
-        growth_rows += f"<tr><td>{point['date']}</td><td>{point['daily']}</td><td>{point['cumulative']}</td></tr>\n"
+        growth_rows += f"<tr><td>{_e(point['date'])}</td><td>{_e(point['daily'])}</td><td>{_e(point['cumulative'])}</td></tr>\n"
 
     cat_rows = ""
     for cat in dashboard.get("category_distribution", [])[:10]:
-        cat_rows += f"<tr><td>{cat['category']}</td><td>{cat['count']}</td></tr>\n"
+        cat_rows += f"<tr><td>{_e(cat['category'])}</td><td>{_e(cat['count'])}</td></tr>\n"
 
     decay_rows = ""
     for item in dashboard.get("decay_warnings", [])[:10]:
-        decay_rows += (f"<tr><td>{item['content'][:60]}...</td><td>{item['category']}</td>"
-                       f"<td>{item['forgetting_score']}</td><td>{item['access_count']}</td></tr>\n")
+        decay_rows += (f"<tr><td>{_e(str(item['content'])[:60])}...</td><td>{_e(item['category'])}</td>"
+                       f"<td>{_e(item['forgetting_score'])}</td><td>{_e(item['access_count'])}</td></tr>\n")
 
     access_rows = ""
     for item in dashboard.get("top_access_low_importance", []):
-        access_rows += (f"<tr><td>{item['content'][:60]}...</td><td>{item['category']}</td>"
-                        f"<td>{item['access_count']}</td><td>{item['importance']}</td></tr>\n")
+        access_rows += (f"<tr><td>{_e(str(item['content'])[:60])}...</td><td>{_e(item['category'])}</td>"
+                        f"<td>{_e(item['access_count'])}</td><td>{_e(item['importance'])}</td></tr>\n")
 
     return f"""<!DOCTYPE html>
 <html lang="zh">
@@ -1143,13 +1150,13 @@ tr:nth-child(even) {{ background: #f9f9f9; }}
 </head>
 <body>
 <h1>MindForge Health Dashboard</h1>
-<p>Generated: {dashboard.get('generated_at', '')}</p>
+<p>Generated: {_e(dashboard.get('generated_at', ''))}</p>
 
 <div class="summary">
-  <div class="card"><div class="num">{dashboard.get('total_memories', 0)}</div><div class="label">Total Memories</div></div>
-  <div class="card"><div class="num">{dashboard.get('summary', {}).get('categories', 0)}</div><div class="label">Categories</div></div>
-  <div class="card"><div class="num">{dashboard.get('summary', {}).get('decay_warning_count', 0)}</div><div class="label">Decay Warnings</div></div>
-  <div class="card"><div class="num">{dashboard.get('summary', {}).get('high_access_low_importance_count', 0)}</div><div class="label">High Access / Low Importance</div></div>
+  <div class="card"><div class="num">{_e(dashboard.get('total_memories', 0))}</div><div class="label">Total Memories</div></div>
+  <div class="card"><div class="num">{_e(dashboard.get('summary', {}).get('categories', 0))}</div><div class="label">Categories</div></div>
+  <div class="card"><div class="num">{_e(dashboard.get('summary', {}).get('decay_warning_count', 0))}</div><div class="label">Decay Warnings</div></div>
+  <div class="card"><div class="num">{_e(dashboard.get('summary', {}).get('high_access_low_importance_count', 0))}</div><div class="label">High Access / Low Importance</div></div>
 </div>
 
 <h2>Memory Growth Curve (Recent 15 Days)</h2>
@@ -5280,10 +5287,13 @@ def cmd_export_obsidian(args):
 def cmd_batch_add(args):
     """从文件批量添加记忆（v5.1.3 新增）"""
     cm = _get_memory(args)
-    input_path = Path(args.input)
-
-    if not input_path.exists():
-        print(c(f"\n❌ 文件不存在: {input_path}", "red"))
+    # v5.6.2 安全修复：路径校验，防路径遍历
+    try:
+        input_path = _safe_path(args.input, must_exist=True,
+                                allowed_exts={".json", ".txt", ".md"},
+                                max_size=50 * 1024 * 1024)
+    except (ValueError, OSError) as e:
+        print(c(f"\n❌ 路径错误: {e}", "red"))
         return 1
 
     try:
@@ -5502,11 +5512,13 @@ def cmd_import_xml(args):
 
     try:
         import xml.etree.ElementTree as ET
+        import re as _re
 
         # 安全加固：记忆 XML 为无 DTD 的简单格式，
         # 直接拒绝 DOCTYPE/ENTITY 声明，防 XXE 与实体膨胀攻击（billion laughs）
-        upper = content[:4096].upper()
-        if "<!DOCTYPE" in upper or "<!ENTITY" in upper:
+        # v5.6.2 安全修复：检查全文（而非仅前 4KB），防止填充绕过；用正则匹配空白变体
+        upper_content = content.upper()
+        if _re.search(r'<!\s*DOCTYPE', upper_content) or _re.search(r'<!\s*ENTITY', upper_content):
             print(c("\n❌ XML 包含 DOCTYPE/ENTITY 声明，已阻止解析（防 XXE 攻击）", "red"))
             cm.close()
             return 1

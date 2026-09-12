@@ -145,6 +145,11 @@ class QueryEngine:
         if not query or not query.strip():
             return [query] if query else []
 
+        # v5.6.2 安全修复：超长输入截断，防止 DoS
+        _MAX_QUERY_LEN = 1000
+        if len(query) > _MAX_QUERY_LEN:
+            query = query[:_MAX_QUERY_LEN]
+
         # 简单分词：按空格、标点分割，保留中文词
         import re
         tokens = re.findall(r'[\u4e00-\u9fff]+|[a-zA-Z0-9_-]+', query.lower())
@@ -215,6 +220,8 @@ class QueryEngine:
 
         # 路 3：FTS5 全文检索
         fts5_used = False
+        # v5.6.2 安全修复：初始化默认值，防止异常路径下 UnboundLocalError
+        strategy_used = "tfidf+fuzzy"
         try:
             conn = self.storage._get_conn()
             fts_results = self.index.fts_search(conn, query, top_k=max_results * 3)
@@ -321,7 +328,12 @@ class QueryEngine:
 
             content_text = entry.content
             if entry.encrypted:
-                content_text = self.storage.decrypt_content(entry)
+                # v5.6.2 安全修复：单条解密失败不中断整个搜索，跳过坏数据
+                try:
+                    content_text = self.storage.decrypt_content(entry)
+                except Exception:
+                    logger.warning("记忆 %s 解密失败，已跳过", entry.id)
+                    continue
 
             chunk = MemoryChunk(
                 memory_id=entry.id,

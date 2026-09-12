@@ -201,6 +201,8 @@ class EncryptionEngine:
             raise SecurityError("encrypt() 要求 str 类型输入")
         plaintext_bytes = plaintext.encode("utf-8")
         nonce = os.urandom(12)
+        # v5.6.2 说明：salt 字段保留用于未来 per-blob KDF，当前未参与密钥派生。
+        # 当前所有密文共享同一主密钥，nonce（12 字节随机）提供唯一性。
         salt = os.urandom(16)
 
         ciphertext = self._aesgcm.encrypt(nonce, plaintext_bytes, None)
@@ -221,8 +223,9 @@ class EncryptionEngine:
         try:
             plaintext = self._aesgcm.decrypt(blob.nonce, blob.ciphertext, None)
             return plaintext.decode("utf-8")
-        except Exception as e:
-            raise SecurityError(f"解密失败：{e}")
+        except Exception:
+            # v5.6.2 安全修复：不泄露底层异常类型，防止认证 Oracle 攻击
+            raise SecurityError("解密失败：数据损坏或密钥不正确")
 
     def hash(self, data: str) -> str:
         """计算数据哈希"""
@@ -272,11 +275,25 @@ def _write_key_file(key_path: Path, salt: bytes, kdf_params: KDFParams,
         try:
             import subprocess
             import os as _os
-            username = _os.getlogin()
-            subprocess.run(
-                ["icacls", str(key_path), "/inheritance:r", "/grant:r", f"{username}:F"],
-                capture_output=True, timeout=5, check=False
-            )
+            # v5.6.2 安全修复：getlogin() 在服务/容器环境可能失败，多策略获取用户名
+            username = None
+            try:
+                username = _os.getlogin()
+            except OSError:
+                pass
+            if not username:
+                username = _os.environ.get("USERNAME") or _os.environ.get("USER")
+            if not username:
+                import getpass
+                try:
+                    username = getpass.getuser()
+                except Exception:
+                    pass
+            if username:
+                subprocess.run(
+                    ["icacls", str(key_path), "/inheritance:r", "/grant:r", f"{username}:F"],
+                    capture_output=True, timeout=5, check=False
+                )
         except Exception:
             pass  # icacls 失败不阻断流程
 
@@ -293,7 +310,8 @@ def _verify_key_password(engine: EncryptionEngine, key_data: dict) -> bool:
     try:
         blob = EncryptedBlob.from_dict(key_data["verify_blob"])
         decrypted = engine.decrypt(blob)
-        return decrypted == _KEY_VERIFY_TOKEN
+        # v5.6.2 安全修复：使用常量时间比较，防止时序攻击
+        return hmac.compare_digest(decrypted, _KEY_VERIFY_TOKEN)
     except Exception:
         return False
 

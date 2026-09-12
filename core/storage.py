@@ -321,11 +321,6 @@ class _RateLimiter:
         # 清理过期记录
         self._windows[key] = [t for t in self._windows[key] if now - t < window_seconds]
 
-        # v5.3.5 安全：该键窗口清空后直接移除，减少字典体积
-        if not self._windows[key]:
-            del self._windows[key]
-            self._windows[key] = []
-
         if len(self._windows[key]) >= max_calls:
             return False
 

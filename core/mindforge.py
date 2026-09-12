@@ -154,6 +154,7 @@ class MindForge:
         self._share_conflict = None     # v5.4.2 lazy
         self._evolution = None          # v5.4.8 lazy (记忆巩固)
         self._event_bus = None          # v5.5.5 lazy (事件总线)
+        self._privacy_engine = None     # v5.6.2 lazy (隐私引擎)
 
         if self.config.encrypted:
             self._init_encryption()
@@ -441,6 +442,15 @@ class MindForge:
         layer = layer if layer is not None else self.config.default_layer
         memory_type = memory_type if memory_type is not None else MemoryType.TEXT
 
+        # v5.6.2 安全修复：content 类型与长度校验
+        if not isinstance(content, str):
+            raise ValueError("content 必须是 str 类型")
+        if not content.strip():
+            raise ValueError("content 不能为空")
+        _MAX_CONTENT_LENGTH = 1_000_000  # 1MB 字符上限
+        if len(content) > _MAX_CONTENT_LENGTH:
+            raise ValueError(f"content 超过最大长度限制（{_MAX_CONTENT_LENGTH} 字符）")
+
         entry = self._storage.add_memory(
             content=content,
             category=category,
@@ -467,7 +477,14 @@ class MindForge:
 
     def get(self, memory_id: str, actor: str = "", session_id: str = "") -> Optional[MemoryEntry]:
         """获取记忆"""
-        return self._storage.get_memory(memory_id, actor, session_id)
+        entry = self._storage.get_memory(memory_id, actor, session_id)
+        if entry is None:
+            return None
+        # v5.6.2 安全修复：隐私访问控制
+        ok, _reason = self.privacy_engine.check_access(entry, actor, session_id)
+        if not ok:
+            return None
+        return entry
 
     def search(self,
                query: str,
@@ -489,7 +506,7 @@ class MindForge:
             query = ""
         elif not isinstance(query, str):
             query = str(query)
-        return self._query.search(
+        result = self._query.search(
             query=query,
             max_results=max_results,
             min_relevance=min_relevance,
@@ -499,6 +516,19 @@ class MindForge:
             session_id=session_id,
             use_embedding=use_embedding,
         )
+        # v5.6.2 安全修复：隐私访问控制过滤搜索结果
+        # 从存储层获取完整条目以检查隐私级别
+        filtered_chunks = []
+        for chunk in result.chunks:
+            entry = self._storage.get_memory(chunk.memory_id, agent_id, session_id)
+            if entry is None:
+                continue
+            ok, _reason = self.privacy_engine.check_access(entry, agent_id, session_id)
+            if ok:
+                filtered_chunks.append(chunk)
+        result.chunks = filtered_chunks
+        result.total_found = len(filtered_chunks)
+        return result
 
     def rebuild_embeddings(self, batch_size: int = 100,
                            incremental: bool = True) -> dict:
@@ -612,6 +642,14 @@ class MindForge:
 
         v5.5.6 新增 pinned 参数。
         """
+        # v5.6.2 安全修复：隐私访问控制
+        entry = self._storage.get_memory(memory_id, actor, session_id)
+        if entry is None:
+            return False
+        ok, _reason = self.privacy_engine.check_access(entry, actor, session_id)
+        if not ok:
+            return False
+
         success = self._storage.update_memory(
             entry_id=memory_id,
             content=content,
@@ -647,6 +685,14 @@ class MindForge:
     def delete(self, memory_id: str, actor: str = "",
                session_id: str = "", hard_delete: bool = False) -> bool:
         """删除记忆"""
+        # v5.6.2 安全修复：隐私访问控制
+        entry = self._storage.get_memory(memory_id, actor, session_id)
+        if entry is None:
+            return False
+        ok, _reason = self.privacy_engine.check_access(entry, actor, session_id)
+        if not ok:
+            return False
+
         success = self._storage.delete_memory(
             memory_id, actor, session_id, hard_delete
         )
@@ -783,8 +829,10 @@ class MindForge:
         Returns:
             Path: 导出文件路径
         """
+        # v5.6.2 安全修复：路径校验
+        safe_out = _safe_path(output_path, allowed_exts={".md"})
         return self._storage.export_as_markdown(
-            output_path=output_path,
+            output_path=str(safe_out),
             category=category,
             layer=layer,
             starred_only=starred_only,
@@ -1619,6 +1667,14 @@ class MindForge:
     def query(self) -> QueryEngine:
         return self._query
 
+    @property
+    def privacy_engine(self):
+        """v5.6.2 安全修复：懒加载隐私引擎，集成访问控制到核心 API"""
+        if self._privacy_engine is None:
+            from modules.privacy import PrivacyEngine
+            self._privacy_engine = PrivacyEngine(self._storage)
+        return self._privacy_engine
+
     def cleanup(self, max_age_hours: int = 24, layer: str = "sensory") -> int:
         """清理过期记忆（v5.1.3 新增）
 
@@ -1800,8 +1856,11 @@ class MindForge:
                      target_category: Optional[str] = None,
                      target_layer: Optional[MemoryLayer] = None) -> Dict[str, int]:
         """从 Excel 文件导入记忆（v5.1.9 新增）"""
+        # v5.6.2 安全修复：路径校验
+        safe_in = _safe_path(input_path, must_exist=True,
+                             allowed_exts={".xlsx", ".xls"}, max_size=50 * 1024 * 1024)
         return self._storage.import_from_excel(
-            input_path=input_path,
+            input_path=str(safe_in),
             target_category=target_category,
             target_layer=target_layer,
         )
@@ -2364,12 +2423,11 @@ class MindForge:
         import zipfile
         import time
 
-        backup = Path(backup_path)
-        if not backup.exists():
-            raise ValueError(f"备份文件不存在: {backup_path}")
-
-        target_db = Path(db_path)
-        target_key = Path(key_file) if key_file else None
+        # v5.6.2 安全修复：路径校验，防路径遍历
+        backup = _safe_path(backup_path, must_exist=True,
+                            allowed_exts={".zip"}, max_size=2 * 1024 * 1024 * 1024)
+        target_db = _safe_path(db_path, allowed_exts={".db"})
+        target_key = _safe_path(key_file) if key_file else None
 
         # 检查目标文件是否已存在
         if target_db.exists() and not force:

@@ -357,9 +357,13 @@ class FederatedMemory:
         }
 
     def _verify_memory_exists(self, memory_id: str) -> bool:
-        """验证记忆存在"""
+        """验证记忆存在
+
+        v5.6.2 安全修复：无 storage 时 fail-closed 返回 False，
+        而非 fail-open 返回 True。
+        """
         if not self.storage:
-            return True
+            return False  # fail-closed：无法验证则视为不存在
         try:
             entry = self.storage.get_memory(memory_id)
             return entry is not None
@@ -378,7 +382,7 @@ class FederatedMemory:
             return ""
         key = peer.public_key.encode("utf-8")
         msg = json.dumps(data, sort_keys=True, ensure_ascii=False).encode("utf-8")
-        return hmac.new(key, msg, hashlib.sha256).hexdigest()
+        return hmac.new(key, msg, digestmod=hashlib.sha256).hexdigest()
 
     def _verify_signature(self, data: Dict, signature: str, peer_id: str) -> bool:
         """验证 HMAC-SHA256 签名

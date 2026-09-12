@@ -35,6 +35,20 @@ jobs:
           echo "Updated sitemap.xml:"
           head -20 website/sitemap.xml
 
+      - name: 注入百度站长验证码
+        env:
+          BAIDU_CODE: ${{ secrets.BAIDU_SITE_VERIFICATION }}
+        run: |
+          # 只有配置了 Secret 才注入；未配置时占位符保持为注释，不影响页面渲染
+          if [ -n "$BAIDU_CODE" ]; then
+            echo "已检测到 BAIDU_SITE_VERIFICATION，注入验证标签"
+            sed -i "s|<!--BAIDU_VERIFY_SLOT-->|<meta name=\"baidu-site-verification\" content=\"$BAIDU_CODE\">|" website/index.html
+            grep -o 'baidu-site-verification[^>]*' website/index.html | head -1 || echo "（未能在页面中检索到验证标签，请检查 Secret 值是否含特殊字符）"
+          else
+            echo "::notice::未配置 Secrets.BAIDU_SITE_VERIFICATION，跳过验证码注入（不影响部署）。"
+            echo "配置后即可完成百度站长平台的所有权验证，方法见 docs/百度站长平台收录指南.md"
+          fi
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 

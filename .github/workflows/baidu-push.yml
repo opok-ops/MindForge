@@ -1,0 +1,52 @@
+name: 百度站长平台 - 主动推送
+
+# 作用：官网部署完成后，自动把 URL 推给百度，加速收录。
+#
+# 只需配置一次 Secret（BAIDU_PUSH_TOKEN），之后每次 push 官网都会自动推送。
+# 未配置 Secret 时工作流会给出提示并正常结束，不会让 CI 变红。
+
+on:
+  # 官网部署工作流跑完后自动触发
+  workflow_run:
+    workflows: ["Deploy Website to GitHub Pages"]
+    types: [completed]
+  # 也支持手动触发：仓库 → Actions → 本工作流 → Run workflow
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  push:
+    # 仅在部署成功、或手动触发时执行
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 推送 URL 给百度
+        env:
+          BAIDU_PUSH_TOKEN: ${{ secrets.BAIDU_PUSH_TOKEN }}
+          BAIDU_PUSH_SITE: ${{ secrets.BAIDU_PUSH_SITE }}
+        run: |
+          if [ -z "$BAIDU_PUSH_TOKEN" ]; then
+            echo "::warning::未配置 Secrets.BAIDU_PUSH_TOKEN，跳过推送（这不是错误）。"
+            echo ""
+            echo "配置方法（只需做一次）："
+            echo "  1. 打开百度站长平台 → 资源提交 → API 提交，复制「推送接口」里的 token"
+            echo "  2. 仓库 Settings → Secrets and variables → Actions → New repository secret"
+            echo "  3. Name 填 BAIDU_PUSH_TOKEN，Value 粘贴 token"
+            echo ""
+            echo "详细图文步骤见 docs/百度站长平台收录指南.md"
+            exit 0
+          fi
+
+          echo "开始向百度主动推送…"
+          python scripts/baidu_push.py

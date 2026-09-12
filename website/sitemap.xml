@@ -1,76 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="https://www.sitemaps.org/schemas/sitemap/0.9"
-        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+<!--
+  MindForge 官网 Sitemap
+  站点：https://opok-ops.github.io/MindForge/
+
+  收录说明：
+  1. 本站为单页站点，除首页外其他"页面"均为首页锚点（#quickstart / #hybrid 等）。
+     锚点不产生独立 URL，搜索引擎一律视为同一页面，列入 Sitemap 属于无效重复条目，故移除。
+  2. website/demo.html 已设置 <meta name="robots" content="noindex, follow">，
+     按 Sitemap 规范，声明 noindex 的页面不得出现在 Sitemap 中，故不列入。
+  3. lastmod 由 CI（.github/workflows/deploy-website.yml）在每次部署时自动替换为当天日期，
+     无需手工维护。
+-->
+<urlset xmlns="https://www.sitemaps.org/schemas/sitemap/0.9">
 
   <url>
     <loc>https://opok-ops.github.io/MindForge/</loc>
-    <lastmod>2026-09-10</lastmod>
+    <lastmod>2026-09-12</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
-    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://opok-ops.github.io/MindForge/"/>
-  </url>
-
-  <url>
-    <loc>https://opok-ops.github.io/MindForge/index.html#quickstart</loc>
-    <lastmod>2026-09-10</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-
-  <url>
-    <loc>https://opok-ops.github.io/MindForge/index.html#hybrid</loc>
-    <lastmod>2026-09-10</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-
-  <url>
-    <loc>https://opok-ops.github.io/MindForge/index.html#recall</loc>
-    <lastmod>2026-09-10</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-
-  <url>
-    <loc>https://opok-ops.github.io/MindForge/index.html#layers</loc>
-    <lastmod>2026-09-10</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-
-  <url>
-    <loc>https://opok-ops.github.io/MindForge/index.html#capabilities</loc>
-    <lastmod>2026-09-10</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-
-  <url>
-    <loc>https://opok-ops.github.io/MindForge/index.html#architecture</loc>
-    <lastmod>2026-09-10</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-
-  <url>
-    <loc>https://opok-ops.github.io/MindForge/index.html#security</loc>
-    <lastmod>2026-09-10</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-
-  <url>
-    <loc>https://opok-ops.github.io/MindForge/index.html#ecosystem</loc>
-    <lastmod>2026-09-10</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-
-  <url>
-    <loc>https://opok-ops.github.io/MindForge/index.html#changelog</loc>
-    <lastmod>2026-09-10</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
   </url>
 
 </urlset>

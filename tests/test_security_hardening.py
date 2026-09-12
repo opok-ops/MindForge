@@ -81,6 +81,9 @@ def test_api_rejects_non_string_content():
     db_path = os.path.join(tmp, "m.db")
     mf = MindForge(db_path=db_path, encrypted=False)
 
+    # fail-closed 默认需认证；测试环境显式开启无认证
+    os.environ["MINDFORGE_ALLOW_NOAUTH"] = "1"
+
     port = _free_port()
     t = threading.Thread(
         target=start_api_server,
@@ -112,6 +115,8 @@ def test_api_rejects_non_string_content():
     with pytest.raises(urllib.error.HTTPError) as exc:
         urllib.request.urlopen(req_bad, timeout=5)
     assert exc.value.code == 400
+
+    os.environ.pop("MINDFORGE_ALLOW_NOAUTH", None)
 
 
 # ---------------------------------------------------------------------------

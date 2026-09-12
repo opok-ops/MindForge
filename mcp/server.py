@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time as _time
 import traceback
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -103,10 +104,11 @@ def _read_message() -> Dict[str, Any]:
     # v5.6.2 安全修复：拒绝超大消息体，防止内存耗尽 DoS
     if length > MAX_CONTENT_LENGTH:
         raise ValueError(f"Content-Length {length} exceeds maximum {MAX_CONTENT_LENGTH}")
+    # P2 #17 修复：Content-Length 缺失或 ≤ 0 时直接拒绝，不再用 readline() 试探
+    # （MCP 协议必须有 Content-Length 头，readline 可能读到无限长数据）
     if length <= 0:
-        raw = sys.stdin.buffer.readline()
-    else:
-        raw = sys.stdin.buffer.read(length)
+        raise ValueError("Missing or invalid Content-Length header")
+    raw = sys.stdin.buffer.read(length)
     if not raw:
         raise EOFError("stdin closed")
     return json.loads(raw.decode("utf-8"))
@@ -1108,6 +1110,8 @@ def _check_auth(msg: Dict[str, Any], expected_secret: str) -> bool:
 
 
 _authenticated = False
+_auth_last_activity: float = 0.0
+_AUTH_IDLE_TIMEOUT = 30 * 60  # 30 分钟无活动自动登出（P2 #16 修复）
 
 
 def serve_forever(db_path: Optional[str] = None, key_file: Optional[str] = None,
@@ -1124,8 +1128,9 @@ def serve_forever(db_path: Optional[str] = None, key_file: Optional[str] = None,
         kwargs["encrypted"] = True
     mf = MindForge(**kwargs)
 
-    global _authenticated
+    global _authenticated, _auth_last_activity
     _authenticated = False
+    _auth_last_activity = 0.0
     expected_secret = auth_secret or os.environ.get("MINDFORGE_MCP_SECRET", "")
 
     # v5.6.3 安全增强：未设置认证密钥时，MCP 服务对所有能连上的客户端开放。
@@ -1161,9 +1166,34 @@ def serve_forever(db_path: Optional[str] = None, key_file: Optional[str] = None,
                         _respond_error(msg, code=-32001, message="Authentication failed")
             elif method == "notifications/initialized":
                 pass
-            elif not _authenticated and expected_secret:
+            elif expected_secret and not _authenticated:
                 if rid is not None:
                     _respond_error(msg, code=-32001, message="Not authenticated")
+            elif expected_secret and _authenticated:
+                # P2 #16 修复：认证过期检查（30 分钟无活动自动登出）
+                now = _time.time()
+                if now - _auth_last_activity > _AUTH_IDLE_TIMEOUT:
+                    _authenticated = False
+                    _auth_last_activity = 0.0
+                    if rid is not None:
+                        _respond_error(msg, code=-32001, message="Session expired")
+                    continue
+                _auth_last_activity = now
+                if method == "tools/list":
+                    _respond(msg, _handle_tools_list(msg))
+                elif method == "tools/call":
+                    _respond(msg, _handle_tools_call(mf, msg))
+                elif method == "ping":
+                    _respond(msg, {})
+                elif method in ("shutdown", "exit"):
+                    if rid is not None:
+                        _respond(msg, {})
+                    return 0
+                else:
+                    if rid is None:
+                        _log(f"ignored notification: {method}")
+                    else:
+                        _respond_error(msg, code=-32601, message=f"Method not found: {method}")
             elif method == "tools/list":
                 _respond(msg, _handle_tools_list(msg))
             elif method == "tools/call":

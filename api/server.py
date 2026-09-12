@@ -99,6 +99,25 @@ class _RateLimiter:
 _rate_limiter = _RateLimiter(max_requests=100, window_seconds=60)
 
 
+def _normalize_ip(ip: str) -> str:
+    """将 IP 规范化为限流 key
+
+    P2 #15 修复：IPv6 主机可生成大量临时地址绕过限流。
+    对 IPv6 使用 /64 子网前缀作为限流 key（同一子网共享计数）。
+    IPv4 直接使用原地址。
+    """
+    import ipaddress
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return ip  # 解析失败直接用原值（fail-open，但仅用于限流 key）
+    if isinstance(addr, ipaddress.IPv6Address):
+        # 取 /64 前缀
+        network = ipaddress.IPv6Network((addr, 64), strict=False)
+        return str(network.network_address) + "/64"
+    return ip
+
+
 # P0-003: 限制最大并发线程数的 HTTP 服务器
 class BoundedThreadingHTTPServer(ThreadingHTTPServer):
     """带最大并发线程数限制的 HTTP 服务器
@@ -251,21 +270,20 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
     def _check_auth(self):
         """验证 Bearer Token（通过 MINDFORGE_API_KEY 环境变量配置）
 
-        v5.6.3 安全增强：
-        - 未设置 MINDFORGE_API_KEY 时，默认仅允许本地回环（localhost）访问，
-          并记录一次性告警；若显式设置 MINDFORGE_ALLOW_NOAUTH=0/false/no，
-          则无论是否本地都强制要求鉴权（fail-closed），避免多用户主机上的
-          本地回环被其他本地用户滥用。
+        v5.6.3 安全增强（P1 #12 修复）：
+        - MINDFORGE_ALLOW_NOAUTH 默认 "0"（fail-closed），多用户主机安全。
+          单用户本地使用需显式设 MINDFORGE_ALLOW_NOAUTH=1 开启无认证模式。
         - 设置 MINDFORGE_API_KEY 后，所有非 /api/health 端点必须携带正确 Bearer Token。
+        - 非 localhost 绑定且无 API Key 时，启动阶段直接拒绝（fail-closed）。
         """
         api_key = os.environ.get("MINDFORGE_API_KEY", "")
         if not api_key:
-            # 显式关闭「无认证」模式：强制要求密钥
-            allow_noauth = os.environ.get("MINDFORGE_ALLOW_NOAUTH", "1").strip().lower()
-            if allow_noauth in ("0", "false", "no", "off"):
-                self._send_json({"error": "Unauthorized (auth required)"}, 401)
+            # P1 修复：默认 fail-closed，显式设置 ALLOW_NOAUTH=1 才开放本地无认证
+            allow_noauth = os.environ.get("MINDFORGE_ALLOW_NOAUTH", "0").strip().lower()
+            if allow_noauth not in ("1", "true", "yes", "on"):
+                self._send_json({"error": "Unauthorized (MINDFORGE_API_KEY required)"}, 401)
                 return False
-            # 本地开发模式：未设密钥时开放，但给出一次性告警
+            # 显式开启的无认证模式：记录一次性告警
             if not getattr(self.__class__, '_auth_warned', False):
                 logger.warning(
                     "MINDFORGE_API_KEY not set — API is open to all LOCAL requests. "
@@ -294,7 +312,8 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
         返回 True 表示允许，False 表示已返回 429。
         """
         client_ip = self.client_address[0]
-        if not _rate_limiter.check(client_ip):
+        rate_key = _normalize_ip(client_ip)
+        if not _rate_limiter.check(rate_key):
             self._send_json({"error": "Rate limit exceeded. Try again later."}, 429)
             return False
         return True
@@ -424,7 +443,7 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                 })
 
             else:
-                self._send_json({"error": "Not found", "path": path}, 404)
+                self._send_json({"error": "Not found"}, 404)
 
         except Exception as e:
             logger.exception("API error")
@@ -496,7 +515,7 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                 self._send_json({"imported": imported, "failed": failed})
 
             else:
-                self._send_json({"error": "Not found", "path": path}, 404)
+                self._send_json({"error": "Not found"}, 404)
 
         except Exception as e:
             logger.exception("API error")
@@ -541,11 +560,12 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                 else:
                     self._send_json({"error": "Update failed or memory not found"}, 404)
             else:
-                self._send_json({"error": "Not found", "path": path}, 404)
+                self._send_json({"error": "Not found"}, 404)
 
         except Exception as e:
             logger.exception("API error")
             self._send_json({"error": "Internal server error"}, 500)
+
 
     def do_DELETE(self):
         parsed = urlparse(self.path)
@@ -570,7 +590,7 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                 else:
                     self._send_json({"error": "Delete failed or memory not found"}, 404)
             else:
-                self._send_json({"error": "Not found", "path": path}, 404)
+                self._send_json({"error": "Not found"}, 404)
 
         except Exception as e:
             logger.exception("API error")

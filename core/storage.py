@@ -581,56 +581,66 @@ class MemoryCache:
     """记忆缓存（v5.5.5 新增）
 
     LRU 缓存高频访问的记忆摘要，减少磁盘 IO 和重复计算。
+
+    v5.6.2 P2 #21 修复：加 threading.Lock()，多线程并发下防止
+    RuntimeError: OrderedDict mutated during iteration。
     """
 
     def __init__(self, max_size: int = 1000):
+        import threading as _threading
         self.max_size = max_size
         self._cache: OrderedDict[str, Dict[str, Any]] = OrderedDict()
         self.hits = 0
         self.misses = 0
+        self._lock = _threading.Lock()
 
     def get(self, memory_id: str) -> Optional[Dict[str, Any]]:
         """获取缓存，命中时移到末尾（最近使用）"""
-        if memory_id in self._cache:
-            self._cache.move_to_end(memory_id)
-            self.hits += 1
-            return self._cache[memory_id]
-        self.misses += 1
-        return None
+        with self._lock:
+            if memory_id in self._cache:
+                self._cache.move_to_end(memory_id)
+                self.hits += 1
+                return self._cache[memory_id]
+            self.misses += 1
+            return None
 
     def set(self, memory_id: str, data: Dict[str, Any]) -> None:
         """设置缓存，如果满了淘汰最久未使用的"""
-        if memory_id in self._cache:
-            self._cache.move_to_end(memory_id)
-            self._cache[memory_id] = data
-        else:
-            if len(self._cache) >= self.max_size:
-                # 淘汰最久未使用的（队首）
-                self._cache.popitem(last=False)
-            self._cache[memory_id] = data
+        with self._lock:
+            if memory_id in self._cache:
+                self._cache.move_to_end(memory_id)
+                self._cache[memory_id] = data
+            else:
+                if len(self._cache) >= self.max_size:
+                    # 淘汰最久未使用的（队首）
+                    self._cache.popitem(last=False)
+                self._cache[memory_id] = data
 
     def invalidate(self, memory_id: str) -> None:
         """使单条缓存失效"""
-        if memory_id in self._cache:
-            del self._cache[memory_id]
+        with self._lock:
+            if memory_id in self._cache:
+                del self._cache[memory_id]
 
     def clear(self) -> None:
         """清空所有缓存"""
-        self._cache.clear()
-        self.hits = 0
-        self.misses = 0
+        with self._lock:
+            self._cache.clear()
+            self.hits = 0
+            self.misses = 0
 
     def stats(self) -> Dict[str, Any]:
         """缓存统计"""
-        total = self.hits + self.misses
-        hit_rate = round(self.hits / total, 4) if total > 0 else 0.0
-        return {
-            "size": len(self._cache),
-            "max_size": self.max_size,
-            "hits": self.hits,
-            "misses": self.misses,
-            "hit_rate": hit_rate,
-        }
+        with self._lock:
+            total = self.hits + self.misses
+            hit_rate = round(self.hits / total, 4) if total > 0 else 0.0
+            return {
+                "size": len(self._cache),
+                "max_size": self.max_size,
+                "hits": self.hits,
+                "misses": self.misses,
+                "hit_rate": hit_rate,
+            }
 
 
 class StorageEngine:
@@ -6183,12 +6193,18 @@ class StorageEngine:
 
     @staticmethod
     def _safe_json_loads(data: Optional[str], default: Any = None) -> Any:
-        """安全解析 JSON，损坏时返回默认值（v5.2.3 安全加固）"""
+        """安全解析 JSON，带深度+大小限制，损坏时返回默认值
+
+        P2 #22 修复：统一委托给模块级 _safe_json_loads（有 max_depth/max_size 限制），
+        此前 StorageEngine 版本直接 json.loads，深度嵌套 JSON 可导致栈溢出。
+        """
         if not data:
             return default
+        if not isinstance(data, str):
+            return default
         try:
-            return json.loads(data)
-        except (json.JSONDecodeError, TypeError):
+            return _safe_json_loads(data)
+        except (ValueError, json.JSONDecodeError, TypeError):
             return default
 
     def _row_to_entry(self, row: sqlite3.Row) -> MemoryEntry:

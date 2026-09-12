@@ -358,9 +358,16 @@ def cmd_init(args):
             print(c(f"❌ 初始化失败：{e}", "red"))
             return 1
 
-    # 非交互式密码（--password 参数）
-    if getattr(args, 'password', None):
+    # P2 #20 修复：密码读取优先级 环境变量 > --password 参数 > 交互式
+    # 命令行参数会暴露在 ps/进程列表中，推荐使用环境变量。
+    env_password = os.environ.get("MINDFORGE_PASSWORD", "")
+    if env_password:
+        password = env_password
+        if len(password) < 8:
+            print(c("⚠️  警告：密码建议至少 8 位", "yellow"))
+    elif getattr(args, 'password', None):
         password = args.password
+        print(c("⚠️  警告：--password 会在进程列表中可见，建议改用 MINDFORGE_PASSWORD 环境变量", "yellow"))
         if len(password) < 8:
             print(c("⚠️  警告：密码建议至少 8 位", "yellow"))
     else:
@@ -376,7 +383,7 @@ def cmd_init(args):
                 print(c("❌ 两次密码不一致", "red"))
                 return 1
         except (EOFError, OSError):
-            print(c("❌ 无法读取密码：非交互式环境请使用 --password 或 --no-encrypt", "red"))
+            print(c("❌ 无法读取密码：非交互式环境请设置 MINDFORGE_PASSWORD 环境变量或使用 --password", "red"))
             return 1
 
         if len(password) < 8:
@@ -1853,19 +1860,120 @@ def cmd_serve(args):
     print(c("启动 MindForge Web UI...", "cyan"))
     print(f"  地址: http://{args.host}:{args.port}")
     print(f"  数据库: {args.db_path}")
+
+    # P1 #13 安全修复：Web UI 安全加固
+    import os as _os
+    api_key = _os.environ.get("MINDFORGE_API_KEY", "")
+    allow_noauth = _os.environ.get("MINDFORGE_ALLOW_NOAUTH", "0").strip().lower()
+
+    # fail-closed 启动检查：非 localhost 绑定必须设 API Key
+    if args.host not in ("127.0.0.1", "localhost") and not api_key:
+        print(c("错误：非本地绑定（host=%s）时必须设置 MINDFORGE_API_KEY" % args.host, "red"))
+        print(c("  或绑定到 127.0.0.1 并设 MINDFORGE_ALLOW_NOAUTH=1", "yellow"))
+        return 1
+
+    if not api_key and allow_noauth not in ("1", "true", "yes", "on"):
+        print(c("错误：Web UI 默认需要认证。", "red"))
+        print(c("  - 生产：设置 MINDFORGE_API_KEY 环境变量", "yellow"))
+        print(c("  - 本地开发：设置 MINDFORGE_ALLOW_NOAUTH=1", "yellow"))
+        return 1
+
     print(c("\n  按 Ctrl+C 停止服务", "yellow"))
 
     try:
         import http.server
         import socketserver
+        import base64 as _b64
+        import hashlib as _hl
+        import hmac as _hmac
+        import time as _time
 
         web_dir = Path(__file__).parent.parent / "website"
-        if web_dir.exists():
-            import os
-            os.chdir(web_dir)
+        _MAX_REQUEST_SIZE = 10 * 1024 * 1024  # 10MB 上限
+        _RATE_LIMIT = 60  # 每分钟请求上限
+        _rate_window: Dict[str, List[float]] = {"_last_purge": _time.time()}
 
-        Handler = http.server.SimpleHTTPRequestHandler
-        with socketserver.TCPServer((args.host, args.port), Handler) as httpd:
+        def _check_web_rate(client_ip: str) -> bool:
+            now = _time.time()
+            if now - _rate_window["_last_purge"] > 3600:
+                _rate_window.clear()
+                _rate_window["_last_purge"] = now
+            if client_ip not in _rate_window:
+                _rate_window[client_ip] = []
+            _rate_window[client_ip] = [t for t in _rate_window[client_ip] if now - t < 60]
+            if len(_rate_window[client_ip]) >= _RATE_LIMIT:
+                return False
+            _rate_window[client_ip].append(now)
+            return True
+
+        class SecureWebUIHandler(http.server.SimpleHTTPRequestHandler):
+            """安全加固的 Web UI Handler
+
+            - Basic Auth（MINDFORGE_API_KEY 当密码，用户名任意）
+            - 请求大小限制 10MB
+            - 速率限制 60 req/min
+            - 不改变全局 cwd（修复 P2 #18）
+            """
+
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, directory=str(web_dir), **kwargs)
+
+            def do_GET(self):
+                client_ip = self.client_address[0]
+                if not _check_web_rate(client_ip):
+                    self.send_error(429, "Too Many Requests")
+                    return
+                if not self._check_web_auth():
+                    return
+                # 防止路径穿越
+                if ".." in self.path or "\x00" in self.path:
+                    self.send_error(400, "Bad Request")
+                    return
+                super().do_GET()
+
+            def do_POST(self):
+                client_ip = self.client_address[0]
+                if not _check_web_rate(client_ip):
+                    self.send_error(429, "Too Many Requests")
+                    return
+                if not self._check_web_auth():
+                    return
+                # 请求大小限制
+                content_length = int(self.headers.get("Content-Length", "0") or "0")
+                if content_length > _MAX_REQUEST_SIZE:
+                    self.send_error(413, "Payload Too Large")
+                    return
+                super().do_POST()
+
+            def _check_web_auth(self) -> bool:
+                if not api_key:
+                    return True  # ALLOW_NOAUTH=1 模式
+                auth_header = self.headers.get("Authorization", "")
+                if not auth_header.startswith("Basic "):
+                    self._request_auth()
+                    return False
+                try:
+                    decoded = _b64.b64decode(auth_header[6:]).decode("utf-8")
+                    _, password = decoded.split(":", 1)
+                except Exception:
+                    self._request_auth()
+                    return False
+                if _hmac.compare_digest(password, api_key):
+                    return True
+                self._request_auth()
+                return False
+
+            def _request_auth(self):
+                self.send_response(401)
+                self.send_header("WWW-Authenticate", 'Basic realm="MindForge Web UI"')
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                self.wfile.write(b"Authentication required")
+
+            def log_message(self, format, *args):
+                pass  # 静默访问日志
+
+        with socketserver.TCPServer((args.host, args.port), SecureWebUIHandler) as httpd:
             httpd.serve_forever()
     except KeyboardInterrupt:
         print("\n服务已停止")
@@ -6123,10 +6231,12 @@ def cmd_rekey(args):
     print(f"  推荐迭代次数:    {PBKDF2_ITERATIONS_CURRENT:,} (OWASP 2023)")
     print()
 
-    # 获取旧密码
-    old_password = args.old_password
+    # 获取旧密码（P2 #20 修复：环境变量优先，防命令行参数泄露）
+    old_password = os.environ.get("MINDFORGE_OLD_PASSWORD", "") or args.old_password
     if not old_password:
         old_password = getpass.getpass("请输入旧密码: ")
+    elif args.old_password:
+        print(c("⚠️  警告：--old-password 会在进程列表中可见，建议改用 MINDFORGE_OLD_PASSWORD 环境变量", "yellow"))
     if not old_password:
         print(c("❌ 旧密码不能为空", "red"))
         return 1
@@ -6136,13 +6246,15 @@ def cmd_rekey(args):
         new_password = old_password
         print(c("ℹ️  --upgrade-only 模式：密码不变，仅升级 KDF 参数", "cyan"))
     else:
-        new_password = args.new_password
+        new_password = os.environ.get("MINDFORGE_NEW_PASSWORD", "") or args.new_password
         if not new_password:
             new_password = getpass.getpass("请输入新密码: ")
             confirm = getpass.getpass("请再次输入新密码: ")
             if new_password != confirm:
                 print(c("❌ 两次输入的新密码不一致", "red"))
                 return 1
+        elif args.new_password:
+            print(c("⚠️  警告：--new-password 会在进程列表中可见，建议改用 MINDFORGE_NEW_PASSWORD 环境变量", "yellow"))
         if not new_password:
             print(c("❌ 新密码不能为空", "red"))
             return 1

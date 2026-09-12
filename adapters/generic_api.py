@@ -3,7 +3,7 @@ MindForge v5.0 通用 API 适配器
 REST API / SDK 风格接口
 """
 
-from typing import List, Dict, Optional, Callable
+from typing import List, Dict, Optional, Callable, Any
 
 
 class GenericAPIAdapter:
@@ -30,9 +30,22 @@ class GenericAPIAdapter:
         }
 
     def handle_request(self, request: Dict) -> Dict:
-        """处理 API 请求"""
+        """处理 API 请求
+
+        P2 #19 修复：
+        - 校验 request 结构（action 必选且为字符串）
+        - 异常信息脱敏，不暴露内部调用栈细节
+        """
+        if not isinstance(request, dict):
+            return {"success": False, "error": "Invalid request format"}
+
         action = request.get("action", "")
         params = request.get("params", {})
+
+        if not action or not isinstance(action, str):
+            return {"success": False, "error": "Missing required field: action"}
+        if not isinstance(params, dict):
+            return {"success": False, "error": "Invalid params format"}
 
         handler = self._handlers.get(action)
         if not handler:
@@ -47,11 +60,27 @@ class GenericAPIAdapter:
                 "success": True,
                 "data": result,
             }
-        except (ValueError, TypeError, KeyError, AttributeError) as e:
+        except (ValueError, TypeError) as e:
+            # 预期内的错误：返回消息（用户输入类）
             return {
                 "success": False,
                 "error": str(e),
             }
+        except Exception as e:
+            # 未预期的错误：脱敏返回，防止内部细节泄露
+            import logging as _logging
+            _logging.getLogger(__name__).exception("API handler error: %s", action)
+            return {
+                "success": False,
+                "error": "Internal error",
+            }
+
+    @staticmethod
+    def _require(params: Dict, field: str, error_msg: str = "") -> Any:
+        """校验必需字段，缺失时返回友好错误"""
+        if field not in params:
+            raise ValueError(error_msg or f"Missing required field: {field}")
+        return params[field]
 
     def _handle_add(self, params: Dict) -> Dict:
         entry = self.cm.add(

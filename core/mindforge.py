@@ -332,42 +332,64 @@ class MindForge:
         old_params = get_key_params(self.config.key_file)
         old_iterations = old_params.iterations if old_params else 0
 
-        # 2. 更换密钥文件
-        old_engine, new_engine = _rekey_engine(
-            old_password, new_password,
-            key_file=self.config.key_file,
-            new_iterations=new_iterations,
+        # 2. 验证旧密码 + 创建新引擎（不切换全局，不写 key 文件）
+        #    P1 修复：**先重加密数据库，成功后再换密钥文件和引擎**。
+        #    原顺序（先换密钥再重加密）有数据丢失风险：若重加密中途崩溃，
+        #    数据库事务回滚（旧密文）但密钥文件已是新的 → 重启后全量解密失败。
+        from core.encryption import EncryptionEngine, PBKDF2_ITERATIONS_CURRENT
+        from core.encryption import _set_global_engine, _verify_key_password
+
+        old_engine = self._encryption  # 当前引擎就是旧引擎
+
+        # 验证旧密码（从 key 文件读取 salt 验证，防止误操作）
+        key_path = Path(self.config.key_file)
+        if key_path.exists():
+            import json as _json
+            import base64 as _b64
+            with open(key_path, "r", encoding="utf-8") as f:
+                key_data = _json.load(f)
+            old_salt = _b64.b64decode(key_data["salt"])
+            verify_engine, _ = EncryptionEngine.from_password(
+                old_password, old_salt,
+                iterations=old_params.iterations if old_params else PBKDF2_ITERATIONS_CURRENT
+            )
+            if not _verify_key_password(verify_engine, key_data):
+                raise SecurityError("旧密码错误")
+
+        if new_iterations is None:
+            new_iterations = PBKDF2_ITERATIONS_CURRENT
+
+        new_salt = __import__("os").urandom(16)
+        new_engine, _ = EncryptionEngine.from_password(
+            new_password, new_salt, iterations=new_iterations
         )
 
-        new_params = get_key_params(self.config.key_file)
-        new_iterations_val = new_params.iterations if new_params else 0
+        # 3. 批量重加密所有记忆（数据库事务内，失败自动回滚）
+        count = 0
+        if self._storage:
+            count = self._storage.rekey_memories(old_engine, new_engine)
 
-        # 3. 更新当前实例的加密引擎
+        # 4. 重加密成功 → 原子切换密钥文件 + 引擎引用
+        #    此时数据库已是新密文，切换密钥后两边一致；
+        #    若切换中途崩溃，重启时用新 key 文件初始化 → 新密钥解新密文，正确。
+        _write_key_file = __import__("core.encryption", fromlist=["_write_key_file"])._write_key_file
+        from core.encryption import KDFParams, KDF_ALGORITHM
+        backup_path = Path(self.config.key_file).with_suffix(
+            Path(self.config.key_file).suffix + ".bak"
+        )
+        import shutil
+        if Path(self.config.key_file).exists():
+            shutil.copy2(self.config.key_file, backup_path)
+
+        new_kdf_params = KDFParams(algorithm=KDF_ALGORITHM, iterations=new_iterations)
+        _write_key_file(Path(self.config.key_file), new_salt, new_kdf_params, new_engine)
+
         self._encryption = new_engine
         if self._storage:
             self._storage.encryption = new_engine
+        _set_global_engine(new_engine)
 
-        # 4. 批量重加密所有记忆
-        count = 0
-        if self._storage:
-            try:
-                count = self._storage.rekey_memories(old_engine, new_engine)
-            except Exception:
-                # 重加密失败：恢复旧密钥文件，确保旧密文 + 旧密钥一致
-                import shutil
-                backup_path = Path(self.config.key_file).with_suffix(
-                    Path(self.config.key_file).suffix + ".bak"
-                )
-                if backup_path.exists():
-                    shutil.copy2(backup_path, self.config.key_file)
-                # 恢复引擎引用
-                self._encryption = old_engine
-                if self._storage:
-                    self._storage.encryption = old_engine
-                # 全局引擎也恢复
-                from core.encryption import _set_global_engine
-                _set_global_engine(old_engine)
-                raise
+        new_iterations_val = new_iterations
 
         return {
             "rekeyed_count": count,

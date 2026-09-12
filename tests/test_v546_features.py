@@ -187,8 +187,11 @@ class TestIncrementalEmbeddings:
 # ---------- 8. REST API（含 SQLite 跨线程修复） ----------
 
 class TestRestAPI:
-    def test_stats_and_health_endpoints(self, tmp_path):
+    def test_stats_and_health_endpoints(self, tmp_path, monkeypatch):
         from api.server import start_api_server
+
+        # fail-closed 默认需认证；测试环境显式开启无认证
+        monkeypatch.setenv("MINDFORGE_ALLOW_NOAUTH", "1")
 
         mf = MindForge(db_path=str(tmp_path / "apimem.db"), encrypted=False)
         mf.add("API 测试记忆", layer=MemoryLayer.LONG_TERM)

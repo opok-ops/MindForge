@@ -107,12 +107,16 @@ def _safe_path(path_str, must_exist=False, allow_symlinks=False,
     except (OSError, RuntimeError) as e:
         raise ValueError(f"路径解析失败: {e}")
 
-    # 符号链接检查
+    # 符号链接检查 — 使用 lstat() 逐组件检查原始路径，非解析后路径
     if not allow_symlinks:
-        check_path = resolved
+        import os as _os
+        check_path = target
         while check_path != check_path.parent:
-            if check_path.is_symlink():
-                raise ValueError(f"不允许操作符号链接: {check_path}")
+            try:
+                if _os.path.islink(str(check_path)):
+                    raise ValueError(f"不允许操作符号链接: {check_path}")
+            except OSError:
+                pass
             check_path = check_path.parent
 
     # 扩展名检查
@@ -253,13 +257,13 @@ class MindForge:
                                 "layer": entry.layer.value if hasattr(entry.layer, 'value') else str(entry.layer),
                             }
                         )
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning("Failed to index memory %s: %s", entry.id, e)
                 offset += page_size
                 if len(entries) < page_size:
                     break
         except Exception as e:
-            logger.warning("Failed to rebuild index from storage: %s", e)
+            logger.error("Index rebuild failed at offset %d: %s", offset, e)
 
     def init_with_password(self, password: str):
         """使用密码初始化加密引擎
@@ -516,18 +520,21 @@ class MindForge:
             session_id=session_id,
             use_embedding=use_embedding,
         )
-        # v5.6.2 安全修复：隐私访问控制过滤搜索结果
-        # 从存储层获取完整条目以检查隐私级别
-        filtered_chunks = []
-        for chunk in result.chunks:
-            entry = self._storage.get_memory(chunk.memory_id, agent_id, session_id)
-            if entry is None:
-                continue
-            ok, _reason = self.privacy_engine.check_access(entry, agent_id, session_id)
-            if ok:
-                filtered_chunks.append(chunk)
-        result.chunks = filtered_chunks
-        result.total_found = len(filtered_chunks)
+        # 批量获取记忆条目做隐私过滤，避免 N+1 查询
+        if result.chunks:
+            mem_ids = [c.memory_id for c in result.chunks]
+            entries = self._storage.get_memories_by_ids(mem_ids)
+            entry_map = {e.id: e for e in entries if e is not None}
+            filtered_chunks = []
+            for chunk in result.chunks:
+                entry = entry_map.get(chunk.memory_id)
+                if entry is None:
+                    continue
+                ok, _ = self.privacy_engine.check_access(entry, agent_id, session_id)
+                if ok:
+                    filtered_chunks.append(chunk)
+            result.chunks = filtered_chunks
+            result.total_found = len(filtered_chunks)
         return result
 
     def rebuild_embeddings(self, batch_size: int = 100,
@@ -968,6 +975,8 @@ class MindForge:
         生成可视化报告数据：记忆增长曲线、分类分布、衰减预警、
         Top10 高访问低重要度记忆。
 
+        v5.6.2 性能修复：改用分页查询 + SQL 聚合统计，避免全量加载到内存。
+
         Returns:
             dict: 含 growth_curve, category_distribution, decay_warnings,
                   top_access_low_importance, layer_distribution, importance_distribution
@@ -975,75 +984,85 @@ class MindForge:
         import time as _time
         from collections import Counter
 
-        entries = self._storage.list_memories(limit=100000)
+        conn = self._storage._get_conn()
         now = _time.time()
 
-        # 1. 记忆增长曲线（按天聚合最近 30 天）
+        # 1. 统计总数（不加载条目）
+        total = conn.execute("SELECT COUNT(*) FROM memories WHERE category != 'trash'").fetchone()[0]
+
+        # 2. 分类分布（SQL 聚合，不加载条目）
+        cat_rows = conn.execute(
+            "SELECT category, COUNT(*) as cnt FROM memories WHERE category != 'trash' "
+            "GROUP BY category ORDER BY cnt DESC LIMIT 20"
+        ).fetchall()
+        category_dist = [{"category": r[0], "count": r[1]} for r in cat_rows]
+
+        # 3. 层级分布（SQL 聚合）
+        layer_rows = conn.execute(
+            "SELECT layer, COUNT(*) as cnt FROM memories GROUP BY layer ORDER BY cnt DESC"
+        ).fetchall()
+        layer_dist = [{"layer": r[0], "count": r[1]} for r in layer_rows]
+
+        # 4. 重要度分布（SQL 聚合）
+        imp_rows = conn.execute(
+            "SELECT importance, COUNT(*) as cnt FROM memories GROUP BY importance ORDER BY cnt DESC"
+        ).fetchall()
+        importance_dist = [{"importance": r[0], "count": r[1]} for r in imp_rows]
+
+        # 5. 记忆增长曲线（SQL 按天聚合最近 30 天）
+        thirty_days_ago = now - 30 * 86400
+        growth_rows = conn.execute(
+            "SELECT created_at FROM memories WHERE created_at >= ? AND category != 'trash'",
+            (thirty_days_ago,)
+        ).fetchall()
         growth = {}
-        for e in entries:
-            if e.created_at > 0:
-                day = _time.strftime("%Y-%m-%d", _time.gmtime(e.created_at))
-                growth[day] = growth.get(day, 0) + 1
-        # 按日期排序，计算累计
+        for row in growth_rows:
+            day = _time.strftime("%Y-%m-%d", _time.gmtime(row[0]))
+            growth[day] = growth.get(day, 0) + 1
         sorted_days = sorted(growth.keys())
         cumulative = 0
         growth_curve = []
         for day in sorted_days:
             cumulative += growth[day]
             growth_curve.append({"date": day, "daily": growth[day], "cumulative": cumulative})
-        # 只保留最近 30 天
-        growth_curve = growth_curve[-30:] if len(growth_curve) > 30 else growth_curve
 
-        # 2. 分类分布
-        cat_counter = Counter(e.category for e in entries if e.category != "trash")
-        category_dist = [{"category": cat, "count": cnt}
-                         for cat, cnt in cat_counter.most_common(20)]
-
-        # 3. 层级分布
-        layer_counter = Counter(e.layer.value if hasattr(e.layer, 'value') else str(e.layer)
-                                for e in entries)
-        layer_dist = [{"layer": layer, "count": cnt}
-                      for layer, cnt in layer_counter.most_common()]
-
-        # 4. 衰减预警（forgetting_score 高的记忆）
+        # 6. 衰减预警（SQL 筛选，只加载符合条件的条目）
+        decay_rows = conn.execute(
+            "SELECT id, content, category, forgetting_score, access_count, strength "
+            "FROM memories WHERE category != 'trash' AND forgetting_score >= 0.5 "
+            "ORDER BY forgetting_score DESC LIMIT 20"
+        ).fetchall()
         decay_warnings = []
-        for e in entries:
-            if hasattr(e, 'forgetting_score') and e.forgetting_score >= 0.5:
-                decay_warnings.append({
-                    "id": e.id,
-                    "content": e.content[:100],
-                    "category": e.category,
-                    "forgetting_score": round(e.forgetting_score, 3),
-                    "access_count": e.access_count,
-                    "strength": round(e.strength, 3) if hasattr(e, 'strength') else 0,
-                })
-        decay_warnings.sort(key=lambda x: x["forgetting_score"], reverse=True)
-        decay_warnings = decay_warnings[:20]
+        for r in decay_rows:
+            decay_warnings.append({
+                "id": r[0],
+                "content": (r[1] or "")[:100],
+                "category": r[2],
+                "forgetting_score": round(r[3] or 0, 3),
+                "access_count": r[4],
+                "strength": round(r[5] or 0, 3),
+            })
 
-        # 5. Top10 高访问低重要度记忆
+        # 7. Top10 高访问低重要度记忆（SQL 筛选）
+        access_rows = conn.execute(
+            "SELECT id, content, category, access_count, importance "
+            "FROM memories WHERE category != 'trash' AND access_count >= 3 "
+            "AND importance IN ('LOW', 'MEDIUM') "
+            "ORDER BY access_count DESC LIMIT 10"
+        ).fetchall()
         access_low_imp = []
-        for e in entries:
-            imp_val = e.importance.to_int() if hasattr(e.importance, 'to_int') else 1
-            if e.access_count >= 3 and imp_val <= 1:  # LOW or MEDIUM
-                access_low_imp.append({
-                    "id": e.id,
-                    "content": e.content[:100],
-                    "category": e.category,
-                    "access_count": e.access_count,
-                    "importance": e.importance.value if hasattr(e.importance, 'value') else str(e.importance),
-                })
-        access_low_imp.sort(key=lambda x: x["access_count"], reverse=True)
-        access_low_imp = access_low_imp[:10]
-
-        # 6. 重要度分布
-        imp_counter = Counter(e.importance.value if hasattr(e.importance, 'value') else str(e.importance)
-                              for e in entries)
-        importance_dist = [{"importance": imp, "count": cnt}
-                           for imp, cnt in imp_counter.most_common()]
+        for r in access_rows:
+            access_low_imp.append({
+                "id": r[0],
+                "content": (r[1] or "")[:100],
+                "category": r[2],
+                "access_count": r[3],
+                "importance": r[4],
+            })
 
         return {
             "generated_at": _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime(now)),
-            "total_memories": len(entries),
+            "total_memories": total,
             "growth_curve": growth_curve,
             "category_distribution": category_dist,
             "layer_distribution": layer_dist,

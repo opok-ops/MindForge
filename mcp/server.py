@@ -1068,7 +1068,7 @@ def _handle_tools_call(mf, request: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _parse_args(argv: List[str]) -> Dict[str, Any]:
-    cfg: Dict[str, Any] = {"db_path": None, "key_file": None}
+    cfg: Dict[str, Any] = {"db_path": None, "key_file": None, "auth_secret": None}
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -1080,12 +1080,31 @@ def _parse_args(argv: List[str]) -> Dict[str, Any]:
             cfg["key_file"] = argv[i + 1]; i += 2
         elif a.startswith("--key-file="):
             cfg["key_file"] = a.split("=", 1)[1]; i += 1
+        elif a == "--auth-secret" and i + 1 < len(argv):
+            cfg["auth_secret"] = argv[i + 1]; i += 2
+        elif a.startswith("--auth-secret="):
+            cfg["auth_secret"] = a.split("=", 1)[1]; i += 1
         else:
             i += 1
     return cfg
 
 
-def serve_forever(db_path: Optional[str] = None, key_file: Optional[str] = None) -> int:
+def _check_auth(msg: Dict[str, Any], expected_secret: str) -> bool:
+    """认证检查：initialize 请求须携带 _meta.authSecret，与 shared-secret 比对"""
+    if not expected_secret:
+        return True
+    params = msg.get("params") or {}
+    meta = params.get("_meta") or {}
+    client_secret = meta.get("authSecret", "")
+    import hmac as _hmac
+    return _hmac.compare_digest(str(client_secret), expected_secret)
+
+
+_authenticated = False
+
+
+def serve_forever(db_path: Optional[str] = None, key_file: Optional[str] = None,
+                  auth_secret: Optional[str] = None) -> int:
     from MindForge import MindForge
     if not db_path:
         default_root = os.path.join(os.path.expanduser("~"), ".MindForge", "data", "store")
@@ -1097,6 +1116,10 @@ def serve_forever(db_path: Optional[str] = None, key_file: Optional[str] = None)
         kwargs["key_file"] = key_file
         kwargs["encrypted"] = True
     mf = MindForge(**kwargs)
+
+    global _authenticated
+    _authenticated = False
+    expected_secret = auth_secret or os.environ.get("MINDFORGE_MCP_SECRET", "")
 
     while True:
         try:
@@ -1112,9 +1135,18 @@ def serve_forever(db_path: Optional[str] = None, key_file: Optional[str] = None)
         rid = msg.get("id")
         try:
             if method == "initialize":
-                _respond(msg, _handle_initialize(msg))
+                if _check_auth(msg, expected_secret):
+                    _authenticated = True
+                    _respond(msg, _handle_initialize(msg))
+                else:
+                    _authenticated = False
+                    if rid is not None:
+                        _respond_error(msg, code=-32001, message="Authentication failed")
             elif method == "notifications/initialized":
                 pass
+            elif not _authenticated and expected_secret:
+                if rid is not None:
+                    _respond_error(msg, code=-32001, message="Not authenticated")
             elif method == "tools/list":
                 _respond(msg, _handle_tools_list(msg))
             elif method == "tools/call":
@@ -1134,14 +1166,14 @@ def serve_forever(db_path: Optional[str] = None, key_file: Optional[str] = None)
             tb = traceback.format_exc(limit=6)
             _log(f"handler error {method}: {e}\n{tb}")
             if rid is not None:
-                # v5.6.2 安全修复：不向客户端返回堆栈跟踪，仅服务端日志记录
                 _respond_error(msg, code=-32000, message="Internal server error")
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     cfg = _parse_args(argv)
-    return serve_forever(db_path=cfg.get("db_path"), key_file=cfg.get("key_file"))
+    return serve_forever(db_path=cfg.get("db_path"), key_file=cfg.get("key_file"),
+                         auth_secret=cfg.get("auth_secret"))
 
 
 if __name__ == "__main__":

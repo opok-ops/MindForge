@@ -375,7 +375,7 @@ def cmd_init(args):
         if len(password) < 8:
             print(c("⚠️  警告：密码建议至少 8 位", "yellow"))
 
-    print("\n正在生成加密密钥（PBKDF2-SHA256，100000 次迭代）...")
+    print("\n正在生成加密密钥（PBKDF2-SHA256，600000 次迭代）...")
 
     try:
         config = MemoryConfig(

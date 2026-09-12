@@ -196,22 +196,26 @@ class EncryptionEngine:
         return cls(key, kdf_params=kdf_params), salt
 
     def encrypt(self, plaintext: str) -> EncryptedBlob:
-        """加密文本"""
+        """加密文本
+
+        salt 参与 AEAD 关联数据（AAD），使每条密文绑定唯一 salt。
+        虽然 AES-GCM 的 nonce 已提供机密性和完整性，将 salt 作为 AAD
+        可以防止密文头篡改（nonce/salt 不匹配时解密失败）。
+        """
         if not isinstance(plaintext, str):
             raise SecurityError("encrypt() 要求 str 类型输入")
         plaintext_bytes = plaintext.encode("utf-8")
         nonce = os.urandom(12)
-        # v5.6.2 说明：salt 字段保留用于未来 per-blob KDF，当前未参与密钥派生。
-        # 当前所有密文共享同一主密钥，nonce（12 字节随机）提供唯一性。
         salt = os.urandom(16)
 
-        ciphertext = self._aesgcm.encrypt(nonce, plaintext_bytes, None)
+        # salt 作为 AAD 参与认证加密，非装饰性字段
+        ciphertext = self._aesgcm.encrypt(nonce, plaintext_bytes, salt)
         return EncryptedBlob(
             ciphertext=ciphertext,
             nonce=nonce,
             salt=salt,
             algorithm="AES-256-GCM",
-            kdf_params=self._kdf_params,  # 密文头携带密钥的 KDF 参数
+            kdf_params=self._kdf_params,
         )
 
     def decrypt(self, blob: EncryptedBlob) -> str:
@@ -220,11 +224,13 @@ class EncryptionEngine:
             raise SecurityError("decrypt() 要求 EncryptedBlob 类型输入")
         if not blob.nonce or not blob.ciphertext:
             raise SecurityError("EncryptedBlob 缺少 nonce 或 ciphertext 字段")
+        if not blob.salt:
+            raise SecurityError("EncryptedBlob 缺少 salt 字段")
         try:
-            plaintext = self._aesgcm.decrypt(blob.nonce, blob.ciphertext, None)
+            # salt 作为 AAD 参与解密，篡改 salt 会导致认证失败
+            plaintext = self._aesgcm.decrypt(blob.nonce, blob.ciphertext, blob.salt)
             return plaintext.decode("utf-8")
         except Exception:
-            # v5.6.2 安全修复：不泄露底层异常类型，防止认证 Oracle 攻击
             raise SecurityError("解密失败：数据损坏或密钥不正确")
 
     def hash(self, data: str) -> str:

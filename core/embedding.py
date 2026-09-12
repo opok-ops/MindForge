@@ -20,6 +20,7 @@ MindForge v5.5.8 嵌入引擎
 import struct
 import logging
 import os
+import threading
 import json
 from typing import List, Optional, Tuple
 from abc import ABC, abstractmethod
@@ -572,12 +573,14 @@ class EmbeddingEngine:
         engine = EmbeddingEngine(backend="ollama", model_name="nomic-embed-text")
     """
 
-    _instance = None  # 单例（避免重复加载模型）
+    _instance = None
+    _lock = threading.Lock()
 
     def __new__(cls, *args, **kwargs):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = super().__new__(cls)
+            return cls._instance
 
     def __init__(self, model_name: str = "", backend: str = ""):
         if hasattr(self, "_initialized"):

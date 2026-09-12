@@ -64,7 +64,11 @@ class GenericAPIAdapter:
         return entry.to_dict()
 
     def _handle_get(self, params: Dict) -> Optional[Dict]:
-        entry = self.cm.get(params["id"])
+        entry = self.cm.get(
+            params["id"],
+            actor=params.get("actor", "api"),
+            session_id=params.get("session_id", ""),
+        )
         return entry.to_dict() if entry else None
 
     def _handle_search(self, params: Dict) -> Dict:
@@ -72,6 +76,8 @@ class GenericAPIAdapter:
             query=params["query"],
             max_results=params.get("limit", 10),
             categories=params.get("categories"),
+            actor=params.get("actor", "api"),
+            session_id=params.get("session_id", ""),
         )
         return {
             "total": result.total_found,
@@ -101,10 +107,16 @@ class GenericAPIAdapter:
             content=params.get("content"),
             category=params.get("category"),
             tags=params.get("tags"),
+            actor=params.get("actor", "api"),
+            session_id=params.get("session_id", ""),
         )
 
     def _handle_delete(self, params: Dict) -> bool:
-        return self.cm.delete(params["id"])
+        return self.cm.delete(
+            params["id"],
+            actor=params.get("actor", "api"),
+            session_id=params.get("session_id", ""),
+        )
 
     def _handle_stats(self, params: Dict) -> Dict:
         return self.cm.stats()

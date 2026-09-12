@@ -134,10 +134,14 @@ def _safe_path(path_str, must_exist=False, allow_symlinks=False,
         raise ValueError(f"路径解析失败: {e}")
 
     if not allow_symlinks:
-        check_path = resolved
+        import os as _os
+        check_path = target
         while check_path != check_path.parent:
-            if check_path.is_symlink():
-                raise ValueError(f"不允许操作符号链接: {check_path}")
+            try:
+                if _os.path.islink(str(check_path)):
+                    raise ValueError(f"不允许操作符号链接: {check_path}")
+            except OSError:
+                pass
             check_path = check_path.parent
 
     if allowed_exts is not None:
@@ -1259,6 +1263,29 @@ class StorageEngine:
 
         self._update_access(entry, actor, session_id)
         return entry
+
+    def get_memories_by_ids(self, memory_ids: List[str]) -> List[Optional[MemoryEntry]]:
+        """批量获取记忆（单次查询，避免 N+1）
+
+        不做自动过期检查（批量场景下过期处理由调用方决定），
+        不更新 access 记录（避免批量查询打满 DB 写入）。
+        """
+        if not memory_ids:
+            return []
+        conn = self._get_conn()
+        placeholders = ",".join("?" * len(memory_ids))
+        rows = conn.execute(
+            f"SELECT * FROM memories WHERE id IN ({placeholders}) AND category != 'trash'",
+            memory_ids
+        ).fetchall()
+        entry_map = {}
+        for row in rows:
+            try:
+                entry = self._row_to_entry(row)
+                entry_map[entry.id] = entry
+            except Exception:
+                pass
+        return [entry_map.get(mid) for mid in memory_ids]
 
     def decrypt_content(self, entry: MemoryEntry) -> str:
         """解密记忆内容"""

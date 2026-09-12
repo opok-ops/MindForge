@@ -327,9 +327,19 @@ class FederatedMemory:
                     "timestamp": time.time(),
                 })
 
-            # 将本地结果按 peer 数量均分，同时标记等待远端
-            per_peer = local_results[:max_per_peer]
-            results[pid] = per_peer
+            # 将本地结果在活跃 peer 间分片分配（而非每个 peer 拿相同的副本）
+            active_peer_ids = [pid for pid in search_peers
+                              if pid in self.peers
+                              and self.peers[pid].status != PeerStatus.OFFLINE
+                              and self.peers[pid].trust_level >= 0.3]
+            if active_peer_ids:
+                peer_idx = active_peer_ids.index(pid)
+                chunk_size = max(1, len(local_results) // len(active_peer_ids))
+                start = peer_idx * chunk_size
+                end = start + chunk_size if pid != active_peer_ids[-1] else len(local_results)
+                results[pid] = local_results[start:end]
+            else:
+                results[pid] = []
 
         return results
 

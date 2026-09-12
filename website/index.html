@@ -75,6 +75,14 @@
 
 <a class="skip-link" href="#main">跳到主要内容</a>
 
+<!-- ===================== 液态玻璃环境光斑 ===================== -->
+<div class="liquid-bg" aria-hidden="true">
+  <span class="lb lb-1"></span>
+  <span class="lb lb-2"></span>
+  <span class="lb lb-3"></span>
+  <span class="lb lb-4"></span>
+</div>
+
 <!-- ===================== SVG Sprite（线性图标，不使用 emoji） ===================== -->
 <svg class="sprite-host" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
   <defs>
@@ -165,6 +173,7 @@
       <li><a href="#hybrid">技术核心</a></li>
       <li><a href="#capabilities">核心能力</a></li>
       <li><a href="#architecture">系统架构</a></li>
+      <li><a href="#v6" class="nav-new">v6.0 预览<i aria-hidden="true">开发中</i></a></li>
       <li><a href="#changelog">更新日志</a></li>
     </ul>
 
@@ -189,6 +198,7 @@
     <li><a href="#capabilities">核心能力 <svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
     <li><a href="#architecture">系统架构 <svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
     <li><a href="#security">安全与隐私 <svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+    <li><a href="#v6">v6.0 预览 <span class="dev-tag">开发中</span> <svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
     <li><a href="#changelog">更新日志 <svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
   </ul>
   <div class="drawer-cta">
@@ -213,6 +223,15 @@
       <span class="pulse" aria-hidden="true"></span>
       <b data-ver>v5.6.1</b>
       <span>四层记忆架构 · 六路混合检索 · 端侧加密</span>
+    </p>
+
+    <p class="hero-badge hero-badge-next" data-reveal style="--d:40ms">
+      <span class="pulse pulse-vi" aria-hidden="true"></span>
+      <b>v6.0.0</b>
+      <span>多 Agent 协作 · 6G AI 记忆预览</span>
+      <a class="badge-dev" href="#v6">
+        <span class="badge-dot" aria-hidden="true"></span>开发中
+      </a>
     </p>
 
     <h1 class="hero-title" data-reveal style="--d:80ms">
@@ -820,6 +839,92 @@
   </div>
 </section>
 
+<!-- ===================== v6.0.0 预览（开发中） ===================== -->
+<section class="section v6-sect" id="v6" aria-labelledby="v6-title">
+  <div class="container">
+    <div class="section-head" data-reveal>
+      <span class="tag"><span class="tag-dot" aria-hidden="true"></span>Roadmap · v6.0.0</span>
+      <h2 id="v6-title">下一代记忆引擎，<span class="gradient-text">正在锻造</span></h2>
+      <p>v6.0.0 的两个旗舰方向已经开工：多 Agent 协作 与 6G AI 记忆预览。以下能力<b class="hl">尚未发布</b>，接口与行为在开发期可能调整。</p>
+    </div>
+
+    <div class="v6-grid">
+      <!-- 卡片 1：多 Agent 协作 -->
+      <article class="v6-card" data-reveal style="--d:0ms">
+        <div class="v6-sheen" aria-hidden="true"></div>
+        <header class="v6-head">
+          <span class="v6-ico" aria-hidden="true"><svg class="icon"><use href="#i-federated"/></svg></span>
+          <span class="badge-dev"><span class="badge-dot" aria-hidden="true"></span>开发中</span>
+        </header>
+
+        <h3 class="v6-name">多 Agent 协作</h3>
+        <p class="v6-en">Multi-Agent Orchestration</p>
+        <p class="v6-desc">
+          让多个 Agent 共用同一份记忆底座：角色化的读写权限、共享记忆黑板、写入冲突自动仲裁，
+          以及可回溯的协同链路。从"一个人记"走向"一群人会记"。
+        </p>
+
+        <ul class="v6-list">
+          <li><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check"/></svg><span>角色与权限矩阵：Owner / Writer / Reader / Guest 四级</span></li>
+          <li><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check"/></svg><span>共享记忆黑板，写入冲突检测与自动仲裁策略</span></li>
+          <li><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check"/></svg><span>任务编排：拆分 → 派发 → 汇总 → 回溯全链路</span></li>
+          <li><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check"/></svg><span>跨 Agent 记忆溯源与贡献度归因</span></li>
+        </ul>
+
+        <div class="v6-tags">
+          <span class="chip chip-cy">任务编排</span>
+          <span class="chip chip-in">权限矩阵</span>
+          <span class="chip chip-vi">共享黑板</span>
+        </div>
+
+        <footer class="v6-foot">
+          <span class="v6-status"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-clock"/></svg>开发中</span>
+          <span class="v6-eta">目标版本 <b>v6.0.0</b></span>
+        </footer>
+      </article>
+
+      <!-- 卡片 2：6G AI 记忆预览 -->
+      <article class="v6-card v6-card-vi" data-reveal style="--d:120ms">
+        <div class="v6-sheen" aria-hidden="true"></div>
+        <header class="v6-head">
+          <span class="v6-ico" aria-hidden="true"><svg class="icon"><use href="#i-spark"/></svg></span>
+          <span class="badge-dev"><span class="badge-dot" aria-hidden="true"></span>开发中</span>
+        </header>
+
+        <h3 class="v6-name">6G AI 记忆预览</h3>
+        <p class="v6-en">6G AI Memory Preview</p>
+        <p class="v6-desc">
+          第六代记忆引擎的预览通道：与稳定版并行的实验分支，提前开放上下文蒸馏、
+          增量索引与记忆可视化，让新能力先被看见、再被合并。
+        </p>
+
+        <ul class="v6-list">
+          <li><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check"/></svg><span>Preview Channel：实验特性与稳定版并行安装、互不污染</span></li>
+          <li><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check"/></svg><span>上下文蒸馏：长程记忆分层摘要与 Token 压缩</span></li>
+          <li><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check"/></svg><span>增量索引：写入即索引，大规模库下的近实时召回</span></li>
+          <li><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check"/></svg><span>记忆时间线可视化预览与调试面板</span></li>
+        </ul>
+
+        <div class="v6-tags">
+          <span class="chip chip-vi">预览通道</span>
+          <span class="chip chip-cy">上下文蒸馏</span>
+          <span class="chip chip-in">增量索引</span>
+        </div>
+
+        <footer class="v6-foot">
+          <span class="v6-status"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-clock"/></svg>开发中</span>
+          <span class="v6-eta">目标版本 <b>v6.0.0</b></span>
+        </footer>
+      </article>
+    </div>
+
+    <p class="v6-note" data-reveal style="--d:200ms">
+      <svg class="icon icon-sm" aria-hidden="true"><use href="#i-alert"/></svg>
+      <span>以上为规划中的能力，尚未在任何已发布版本中提供。想跟进进度，请关注仓库的 <a href="https://github.com/opok-ops/MindForge/milestones" target="_blank" rel="noopener noreferrer">Milestones<svg class="icon icon-sm" aria-hidden="true"><use href="#i-external"/></svg></a>。</span>
+    </p>
+  </div>
+</section>
+
 <!-- ===================== 系统架构 ===================== -->
 <section class="section section-alt" id="architecture" aria-labelledby="ar-title">
   <div class="container">
@@ -1176,6 +1281,22 @@
     </div>
 
     <div class="cl-list">
+      <article class="cl-item is-next" data-reveal>
+        <div class="cl-meta">
+          <span class="cl-ver">v6.0.0</span>
+          <span class="cl-date">未发布</span>
+          <span class="cl-kind cl-kind-dev"><span class="badge-dot" aria-hidden="true"></span>开发中</span>
+        </div>
+        <div class="cl-body">
+          <h4>多 Agent 协作 · 6G AI 记忆预览</h4>
+          <ul>
+            <li><b>多 Agent 协作</b>：角色与权限矩阵、共享记忆黑板、写入冲突自动仲裁、任务编排与跨 Agent 记忆溯源</li>
+            <li><b>6G AI 记忆预览</b>：预览通道与稳定版并行、上下文蒸馏与长程摘要、增量索引、记忆时间线可视化</li>
+            <li><b>状态</b>：开发中，尚未发布，接口与行为在开发期可能调整。详见上方 <a href="#v6">v6.0 预览</a></li>
+          </ul>
+        </div>
+      </article>
+
       <article class="cl-item is-latest" data-reveal>
         <div class="cl-meta">
           <span class="cl-ver" data-ver>v5.6.1</span>

@@ -1,0 +1,12 @@
+# MindForge 运行依赖锁定文件（用于确定性安装与漏洞扫描）
+#
+# 安装方式：
+#   pip install -r requirements.txt
+#
+# 作用：
+#   - 锁定 cryptography 主版本，避免数月无人维护期间被自动升级到破坏性大版本。
+#   - 供 CI 的 pip-audit 仅审计直接依赖（避免 runner 预装包的 CVE 噪音）。
+#
+# 升级策略：由 .github/dependabot.yml 每周自动提交升级 PR，
+# 人为 review 后合入，确保「数月不更新」期间依赖仍安全可控。
+cryptography==50.0.1

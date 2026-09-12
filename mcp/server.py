@@ -1128,6 +1128,16 @@ def serve_forever(db_path: Optional[str] = None, key_file: Optional[str] = None,
     _authenticated = False
     expected_secret = auth_secret or os.environ.get("MINDFORGE_MCP_SECRET", "")
 
+    # v5.6.3 安全增强：未设置认证密钥时，MCP 服务对所有能连上的客户端开放。
+    # 若通过 HTTP/网络暴露（而非本地 stdio），这属于安全暴露面。给出一次性告警，
+    # 并提示用 MINDFORGE_MCP_SECRET 启用 shared-secret 认证（initialize 携带 _meta.authSecret）。
+    if not expected_secret:
+        _log(
+            "WARNING: MINDFORGE_MCP_SECRET not set — MCP server accepts all clients. "
+            "If this server is reachable over a network, set MINDFORGE_MCP_SECRET "
+            "to enable shared-secret authentication (client sends _meta.authSecret on initialize)."
+        )
+
     while True:
         try:
             msg = _read_message()

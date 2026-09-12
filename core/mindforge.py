@@ -1818,7 +1818,18 @@ class MindForge:
                     config_kwargs[key] = config_data[key]
 
         config = MemoryConfig(**config_kwargs)
-        return cls(config=config)
+        instance = cls(config=config)
+        # v5.6.3 安全增强：数据默认明文落盘（encrypted=False）时给出明确告警。
+        # 敏感记忆的 content 将以明文存储在 SQLite 中，建议对含隐私数据的部署
+        # 启用加密（config.json 设 "encrypted": true 并通过 init_with_password 初始化）。
+        if not config.encrypted:
+            logger.warning(
+                "MindForge started with encryption DISABLED (config 'encrypted': false). "
+                "Memory content will be stored as plaintext in the SQLite database. "
+                "Enable encryption (set 'encrypted': true and call init_with_password) "
+                "if the store holds sensitive data."
+            )
+        return instance
 
     @classmethod
     def load_config(cls, config_path: str) -> dict:

@@ -29,7 +29,10 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          # 确定性安装：先装运行依赖锁定版，再装开发/测试工具锁定版
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+          pip install -e .
 
       - name: Run tests
         run: |
@@ -69,7 +72,12 @@ jobs:
 
       - name: Bandit scan
         run: |
-          bandit -r . -x tests --confidence-level medium || true
+          # 仅对 HIGH 严重度失败，使安全扫描真正生效（历史上 `|| true` 形同虚设）。
+          # 选用 -lll（= HIGH only）：项目代码经人工审查无真实 HIGH 漏洞；
+          # 既有 Medium（B608 参数化占位符误报、scripts/baidu_push 的 B310/B314）
+          # 均为可接受低风险，详见发布说明与安全报告，不阻断正常 CI。
+          # 排除 .venv/venv/website/examples，避免本地或演示目录污染扫描结果。
+          bandit -r . -x tests,.venv,venv,website,examples -lll
 
       - name: pip-audit
         run: |

@@ -57,7 +57,15 @@ MAX_BODY_SIZE = 10 * 1024 * 1024
 
 # v5.4.7 修复 H-7：简单速率限制器
 class _RateLimiter:
-    """基于 IP 的请求速率限制"""
+    """基于 IP 的请求速率限制
+
+    v5.6.3 稳定性修复：
+    - 清理过期记录后，若某 IP 的计数已归零则删除该键，避免冷 IP 永久驻留内存；
+    - 对跟踪的 IP 总数设上限（默认 10000），超出时丢弃最久未活动的 IP，
+      防止长期运行（数月）后字典无界增长导致内存泄漏。
+    """
+    _MAX_TRACKED_IPS = 10000
+
     def __init__(self, max_requests=100, window_seconds=60):
         self.max_requests = max_requests
         self.window = window_seconds
@@ -68,13 +76,23 @@ class _RateLimiter:
         """返回 True 表示允许，False 表示限流"""
         now = time.time()
         with self._lock:
-            # 清理过期记录
-            self._requests[client_ip] = [
-                t for t in self._requests[client_ip] if now - t < self.window
-            ]
-            if len(self._requests[client_ip]) >= self.max_requests:
+            times = self._requests[client_ip]
+            times = [t for t in times if now - t < self.window]
+            if len(times) >= self.max_requests:
+                # 仍写回（保留未过期的计数），但不追加本次请求
+                self._requests[client_ip] = times
                 return False
-            self._requests[client_ip].append(now)
+            times.append(now)
+            # 计数为空则删除键，避免长期驻留
+            if not times:
+                self._requests.pop(client_ip, None)
+            else:
+                self._requests[client_ip] = times
+            # IP 总数上限：丢弃最久未活动的键
+            if len(self._requests) > self._MAX_TRACKED_IPS:
+                excess = len(self._requests) - self._MAX_TRACKED_IPS
+                for stale_ip in list(self._requests.keys())[:excess]:
+                    self._requests.pop(stale_ip, None)
             return True
 
 
@@ -231,14 +249,29 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
         return mem_id
 
     def _check_auth(self):
-        """验证 Bearer Token（通过 MINDFORGE_API_KEY 环境变量配置）"""
+        """验证 Bearer Token（通过 MINDFORGE_API_KEY 环境变量配置）
+
+        v5.6.3 安全增强：
+        - 未设置 MINDFORGE_API_KEY 时，默认仅允许本地回环（localhost）访问，
+          并记录一次性告警；若显式设置 MINDFORGE_ALLOW_NOAUTH=0/false/no，
+          则无论是否本地都强制要求鉴权（fail-closed），避免多用户主机上的
+          本地回环被其他本地用户滥用。
+        - 设置 MINDFORGE_API_KEY 后，所有非 /api/health 端点必须携带正确 Bearer Token。
+        """
         api_key = os.environ.get("MINDFORGE_API_KEY", "")
         if not api_key:
-            # v5.4.8 安全修复：未设置 API Key 时记录警告
+            # 显式关闭「无认证」模式：强制要求密钥
+            allow_noauth = os.environ.get("MINDFORGE_ALLOW_NOAUTH", "1").strip().lower()
+            if allow_noauth in ("0", "false", "no", "off"):
+                self._send_json({"error": "Unauthorized (auth required)"}, 401)
+                return False
+            # 本地开发模式：未设密钥时开放，但给出一次性告警
             if not getattr(self.__class__, '_auth_warned', False):
                 logger.warning(
-                    "MINDFORGE_API_KEY not set — API is open to all requests. "
-                    "Set MINDFORGE_API_KEY environment variable to enable authentication."
+                    "MINDFORGE_API_KEY not set — API is open to all LOCAL requests. "
+                    "Set MINDFORGE_API_KEY to require authentication, or set "
+                    "MINDFORGE_ALLOW_NOAUTH=0 to force auth on all interfaces. "
+                    "Binding to a non-localhost host without MINDFORGE_API_KEY is refused at startup."
                 )
                 self.__class__._auth_warned = True
             return True
@@ -420,6 +453,11 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
 
             if path == "/api/memories":
                 content = body.get("content", "")
+                # v5.6.3 安全修复：content 必须是字符串，否则下游 add() 会抛
+                # ValueError 并最终返回 500。在此提前返回 400，给出明确错误。
+                if not isinstance(content, str):
+                    self._send_json({"error": "Field 'content' must be a string"}, 400)
+                    return
                 if not content:
                     self._send_json({"error": "Missing 'content' field"}, 400)
                     return

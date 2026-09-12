@@ -45,8 +45,9 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-# 百度主动推送接口地址
-PUSH_ENDPOINT = "http://data.zz.baidu.com/urls"
+# 百度主动推送接口地址（使用 HTTPS，使 site/token 查询参数在传输中加密，
+# 避免经 HTTP 明文泄露；百度接口要求 site 与 token 以查询参数形式提交）。
+PUSH_ENDPOINT = "https://data.zz.baidu.com/urls"
 
 # MindForge 官网默认值（在站长平台登记站点时需与此一致）
 DEFAULT_SITE = "https://opok-ops.github.io/MindForge/"

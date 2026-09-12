@@ -22,7 +22,10 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-dependencies = ["cryptography>=50.0.1"]
+# 运行依赖：仅 cryptography。加 <52 上限作为供应链护栏，
+# 避免未来大版本（可能含破坏性变更）在无人维护期间被自动拉入。
+# 确定性安装请使用仓库根目录的 requirements.txt。
+dependencies = ["cryptography>=50.0.1,<52"]
 
 [project.urls]
 Homepage = "https://opok-ops.github.io/MindForge/"

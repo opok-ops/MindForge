@@ -1,0 +1,23 @@
+version: 2
+updates:
+  # 锁定 Python 依赖，每周自动提交升级 PR，人工 review 后合入，
+  # 保障「数月不更新」期间依赖安全可控、不会静默漂移。
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    # 仅升级补丁/次版本，不自动跨大版本（大版本需人工评估）
+    versioning-strategy: increase
+    labels:
+      - "dependencies"
+      - "security"
+
+  # 同步升级 GitHub Actions，避免 action 版本腐化导致 CI 失效。
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "github-actions"

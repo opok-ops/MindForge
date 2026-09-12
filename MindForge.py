@@ -1,5 +1,5 @@
 """
-MindForge v5.5.8 - AI Agent 终身记忆系统
+MindForge - AI Agent 终身记忆系统
 =======================================
 四层记忆架构 · 知识图谱引擎 · 多模态支持 · 人格化记忆 · 联邦网络 · AI短剧记忆
 v5.5.8 修复：storage __version__ NameError · MCP 参数校验 · API body 校验 · 加密输入校验 · falsy 枚举值
@@ -13,7 +13,10 @@ v5.5.2 新增：Memory TTL过期机制 · 多关键词搜索高亮 · 按分类/
 底层实现仍在 core/ 和 modules/ 子包中。
 """
 
-__version__ = "5.6.1"
+# v5.6.2 收敛：版本号唯一真值在 core/version.py，此处仅做再导出，
+# 避免发版时出现「顶层与子模块版本漂移」。
+from core.version import __version__, VERSION_INFO, NEXT_MAJOR_TARGET
+
 __author__ = "MindForge Project"
 __license__ = "MIT"
 
@@ -43,6 +46,22 @@ from modules import (
     MemoryIntegrator,
 )
 
+# v6.0.0 扩展端口预留（默认不启用，仅暴露发现/注册入口）
+from modules import (
+    V6Capability,
+    V6Status,
+    V6Port,
+    MultiAgentCollaborationPort,
+    MultiAgentAdapterPort,
+    MemoryPreviewPort,
+    create_multi_agent_adapter,
+    v6_status,
+    register_v6_port,
+    get_v6_port,
+    list_v6_ports,
+    V6_TARGET_VERSION,
+)
+
 __all__ = [
     "MindForge",
     "MemoryEntry",
@@ -65,4 +84,19 @@ __all__ = [
     "PrivacyEngine",
     "MemoryIntegrator",
     "__version__",
+    "VERSION_INFO",
+    "NEXT_MAJOR_TARGET",
+    # v6.0.0 端口预留
+    "V6_TARGET_VERSION",
+    "V6Capability",
+    "V6Status",
+    "V6Port",
+    "MultiAgentCollaborationPort",
+    "MultiAgentAdapterPort",
+    "MemoryPreviewPort",
+    "create_multi_agent_adapter",
+    "v6_status",
+    "register_v6_port",
+    "get_v6_port",
+    "list_v6_ports",
 ]

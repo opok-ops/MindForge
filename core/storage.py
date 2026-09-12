@@ -35,11 +35,9 @@ from .types import (
 )
 from .encryption import EncryptionEngine, EncryptedBlob, SecurityError
 
-# v5.5.8: 修复 export_agent_memories() 中 __version__ 未定义的 NameError
-try:
-    from .. import __version__
-except (ImportError, ValueError):
-    __version__ = "5.6.1"
+# v5.5.8 修复：export_agent_memories() 曾引用未定义的 __version__（NameError）
+# v5.6.2 收敛：版本号唯一真值迁移到 core/version.py，此处不再保留硬编码兜底
+from .version import __version__
 
 
 # v5.5.7: 检测数据库路径是否位于网络文件系统

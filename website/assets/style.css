@@ -2548,14 +2548,136 @@ body {
 .cl-kind-dev .badge-dot { width: 5px; height: 5px; }
 
 /* —— 移动端：关闭大面积背景模糊，保帧率 —— */
+/* —— 开发者介绍区块（#developer，位于 Quick Start 之后）—— */
+.dvt-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.02fr) minmax(0, .98fr);
+  gap: clamp(18px, 2.4vw, 28px);
+  align-items: stretch;
+}
+
+.dvt-card {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: clamp(24px, 3vw, 34px);
+  overflow: hidden;
+  border: 1px solid var(--lg-edge);
+  border-radius: var(--r-xl);
+  background: var(--lg-fill);
+  backdrop-filter: var(--lg-bd);
+  -webkit-backdrop-filter: var(--lg-bd);
+  box-shadow: var(--lg-shadow);
+}
+/* 玻璃折射用的青色光晕，与 v6 区块的 .v6-sheen 同一套语言 */
+.dvt-card::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  width: 300px; height: 300px;
+  top: -130px; right: -110px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(34,211,238,.30), transparent 68%);
+  filter: blur(44px);
+  opacity: .5;
+  pointer-events: none;
+}
+
+.dvt-avatar {
+  width: 62px; height: 62px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  font-size: 27px; font-weight: 700;
+  color: #05070d;
+  background: linear-gradient(135deg, #22d3ee, #818cf8, #a855f7);
+  box-shadow: 0 1px 0 rgba(255,255,255,.38) inset, 0 16px 34px -18px rgba(34,211,238,.75);
+}
+
+.dvt-name {
+  font-size: clamp(1.25rem, 2vw, 1.5rem);
+  letter-spacing: -.02em;
+  margin-bottom: 3px;
+}
+.dvt-meta { color: var(--txt-3); font-size: 12.5px; font-family: var(--f-mono); }
+.dvt-bio { color: var(--txt-2); font-size: 14.6px; line-height: 1.8; }
+
+.dvt-gh {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  color: var(--cy);
+  font-size: 13.5px;
+  text-decoration: none;
+  transition: gap .3s var(--ease), color .3s var(--ease);
+}
+.dvt-gh:hover { gap: 13px; }
+
+.dvt-social { display: grid; gap: clamp(14px, 1.8vw, 20px); }
+
+.dvt-soc {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 20px;
+  border: 1px solid var(--lg-edge);
+  border-radius: var(--r-lg);
+  background: var(--lg-fill);
+  backdrop-filter: var(--lg-bd);
+  -webkit-backdrop-filter: var(--lg-bd);
+  box-shadow: var(--lg-shadow);
+  text-decoration: none;
+  transition: transform .35s var(--ease), border-color .35s var(--ease), box-shadow .35s var(--ease);
+}
+.dvt-soc:hover {
+  transform: translateY(-3px);
+  border-color: var(--lg-hi);
+  box-shadow: var(--lg-shadow-lift);
+}
+
+.dvt-soc-ico {
+  flex: 0 0 auto;
+  width: 46px; height: 46px;
+  display: grid; place-items: center;
+  border-radius: 14px;
+  border: 1px solid var(--lg-edge);
+  color: #fff;
+}
+.dvt-ico-dy {
+  background: linear-gradient(150deg, #25f4ee 0%, #22d3ee 45%, #fe2c55 100%);
+  box-shadow: 0 12px 26px -14px rgba(37,244,238,.6);
+}
+.dvt-ico-xhs {
+  background: linear-gradient(150deg, #ff2442, #ff5a76);
+  box-shadow: 0 12px 26px -14px rgba(255,36,66,.6);
+}
+
+.dvt-soc-txt { display: grid; gap: 2px; min-width: 0; }
+.dvt-soc-txt b { font-size: 11.5px; font-weight: 500; color: var(--txt-3); letter-spacing: .06em; }
+.dvt-soc-txt strong { font-size: 15.5px; color: var(--txt); font-family: var(--f-mono); }
+.dvt-soc-txt em { font-style: normal; font-size: 12.5px; color: var(--txt-3); }
+
+.dvt-soc-go {
+  margin-left: auto;
+  color: var(--txt-3);
+  transition: transform .3s var(--ease), color .3s var(--ease);
+}
+.dvt-soc:hover .dvt-soc-go { transform: translateX(3px); color: var(--cy); }
+
 @media (max-width: 860px) {
   .cap, .lane, .eco, .arch-layer, .cl-item, .code, .term,
-  .qs-step, .sec-card, .fusion-card, .fusion-out, .v6-card, .flow-node, .layer-row {
+  .qs-step, .sec-card, .fusion-card, .fusion-out, .v6-card, .flow-node, .layer-row,
+  .dvt-card, .dvt-soc {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     background: linear-gradient(157deg, rgba(255,255,255,.07), rgba(255,255,255,.015));
   }
   .v6-grid { grid-template-columns: 1fr; }
+  .dvt-grid { grid-template-columns: 1fr; }
   .hero-stats { border-radius: var(--r-lg); }
   .nav-inner { margin-top: 10px; padding: 0 10px 0 14px; }
 }

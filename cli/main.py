@@ -91,10 +91,17 @@ from core import (
 )
 from core.mindforge import _safe_path
 
+# v5.6.2 收敛：版本号唯一真值在 core/version.py，此处按
+# 「脚本模式（core 为顶层包）→ 安装模式（MindForge.core）→ 硬编码兜底」三级回退，
+# 避免顶层包导入失败时出现版本漂移。
 try:
-    from MindForge import __version__
+    from core.version import __version__
 except ImportError:
-    __version__ = "5.6.1"
+    try:
+        from MindForge.core.version import __version__
+    except (ImportError, ValueError):
+        # 兜底值：必须与 core/version.py 的 __version__ 保持同步
+        __version__ = "5.6.1"
 
 # 懒加载 modules：仅在对应命令执行时才导入，大幅加速 CLI 启动
 _modules_cache = {}

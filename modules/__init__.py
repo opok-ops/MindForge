@@ -23,6 +23,22 @@ from .session_focus import SessionFocus, TopicCluster, FocusSummary
 # v5.4.2 新增两大能力
 from .federated_acl import FederatedACLManager
 from .share_conflict import SharedConflictResolver
+# v6.0.0 扩展端口预留（默认不启用，不引入任何行为变更）
+from .v6 import (
+    V6_TARGET_VERSION,
+    V6Capability,
+    V6Status,
+    V6Port,
+    MultiAgentCollaborationPort,
+    MultiAgentAdapterPort,
+    MemoryPreviewPort,
+    create_multi_agent_adapter,
+    register_v6_port,
+    unregister_v6_port,
+    get_v6_port,
+    list_v6_ports,
+    v6_status,
+)
 
 __all__ = [
     "RecallEngine",
@@ -69,4 +85,18 @@ __all__ = [
     # v5.4.2
     "FederatedACLManager",
     "SharedConflictResolver",
+    # v6.0.0 端口预留
+    "V6_TARGET_VERSION",
+    "V6Capability",
+    "V6Status",
+    "V6Port",
+    "MultiAgentCollaborationPort",
+    "MultiAgentAdapterPort",
+    "MemoryPreviewPort",
+    "create_multi_agent_adapter",
+    "register_v6_port",
+    "unregister_v6_port",
+    "get_v6_port",
+    "list_v6_ports",
+    "v6_status",
 ]

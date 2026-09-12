@@ -35,11 +35,9 @@ from .indexer import IndexEngine
 from .query import QueryEngine
 from .embedding import EmbeddingEngine
 
-# 安全获取版本号：包安装模式从根包导入，脚本模式用 fallback
-try:
-    from .. import __version__
-except (ImportError, ValueError):
-    __version__ = "5.6.1"
+# v5.6.2 收敛：版本号唯一真值在 core/version.py，
+# 此前此处带一份硬编码兜底，发版漏改会导致与顶层包版本漂移
+from .version import __version__
 
 
 # ===== 路径安全校验（v5.2.9 新增：核心层统一防护，防止路径遍历 / 符号链接攻击）=====

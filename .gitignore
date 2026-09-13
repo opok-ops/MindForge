@@ -36,3 +36,8 @@ plugins/*/node_modules/
 
 # 本地克隆的 dsh-mindforge（独立 git 仓库，不纳入本仓库）
 dsh-mindforge/
+
+
+# 性能报告生成的中间图表与逐页渲染预览（PDF/JSON 为交付物，保留跟踪）
+benchmarks/results/chart_*.png
+benchmarks/results/preview/

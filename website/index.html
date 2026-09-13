@@ -47,7 +47,7 @@
   "applicationSubCategory": "AI Agent Memory System",
   "operatingSystem": "Windows, macOS, Linux",
   "programmingLanguage": "Python",
-  "softwareVersion": "5.6.1",
+  "softwareVersion": "5.6.5",
   "toolCount": 33,
   "moduleCount": 15,
   "testCount": 518,
@@ -177,7 +177,7 @@
         </svg>
       </span>
       <span class="brand-name">MindForge</span>
-      <span class="brand-ver" data-ver>v5.6.1</span>
+      <span class="brand-ver" data-ver>v5.6.5</span>
     </a>
 
     <ul class="nav-links">
@@ -233,7 +233,7 @@
   <div class="hero-inner">
     <p class="hero-badge" data-reveal>
       <span class="pulse" aria-hidden="true"></span>
-      <b data-ver>v5.6.1</b>
+      <b data-ver>v5.6.5</b>
       <span>四层记忆架构 · 六路混合检索 · 端侧加密</span>
     </p>
 
@@ -406,7 +406,7 @@
     <div class="section-head" data-reveal>
       <span class="tag"><span class="tag-dot" aria-hidden="true"></span>About Developer</span>
       <h2 id="dev-title">写这套系统的，<span class="gradient-text">只有一个人</span></h2>
-      <p>没有团队，没有融资——<b>小顾</b> 一个人从第一行代码敲到 <span data-ver>v5.6.1</span>。项目进展与技术干货，抖音、小红书同步更新。</p>
+      <p>没有团队，没有融资——<b>小顾</b> 一个人从第一行代码敲到 <span data-ver>v5.6.5</span>。项目进展与技术干货，抖音、小红书同步更新。</p>
     </div>
 
     <div class="dvt-grid">
@@ -1345,7 +1345,7 @@
     <div class="section-head" data-reveal>
       <span class="tag"><span class="tag-dot" aria-hidden="true"></span>Changelog</span>
       <h2 id="cl-title">每次迭代，<span class="gradient-text">都在进化</span></h2>
-      <p>从 v5.3.3 到 <span data-ver>v5.6.1</span>，功能扩展、安全加固与 Bug 修复的完整轨迹。</p>
+      <p>从 v5.3.3 到 <span data-ver>v5.6.5</span>，功能扩展、安全加固与 Bug 修复的完整轨迹。</p>
     </div>
 
     <div class="cl-list">
@@ -1367,9 +1367,78 @@
 
       <article class="cl-item is-latest" data-reveal>
         <div class="cl-meta">
-          <span class="cl-ver" data-ver>v5.6.1</span>
-          <span class="cl-date">2026-09-09</span>
+          <span class="cl-ver" data-ver>v5.6.5</span>
+          <span class="cl-date">2026-09-13</span>
           <span class="cl-kind">最新</span>
+        </div>
+        <div class="cl-body">
+          <h4>Ed25519 联邦签名 · 防重放 · 计数持久 · 内存与流式加固</h4>
+          <ul>
+            <li><b>联邦签名升级 Ed25519 非对称签名</b>：公钥公开即可验签、私钥不出节点，HMAC-SHA256 仅保留用于兼容旧节点；新增签名时间戳 + nonce 防重放（偏差窗口 300s、nonce 容量上限防内存打满）</li>
+            <li><b>计数持久性</b>：访问计数改为 commit 成功后才扣减挂账，失败完整保留等下轮重试；<code>_access_last_flush</code>、过期隐私授权与过期共享记录定期回收，内存不再随数据量线性增长</li>
+            <li><b>内存与流式检索</b>：IndexEngine 内存结构默认 10 万上限 + 近似 LRU（被淘汰文档仍由 FTS5/fuzzy 覆盖，召回不损失）；fuzzy/vector 检索改分块流式 + 有界最小堆，消除约 150MB 瞬时内存峰值</li>
+            <li><b>入口安全</b>：X-Agent-Id 默认不可伪造（需网关密钥 + 显式信任）、Web 非法/负 Content-Length 返回 400、MCP 认证状态加锁、新增 <code>core/paths.py</code> 统一 CLI 与 MCP 默认数据库路径</li>
+            <li><b>测试与性能</b>：新增 31 个专项回归用例，全量 601 项通过；3000 条规模混合检索约 9.5ms，安全加固无可观测性能回归，并附中文测试/性能 PDF 报告</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="cl-item" data-reveal>
+        <div class="cl-meta">
+          <span class="cl-ver">v5.6.4</span>
+          <span class="cl-date">2026-09-13</span>
+          <span class="cl-kind">性能</span>
+        </div>
+        <div class="cl-body">
+          <h4>稀疏向量 + 倒排链 · 模糊剪枝 · 读缓存接入，搜索提速约 59×</h4>
+          <ul>
+            <li><b>向量索引稀疏化 + 倒排链</b>：TF-IDF 不再稠密化到上万维词表，改稀疏 dict + 维度倒排，3000 条混合检索 654ms → 约 9.5ms（约 59×），1000 条后延迟基本不随数据量增长</li>
+            <li><b>fuzzy_search 剪枝</b>：用零成本字符门槛先排除不可能越过相似度阈值的长文本，打分/高亮/阈值语义不变</li>
+            <li><b>读路径缓存真正接入</b>：修复 v5.5.5 建立却从未被读路径使用的 MemoryCache 死代码，命中跳过 SQL；访问计数由每次写库改为进程内挂账 + 60s 批量落库，消费点主动刷盘</li>
+            <li><b>基准与报告</b>：新增可复跑的 perf_benchmark.py 12 阶段基准与含图表的中文测试/性能 PDF；新增 16 个专项用例，全量 570 项通过</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="cl-item" data-reveal>
+        <div class="cl-meta">
+          <span class="cl-ver">v5.6.3</span>
+          <span class="cl-date">2026-09-13</span>
+          <span class="cl-kind">安全</span>
+        </div>
+        <div class="cl-body">
+          <h4>30 项安全审计完整加固 · 入口层测试补齐</h4>
+          <ul>
+            <li><b>联邦与冲突</b>：HMAC 密钥从公开的 public_key 改为 shared_secret（fail-closed）；共享冲突 LWW 不再以 200 字预览覆盖完整内容，杜绝永久丢数据</li>
+            <li><b>加密与并发</b>：rekey 持 <code>_init_lock</code> 原子切换全局加密引擎；存储限流器加锁消除并发 dictionary-changed 异常</li>
+            <li><b>网络与鉴权</b>：Webhook SSRF 全 DNS 解析并拒绝内网/链路本地/云元数据地址、禁用跳转；grant_access 校验调用者；REST API 与 Web UI 默认 fail-closed 认证</li>
+            <li><b>数据保护</b>：备份 key_file 路径包含性校验默认拒绝系统文件；decrypt_content 绑定密文级 KDF 参数，rekey 回滚不丢数据；404 脱敏、IPv6 /64 归一化限流</li>
+            <li><b>测试覆盖</b>：新增约 30 个入口面用例（REST/MCP/适配器/CLI），整体覆盖率由 36% 提升至 40%+</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="cl-item" data-reveal>
+        <div class="cl-meta">
+          <span class="cl-ver">v5.6.2</span>
+          <span class="cl-date">2026-09-12</span>
+          <span class="cl-kind">安全</span>
+        </div>
+        <div class="cl-body">
+          <h4>长期无人值守运行 · 并发安全审计加固</h4>
+          <ul>
+            <li><b>长跑稳定性</b>：面向数月无人值守运行的安全与稳定性审计批次，覆盖 P0 / P1 / P2 多项修复</li>
+            <li><b>并发安全</b>：MemoryCache 内存缓存的读写访问统一加锁，消除 REST API 多线程下的字典迭代 RuntimeError</li>
+            <li><b>健壮性收敛</b>：修复多处静默失败与状态长期累积问题，降低长期运行中的资源膨胀与隐性故障</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="cl-item" data-reveal>
+        <div class="cl-meta">
+          <span class="cl-ver">v5.6.1</span>
+          <span class="cl-date">2026-09-09</span>
+          <span class="cl-kind">安全</span>
         </div>
         <div class="cl-body">
           <h4>版本化 KDF · 记忆衰减引擎 · 备份/恢复 · 安全偿还</h4>
@@ -1677,8 +1746,8 @@
 
       <div class="dev-story" style="text-align:left;line-height:1.85;font-size:15px;color:var(--txt-2);max-width:680px;margin:0 auto 32px">
         <p style="margin-bottom:16px">大家好，我是小顾，一个 2010 年出生的年轻人。学历不高，中专毕业，但这从没拦住我对技术的热爱。别人在刷短视频的时候，我在读源码；别人在打游戏的时候，我在调 Bug。没有名校背景，没有大厂履历，只有一台电脑和一堆自己写的代码。</p>
-        <p style="margin-bottom:16px">MindForge 是我打磨的一套 AI Agent 终身记忆系统——四层记忆架构、知识图谱、六路混合检索、端侧 AES-256-GCM 加密、联邦网络，全部本地运行，数据不上云。从第一行代码到现在 v5.6.1，每一版都是我自己一行一行敲出来的。没有团队，没有融资，就一个人，一台电脑，一个个版本往上堆。</p>
-        <p style="margin-bottom:16px">有人说中专生做不了开源项目，我就做给你看。457 个测试用例全部通过，33 个 MCP 工具，15 个核心模块，百度收录、Google 收录、GitHub Actions CI 全绿。这不是什么天赋，是无数个深夜 debug 出来的。学历不能定义一个人的上限，但代码可以证明一个人的态度。</p>
+        <p style="margin-bottom:16px">MindForge 是我打磨的一套 AI Agent 终身记忆系统——四层记忆架构、知识图谱、六路混合检索、端侧 AES-256-GCM 加密、联邦网络，全部本地运行，数据不上云。从第一行代码到现在 v5.6.5，每一版都是我自己一行一行敲出来的。没有团队，没有融资，就一个人，一台电脑，一个个版本往上堆。</p>
+        <p style="margin-bottom:16px">有人说中专生做不了开源项目，我就做给你看。601 个测试用例全部通过，33 个 MCP 工具，15 个核心模块，百度收录、Google 收录、GitHub Actions CI 全绿。这不是什么天赋，是无数个深夜 debug 出来的。学历不能定义一个人的上限，但代码可以证明一个人的态度。</p>
         <p style="margin-bottom:16px">如果你也对我的项目感兴趣，或者也是一个不服输的人，欢迎来找我聊。抖音和小红书都会更新项目进展和技术分享，不整虚的，都是实操干货。有什么问题直接留言，我看到就会回。</p>
         <p>最后想说一句：别被学历困住。中专怎么了？代码又不会看你文凭。想做什么就去做，用作品说话，用行动证明。</p>
       </div>
@@ -1722,7 +1791,7 @@
         </span>
         <div>
           <div class="fb-t">MindForge</div>
-          <p class="fb-s">AI Agent 终身记忆系统<br><span data-ver>v5.6.1</span> · 100% 本地加密 · 零云端依赖</p>
+          <p class="fb-s">AI Agent 终身记忆系统<br><span data-ver>v5.6.5</span> · 100% 本地加密 · 零云端依赖</p>
           <div class="fb-links">
             <a href="https://github.com/opok-ops/MindForge" target="_blank" rel="noopener noreferrer" aria-label="MindForge GitHub 仓库">
               <svg class="icon icon-md icon-fill" aria-hidden="true"><use href="#i-github"/></svg>

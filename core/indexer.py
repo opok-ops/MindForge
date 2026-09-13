@@ -4,6 +4,7 @@ MindForge v5.0 索引引擎
 """
 
 import math
+import os
 import re
 import sqlite3
 from collections import Counter, defaultdict
@@ -175,15 +176,35 @@ class VectorIndex:
 
 
 class IndexEngine:
-    """索引引擎"""
+    """索引引擎
 
-    def __init__(self, db_path: str = "./data/memory.db"):
+    v5.6.5 P1 #5：内存结构（``_doc_texts`` / 稀疏向量 / 倒排链）设置
+    LRU 上限，默认 ``DEFAULT_MAX_DOCS`` 条，可由构造参数或环境变量
+    ``MINDFORGE_INDEX_MAX_DOCS`` 覆盖（设为 0/负数表示不限制）。超限时
+    最久未写入的文档从该进程内加速器淘汰。被淘汰文档不会丢失可检索性：
+    QueryEngine 多路召回同时走 SQLite FTS5 与 fuzzy（直接扫持久层），
+    按 id 取最高分合并，因此 TF-IDF 加速器有界不影响最终召回。
+    """
+
+    DEFAULT_MAX_DOCS = 100_000
+
+    def __init__(self, db_path: str = "./data/memory.db",
+                 max_docs: Optional[int] = None):
         self.db_path = db_path
         self.vectorizer = TFIDFVectorizer()
         self.vector_index = VectorIndex()
         self._fitted = False
         self._hydrated = False
         self._doc_texts: Dict[str, str] = {}
+        if max_docs is None:
+            try:
+                max_docs = int(os.environ.get("MINDFORGE_INDEX_MAX_DOCS",
+                                             self.DEFAULT_MAX_DOCS))
+            except (TypeError, ValueError):
+                max_docs = self.DEFAULT_MAX_DOCS
+        # None 语义保留：显式 <=0 表示不限制
+        self.max_docs = max_docs if max_docs and max_docs > 0 else None
+        self.evicted_count = 0
 
     @property
     def needs_hydration(self) -> bool:
@@ -207,10 +228,23 @@ class IndexEngine:
         if self._hydrated:
             return 0
         self._doc_texts.update(documents)
-        # 强制下次搜索时重新 fit，确保词表覆盖全部历史文档
+        self._evict_if_needed()
+        # 强制下次搜索时重新 fit，确保词表覆盖保留文档（被淘汰文档仍可经
+        # FTS5/fuzzy 召回，见类文档说明）
         self._fitted = False
         self._hydrated = True
         return len(documents)
+
+    def _evict_if_needed(self) -> None:
+        """超过内存上限时，按插入顺序（近似 LRU）淘汰最旧文档，
+        同步从 _doc_texts、稀疏向量、倒排链三处移除，保证三者一致。"""
+        if self.max_docs is None:
+            return
+        while len(self._doc_texts) > self.max_docs:
+            oldest = next(iter(self._doc_texts))
+            del self._doc_texts[oldest]
+            self.vector_index.remove(oldest)
+            self.evicted_count += 1
 
     def index_memory(self, doc_id: str, text: str, metadata: Optional[Dict] = None):
         """索引记忆"""
@@ -224,6 +258,9 @@ class IndexEngine:
             # 词表长度的稠密 list
             vector_dict = self.vectorizer.transform(text)
             self.vector_index.add(doc_id, vector_dict, metadata)
+
+        # v5.6.5 P1 #5：写入后做 LRU 淘汰（覆盖写不增加条目数，故在 add 之后）
+        self._evict_if_needed()
 
     def remove_memory(self, doc_id: str):
         """移除索引"""

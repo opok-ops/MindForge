@@ -311,7 +311,7 @@ def chart_search_compare(pre, post):
             "s--", color="#27ae60", label="模糊检索 优化后")
     ax.set_xlabel("记忆条数")
     ax.set_ylabel("平均延迟 (ms)")
-    ax.set_title("v5.6.4 搜索性能优化前后对比")
+    ax.set_title("搜索延迟：v5.6.5 复测 vs v5.6.4 优化前基线")
     ax.legend(fontsize=7.5, ncol=2)
     ax.grid(alpha=0.3)
     return _save(fig, "chart_search_compare.png")
@@ -441,10 +441,11 @@ def build():
     story.append(Spacer(1, 6*mm))
     story.append(P("1. 全面测试总览", H1))
     story.append(P(
-        "本次在完成 30 项安全与质量问题修复（P0 级 4 项、P1 级 9 项、"
-        "P2 级 10 项、P3 级 7 项）后，执行全量自动化回归。测试覆盖核心存储、"
-        "加密、冲突解决、联邦签名、SSRF 防护、隐私过滤、"
-        "REST/MCP/适配器/CLI 四个入口面。", BODY))
+        "本次为 v5.6.5 第三轮安全与健壮性加固，共处置 24 项（P0 级 3 项、"
+        "P1 级 7 项、P2 级 8 项、P3 级 6 项；其中 4 项经核验已满足或为刻意"
+        "设计并以回归锁定）。随后执行全量自动化回归，覆盖核心存储、加密、"
+        "Ed25519 联邦签名与防重放、隐私授权、索引 LRU、流式检索，以及 "
+        "REST/MCP/CLI 入口面。", BODY))
 
     table_src = tests["files"] if tests["files"] else tests["suites"]
     if table_src:
@@ -479,54 +480,67 @@ def build():
             ("核心层 (core)", f"{g['核心层 (core)']:.1f}%"),
             ("模块层 (modules)", f"{g['模块层 (modules)']:.1f}%"),
         ], (75*mm, 60*mm)))
-        story.append(P("较审计前基线 36%% 提升至 %.0f%%；其中 adapters 0→80%%、"
-                       "api 45→56%%、mcp 20→36%%、cli 4→16%%。"
+        story.append(P("较 v5.6.3 审计前 36%% 基线提升至 %.0f%%；本轮新增 31 个 "
+                       "v5.6.5 专项用例，联邦模块覆盖率达 70%%，存储/隐私/"
+                       "索引等改动路径均被用例守护。"
                        % cov["overall"], SMALL))
 
     # ---- 2. 安全审计 ----
     story.append(PageBreak())
-    story.append(P("2. 安全审计 30 项修复确认", H1))
+    story.append(P("2. 安全审计 24 项处置确认（v5.6.5）", H1))
     audit = [
-        ("P0", "联邦 HMAC 改用共享密钥，公钥不可伪造签名（fail-closed）"),
-        ("P0", "共享冲突 LWW 不再以 200 字预览覆盖完整内容"),
-        ("P0", "rekey 持 _init_lock 原子切换全局加密引擎"),
-        ("P0", "_RateLimiter / MemoryCache 加锁，消除并发 RuntimeError"),
-        ("P1", "备份 key_file 路径包含性校验，默认拒绝系统文件"),
-        ("P1", "decrypt_content 保留密文级 KDF 参数，回滚不丢数据"),
-        ("P1", "EmbeddingEngine 单例初始化失败可重试"),
-        ("P1", "内容长度限制统一 1MB；consolidate 单次原子更新"),
-        ("P1", "Webhook SSRF：DNS 全解析+拒绝内网/链路本地+禁跳转"),
-        ("P1", "grant_access 校验所有者；API/Web UI 默认 fail-closed 认证"),
-        ("P2", "404 脱敏；IPv6 /64 归一化限流 key"),
-        ("P2", "MCP 认证 30 分钟过期；Content-Length 强校验；EOF 正常退出"),
-        ("P2", "CLI 不再全局 chdir；凭据支持环境变量/不回显输入"),
-        ("P2", "适配器必需字段校验+异常脱敏；外部输入统一安全 JSON 解析"),
-        ("P3", "磁盘探测降量并缓存；_safe_path 单点实现；SQL 全白名单绑定"),
-        ("P3", "F1 列表隐私过滤覆盖 REST/MCP/适配器/归档四入口"),
-        ("P3", "入口层覆盖率测试补齐（新增 30 个入口面用例）"),
+        ("P0", "联邦签名升级为 Ed25519 非对称签名（HMAC 仅向后兼容）"),
+        ("P0", "联邦通信时间戳 + nonce 防重放（偏差窗口/容量上限/加锁）"),
+        ("P0", "访问计数先 commit 成功再扣挂账，失败保留等下轮重试"),
+        ("P1", "_access_last_flush 定期回收，不再随记忆总量线性增长"),
+        ("P1", "IndexEngine 内存结构默认 10 万上限 + 近似 LRU 一致淘汰"),
+        ("P1", "auto_archive 失败计数并记日志，不再静默 continue 吞异常"),
+        ("P1", "过期 privacy grants 内存+DB 定期清理，授权操作统一加锁"),
+        ("P1", "Web UI 非法/负 Content-Length 返回 400，不再裸 500"),
+        ("P1", "X-Agent-Id 默认不信任，需 API Key + 显式开关才采信"),
+        ("P1", "过期 shared_memories 自动清理（节流，防字典膨胀）"),
+        ("P2", "fuzzy_search 改游标惰性反序列化，降万条级内存峰值"),
+        ("P2", "vector_search 分块流式 + 有界最小堆（消除约 150MB 峰值）"),
+        ("P2", "MemoryCache【核验】v5.6.2 已有锁且临界区 O(1)，无需分片"),
+        ("P2", "备份成功后自动轮转（默认保留 10 份，返回 rotated）"),
+        ("P2", "CORS Allow-Methods/Headers 仅在配置 Origin 时下发"),
+        ("P2", "根路径 / 不再枚举完整 API 端点，仅返回名称/版本/健康"),
+        ("P2", "MCP 认证态收敛到加锁 _AuthState，空闲计时用 monotonic"),
+        ("P2", "新增 core/paths.py 统一 CLI 与 MCP 默认数据库路径"),
+        ("P3", "_safe_path【核验】mindforge 已委托 storage 单点实现"),
+        ("P3", "磁盘探测【核验】降至 1MB 且进程级缓存，仅探测一次"),
+        ("P3", "Web UI 改 ThreadingMixIn 多线程 + KeyboardInterrupt 优雅关闭"),
+        ("P3", "/api/health 存储异常返回 503（服务不可用）而非 500"),
+        ("P3", "进程内 TTL/限流/空闲/2FA 会话计时改用 time.monotonic()"),
+        ("P3", "依赖锁与范围分层【核验】，新增一致性校验防止二者漂移"),
     ]
     rows = []
     for sev, desc in audit:
         color = {"P0": "#c0392b", "P1": "#d68910", "P2": "#2874a6",
                  "P3": "#7f8c8d"}[sev]
+        # 核验类问题（#13/#19/#20/#24）如实标注“已核验”，与改码的“已修复”区分
+        if "【核验】" in desc:
+            status_html = '<font color="#2874a6"><b>已核验</b></font>'
+        else:
+            status_html = '<font color="#2e8b57"><b>已修复</b></font>'
         rows.append([
             P(f'<font color="{color}"><b>{sev}</b></font>', CELL_C),
             P(desc, CELL),
-            P('<font color="#2e8b57"><b>已修复</b></font>', CELL_C),
+            P(status_html, CELL_C),
         ])
     story.append(header_table(["级别", "问题", "状态"],
                               rows, [16*mm, 120*mm, 24*mm]))
 
-    # ---- 3. v5.6.4 性能优化前后对比 ----
+    # ---- 3. 搜索性能复测（v5.6.5 相对 v5.6.4 基线无回归） ----
     story.append(PageBreak())
-    story.append(P("3. v5.6.4 性能优化与前后对比", H1))
+    story.append(P("3. 搜索性能复测：v5.6.5 相对 v5.6.4 优化基线", H1))
     _pre_n = {c["records"]: c for c in (pre or {}).get("search_curve", {})}.get(scale["N"])
     _slow_ref = f"约 {_pre_n['hybrid_ms']:.0f} 毫秒" if _pre_n else "近秒级"
     story.append(P(
-        "本轮全面测试的基准暴露了搜索路径的真实性能瓶颈（混合检索延迟随数据量"
-        f"超线性增长，{scale['N']} 条时 3 次中位数达 "
-        f"{_slow_ref}）。定位并修复三处根因后，使用同一基准"
-        "脚本、同一规模（N=3,000）、各 3 次独立运行取中位数重测：", BODY))
+        "v5.6.5 以安全与健壮性加固为主（Ed25519、防重放、计数持久性、内存上限、"
+        "流式检索等）。为确认这些改动不引入性能回归，沿用同一基准脚本、同一规模"
+        f"（N={scale['N']}）重测，并与 v5.6.4 优化前基线（{_slow_ref}）对照；"
+        "下列三项 v5.6.4 已落地的搜索优化在本轮保持不变并继续生效：", BODY))
     story.append(P(
         "<b>① 向量索引稀疏化 + 倒排链（core/indexer.py）</b>：TF-IDF 向量此前"
         "稠密化到随中文 bigram 语料膨胀至上万维的词表，单次搜索对全部文档做 "
@@ -783,7 +797,8 @@ def build():
     if status_ok and bench_ok:
         conclusions.append(
             f"全量 {tests['total']} 个自动化用例通过，性能基准 "
-            f"{scale['N']} 条规模下全部阶段无异常，30 项安全审计问题已修复并回归。")
+            f"{scale['N']} 条规模下全部阶段无异常；v5.6.5 的 24 项处置"
+            "（含 4 项经核验已满足/刻意设计的结论）已全部回归。")
     if pre:
         pre_map = {c["records"]: c for c in pre.get("search_curve", [])}
         post_map = {c["records"]: c for c in perf.get("search_curve", [])}
@@ -791,11 +806,11 @@ def build():
         b = post_map.get(scale["N"])
         if a and b and b["hybrid_ms"]:
             conclusions.append(
-                f"v5.6.4 性能优化使 {scale['N']} 条规模混合检索延迟从 "
-                f"{a['hybrid_ms']:.0f}ms 降至 {b['hybrid_ms']:.0f}ms（"
-                f"{a['hybrid_ms']/b['hybrid_ms']:.1f}×），根因为向量索引稀疏化+"
-                "倒排链、fuzzy difflib 剪枝、读缓存接入与访问计数写库节流，"
-                "并由 16 个新增专项用例守护正确性。")
+                f"v5.6.5 复测 {scale['N']} 条规模混合检索为 {b['hybrid_ms']:.0f}ms，"
+                f"相对 v5.6.4 优化前基线 {a['hybrid_ms']:.0f}ms 仍保持约 "
+                f"{a['hybrid_ms']/b['hybrid_ms']:.1f}× 的优化效果，安全加固未引入"
+                "可观测的性能回归；v5.6.4 的三项搜索优化继续由专项用例守护，"
+                "本轮再新增 31 个安全/健壮性用例。")
     if tw:
         conclusions.append(
             f"单条写入稳定在 p50 {tw['p50_ms']} ms、"

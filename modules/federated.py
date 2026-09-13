@@ -1,17 +1,57 @@
 """
 MindForge v5.0 联邦记忆网络
 多 Agent 间安全共享记忆，端侧联邦学习
+
+v5.6.5 安全加固：
+- P0 #1：跨节点签名由对称 HMAC 升级为真正的非对称 **Ed25519** 数字签名。
+  发送方用自己的私钥签名，接收方只用发送方注册的公钥验签，公钥即便公开也
+  无法伪造签名，消除“一方泄露共享密钥即可冒充对方”的根本问题。为平滑迁移，
+  仍保留 HMAC 作为仅配置了 shared_secret 的旧节点的回退方案。
+- P0 #2：receive_memory 增加重放攻击防护。签名消息必须携带发送方时间戳与
+  随机 nonce（且均被签名覆盖）：超出时钟偏差窗口的旧消息拒收，同一节点同一
+  nonce 只接受一次（带容量上限与过期清理的去重表），截获重放无法重复入队。
+- P1 #10：shared_memories 中已过 expires_at 的共享记录由
+  purge_expired_shared_memories() 定期清理（节流触发，线程安全），不再无限膨胀。
 """
 
 import json
 import hashlib
 import hmac
+import base64
+import binascii
 import logging
+import threading
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 from enum import Enum
+
+logger = logging.getLogger(__name__)
+
+
+def generate_keypair() -> Tuple[str, str]:
+    """生成一对 Ed25519 密钥（v5.6.5 P0 #1）
+
+    Returns:
+        (private_key_b64, public_key_b64)，均为 32 字节原始密钥的
+        URL 安全 base64 编码（无填充）。私钥是签名种子，必须保密；
+        公钥可安全地分发给所有联邦对端用于验签。
+    """
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    priv = Ed25519PrivateKey.generate()
+    seed = priv.private_bytes_raw()
+    pub = priv.public_key().public_bytes_raw()
+    return (_b64e(seed), _b64e(pub))
+
+
+def _b64e(raw: bytes) -> str:
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+
+
+def _b64d(text: str) -> bytes:
+    pad = "=" * (-len(text) % 4)
+    return base64.urlsafe_b64decode(text + pad)
 
 
 class PeerStatus(Enum):
@@ -29,8 +69,8 @@ class FederatedPeer:
     name: str
     status: PeerStatus = PeerStatus.OFFLINE
     trust_level: float = 0.5
-    public_key: str = ""  # 预留：非对称签名公钥（Ed25519 等），不用于 HMAC
-    shared_secret: str = ""  # HMAC 共享密钥，双方必须一致且保密
+    public_key: str = ""  # Ed25519 验签公钥（b64），公开即可，配置后优先使用非对称验签
+    shared_secret: str = ""  # 旧版 HMAC 共享密钥（迁移回退用），配置 Ed25519 后不再需要
     last_seen: float = 0.0
     shared_categories: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -41,6 +81,8 @@ class FederatedPeer:
             "name": self.name,
             "status": self.status.value,
             "trust_level": self.trust_level,
+            # 公钥不是秘密，可随节点信息导出；shared_secret 永不导出。
+            "public_key": self.public_key,
             "last_seen": self.last_seen,
             "shared_categories": self.shared_categories,
             "metadata": self.metadata,
@@ -81,6 +123,45 @@ class FederatedMemory:
         config = config or {}
         self.allow_unsigned_peers = config.get("allow_unsigned_peers", False)
 
+        # v5.6.5 P0 #2：重放防护参数
+        # 允许的收发双方时钟偏差（秒）。消息 _ts 与本地时间相差超过该值即视为
+        # 过期/伪造而拒绝。
+        self.allowed_skew_seconds = float(config.get("federated_allowed_skew_seconds", 300))
+        # 每个节点保留的已用 nonce 上限，超出直接拒收新消息（防止内存被打满）。
+        self._replay_max_nonces = int(config.get("federated_replay_max_nonces", 100000))
+        # peer_id -> {nonce: 该消息时间戳}，仅保留偏差窗口内的 nonce
+        self._seen_nonces: Dict[str, Dict[str, float]] = {}
+        self._fed_lock = threading.Lock()
+
+        # v5.6.5 P0 #1：本地 Ed25519 签名私钥。优先取 config 注入（持久化身份），
+        # 否则生成一次性密钥对（重启后身份变化，仅适合临时进程）。
+        seed_b64 = config.get("local_private_key", "")
+        pub_b64 = config.get("local_public_key", "")
+        if seed_b64:
+            self._local_priv_b64 = seed_b64
+            if not pub_b64:
+                try:
+                    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+                    priv = Ed25519PrivateKey.from_private_bytes(_b64d(seed_b64))
+                    pub_b64 = _b64e(priv.public_key().public_bytes_raw())
+                except (ValueError, binascii.Error, TypeError) as e:
+                    logger.error("本地联邦私钥无效，已改为临时密钥: %s", e)
+                    seed_b64, pub_b64 = generate_keypair()
+                    self._local_priv_b64 = seed_b64
+        else:
+            seed_b64, pub_b64 = generate_keypair()
+            self._local_priv_b64 = seed_b64
+        self._local_pub_b64 = pub_b64
+
+        # v5.6.5 P1 #10：共享记录过期清理的节流时间戳
+        self._last_shared_purge = 0.0
+        self._shared_purge_interval = float(config.get("shared_purge_interval", 300))
+
+    @property
+    def local_public_key(self) -> str:
+        """本节点对外公布的 Ed25519 验签公钥（b64）"""
+        return self._local_pub_b64
+
     def register_peer(self, peer_id: str, name: str,
                       trust_level: float = 0.5,
                       shared_categories: Optional[List[str]] = None,
@@ -88,40 +169,44 @@ class FederatedMemory:
                       public_key: str = "") -> FederatedPeer:
         """注册联邦节点
 
-        N4 修复（破坏性变更）：新增 ``shared_secret`` / ``public_key`` 参数。
-
-        背景：P0 修复把 HMAC 密钥从 ``public_key`` 改成了 ``shared_secret``
-        （公钥是公开的，用它做 HMAC 密钥任何第三方都能伪造签名）。但
-        ``register_peer()`` 从未提供设置 ``shared_secret`` 的入口，导致通过该
-        API 注册的节点一律 ``shared_secret=""``，而 ``_compute_signature`` /
-        ``_verify_signature`` 对空密钥是 fail-closed 的 —— 结果是**所有**
-        联邦节点的签名与验签全部失效，联邦功能整体不可用。
-
-        注意：不传 ``shared_secret`` 时节点仍会被注册（向后兼容），但其签名
-        相关操作会被拒绝，并记录一条 WARNING 提示补齐密钥。
+        v5.6.5（P0 #1）：推荐传入对端的 Ed25519 ``public_key``（验签公钥）。
+        配置公钥后，与该节点的消息签名/验签走非对称 Ed25519；仅配置
+        ``shared_secret`` 的旧节点继续走 HMAC（迁移回退）。两者都未配置时，
+        节点仍会被注册（向后兼容），但签名相关操作 fail-closed，并记录告警。
         """
         peer = FederatedPeer(
             peer_id=peer_id,
             name=name,
+            status=PeerStatus.OFFLINE,
             trust_level=trust_level,
             shared_categories=shared_categories or [],
-            public_key=public_key or "",
+            public_key=(public_key or "").strip(),
             shared_secret=shared_secret or "",
             last_seen=time.time(),
         )
-        if not peer.shared_secret:
-            logging.getLogger(__name__).warning(
-                "联邦节点 %s 未设置 shared_secret，签名/验签将 fail-closed 拒绝"
-                "（如需启用联邦签名，请通过 register_peer(shared_secret=...) 补设）",
+        if not peer.public_key and not peer.shared_secret:
+            logger.warning(
+                "联邦节点 %s 未配置 public_key/shared_secret，签名/验签将 fail-closed "
+                "拒绝（推荐 register_peer(public_key=<对端 Ed25519 公钥>)）",
+                peer_id,
+            )
+        elif peer.shared_secret and not peer.public_key:
+            logger.info(
+                "联邦节点 %s 仍使用 HMAC shared_secret（对称）。建议尽快交换 "
+                "Ed25519 公钥并改用非对称签名，避免单点密钥泄露即被冒充。",
                 peer_id,
             )
         self.peers[peer_id] = peer
+        with self._fed_lock:
+            self._seen_nonces.setdefault(peer_id, {})
         return peer
 
     def remove_peer(self, peer_id: str) -> bool:
         """移除节点"""
         if peer_id in self.peers:
             del self.peers[peer_id]
+            with self._fed_lock:
+                self._seen_nonces.pop(peer_id, None)
             return True
         return False
 
@@ -143,6 +228,8 @@ class FederatedMemory:
         低信任度（<0.3）节点仍会进入 shared_with。现实际过滤，并可叠加
         细粒度 ACL（注入 self.acl 时按 read 操作逐节点评估）。
         """
+        self._maybe_purge_shared()
+
         if not self._verify_memory_exists(memory_id):
             return None
 
@@ -224,10 +311,31 @@ class FederatedMemory:
 
         return True
 
+    def sign_payload(self, data: Dict[str, Any], peer_id: str
+                     ) -> Tuple[Dict[str, Any], str]:
+        """构造带防重放信封的消息并签名（v5.6.5 P0 #2）
+
+        在业务数据中注入 ``_ts``（发送时间戳）与 ``_mid``（随机 nonce），
+        两者随后被签名覆盖，攻击者无法在不破坏签名的前提下篡改或重放。
+
+        Returns:
+            (envelope, signature)，调用方应把两者原样传给对端 receive_memory。
+        """
+        envelope = dict(data)
+        envelope["_ts"] = time.time()
+        envelope["_mid"] = uuid.uuid4().hex
+        return envelope, self._compute_signature(envelope, peer_id)
+
     def receive_memory(self, from_peer: str,
                        memory_data: Dict,
                        signature: str = "") -> bool:
-        """接收来自其他节点的记忆"""
+        """接收来自其他节点的记忆
+
+        v5.6.5 P0 #2：对**已签名**消息强制重放防护——必须含被签名覆盖的
+        ``_ts``/``_mid``，时间戳超窗或 nonce 重复一律拒绝。未签名（显式
+        allow_unsigned_peers）的旧链路保持兼容：携带信封则同样校验，缺失则
+        按旧行为放行。
+        """
         if from_peer not in self.peers:
             return False
 
@@ -236,8 +344,17 @@ class FederatedMemory:
         if peer.trust_level < 0.3:
             return False
 
+        signed = bool(signature)
         if not self._verify_signature(memory_data, signature, from_peer):
             return False
+
+        # 重放防护：签名通道强制；未签名通道尽力而为
+        if signed:
+            if not self._replay_check(from_peer, memory_data, strict=True):
+                return False
+        elif isinstance(memory_data, dict) and ("_ts" in memory_data or "_mid" in memory_data):
+            if not self._replay_check(from_peer, memory_data, strict=False):
+                return False
 
         # v5.4.2 修复：队列大小上限，超限拒绝新消息
         if len(self._incoming_queue) >= self._MAX_QUEUE_SIZE:
@@ -249,6 +366,48 @@ class FederatedMemory:
             "received_at": time.time(),
         })
 
+        return True
+
+    def _replay_check(self, peer_id: str, data: Dict, strict: bool) -> bool:
+        """校验时间戳新鲜度与 nonce 唯一性（v5.6.5 P0 #2）
+
+        strict=True（已签名通道）：缺少 _ts/_mid、时间戳超窗、nonce 重复均拒绝。
+        strict=False（未签名旧链路）：仅当字段可解析时校验，缺失不拦。
+        """
+        if not isinstance(data, dict):
+            return not strict
+        ts = data.get("_ts")
+        mid = data.get("_mid")
+        now = time.time()
+        if ts is None or mid is None:
+            return not strict
+        try:
+            ts = float(ts)
+        except (TypeError, ValueError):
+            return not strict
+        if not isinstance(mid, str) or not mid or len(mid) > 128:
+            return not strict
+        # 跨节点必须用墙上时钟（time.monotonic 各进程基准不同，无法比较）
+        if abs(now - ts) > self.allowed_skew_seconds:
+            logger.warning("联邦消息时间戳超窗，拒绝重放: peer=%s skew=%.1fs",
+                           peer_id, now - ts)
+            return False
+
+        with self._fed_lock:
+            seen = self._seen_nonces.setdefault(peer_id, {})
+            # 先清理超出偏差窗口的旧 nonce（它们不可能再被合法重放）
+            stale = [n for n, t in seen.items() if now - t > self.allowed_skew_seconds]
+            for n in stale:
+                del seen[n]
+            if mid in seen:
+                logger.warning("检测到联邦重放消息，已拒绝: peer=%s mid=%s", peer_id, mid)
+                return False
+            # 容量保护：异常暴涨时拒收新消息而非无限占用内存
+            if len(seen) >= self._replay_max_nonces:
+                logger.error("节点 %s 的 nonce 去重表已满（%d），暂时拒收",
+                             peer_id, self._replay_max_nonces)
+                return False
+            seen[mid] = ts
         return True
 
     def accept_incoming(self, memory_index: int = -1,
@@ -275,9 +434,7 @@ class FederatedMemory:
                 detection = self.conflict_resolver.detect_incoming(incoming)
             except (ValueError, KeyError, TypeError) as e:
                 # v5.4.4 修复 #2：只捕获预期异常，不吞掉数据库损坏等严重错误
-                import logging
-                logging.getLogger(__name__).warning(
-                    "detect_incoming 异常（已降级为 new）: %s", e)
+                logger.warning("detect_incoming 异常（已降级为 new）: %s", e)
                 detection = {"conflict": False, "action": "new",
                              "error": str(e)}
             if detection.get("conflict"):
@@ -368,14 +525,44 @@ class FederatedMemory:
 
         return results
 
+    def purge_expired_shared_memories(self, now: Optional[float] = None) -> int:
+        """清理已过期的共享记忆记录（v5.6.5 P1 #10）
+
+        expires_at 已过的记录从内存字典删除，返回清理条数。线程安全。
+        """
+        if now is None:
+            now = time.time()
+        expired = [mid for mid, s in self.shared_memories.items()
+                   if s.expires_at is not None and s.expires_at <= now]
+        for mid in expired:
+            self.shared_memories.pop(mid, None)
+        if expired:
+            logger.info("清理 %d 条过期联邦共享记录", len(expired))
+        return len(expired)
+
+    def _maybe_purge_shared(self) -> None:
+        """节流触发共享记录过期清理（避免每次操作都全表扫描）"""
+        now = time.time()
+        if now - self._last_shared_purge < self._shared_purge_interval:
+            return
+        self._last_shared_purge = now
+        try:
+            self.purge_expired_shared_memories(now)
+        except Exception as e:  # 清理失败不应影响正常共享
+            logger.error("purge_expired_shared_memories failed: %s", e)
+
     def get_shared_memories(self, peer_id: Optional[str] = None) -> List[SharedMemory]:
-        """获取共享记忆列表"""
+        """获取共享记忆列表（自动过滤掉已过期记录）"""
+        self._maybe_purge_shared()
+        now = time.time()
         if peer_id:
             return [
                 s for s in self.shared_memories.values()
                 if peer_id in s.shared_with
+                and (s.expires_at is None or s.expires_at > now)
             ]
-        return list(self.shared_memories.values())
+        return [s for s in self.shared_memories.values()
+                if s.expires_at is None or s.expires_at > now]
 
     def get_peers(self, status: Optional[PeerStatus] = None) -> List[FederatedPeer]:
         """获取节点列表"""
@@ -407,28 +594,45 @@ class FederatedMemory:
             # OperationalError 等数据库异常在此场景下统一返回 False
             return False
 
-    def _compute_signature(self, data: Dict, peer_id: str) -> str:
-        """计算 HMAC-SHA256 签名
+    @staticmethod
+    def _canonical_message(data: Dict) -> bytes:
+        """确定性序列化待签名内容（HMAC 与 Ed25519 共用，保持历史兼容）"""
+        return json.dumps(data, sort_keys=True, ensure_ascii=False).encode("utf-8")
 
-        使用 peer 的 shared_secret 作为 HMAC 密钥（必须保密，双方共享）。
-        注意：public_key 不用于 HMAC——公钥是公开的，用它做 HMAC 密钥任何人可伪造。
+    def _compute_signature(self, data: Dict, peer_id: str) -> str:
+        """计算签名（v5.6.5 P0 #1）
+
+        - 对端配置了 Ed25519 public_key：用**本节点私钥**做非对称签名（b64）。
+        - 否则对端仅有 shared_secret：回退 HMAC-SHA256（旧版对称，迁移用）。
+        - 两者皆无：返回 ""（验签端 fail-closed）。
         """
         peer = self.peers.get(peer_id)
-        if not peer or not peer.shared_secret:
+        if not peer:
+            return ""
+        msg = self._canonical_message(data)
+
+        if peer.public_key:
+            try:
+                from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+                priv = Ed25519PrivateKey.from_private_bytes(_b64d(self._local_priv_b64))
+                return _b64e(priv.sign(msg))
+            except (ValueError, binascii.Error, TypeError) as e:
+                logger.error("Ed25519 签名失败: %s", e)
+                return ""
+
+        if not peer.shared_secret:
             return ""
         key = peer.shared_secret.encode("utf-8")
-        msg = json.dumps(data, sort_keys=True, ensure_ascii=False).encode("utf-8")
         return hmac.new(key, msg, digestmod=hashlib.sha256).hexdigest()
 
     def _verify_signature(self, data: Dict, signature: str, peer_id: str) -> bool:
-        """验证 HMAC-SHA256 签名
+        """验证签名（v5.6.5 P0 #1）
 
-        P0 安全修复：使用 shared_secret（而非 public_key）做 HMAC 密钥。
-        fail-closed 安全策略：
-        - 未注册节点：直接拒绝
-        - 无 shared_secret 节点：直接拒绝
-        - 签名不匹配：拒绝
-        - 无签名时：仅当 allow_unsigned_peers=True 时允许
+        按对端注册的密钥材料选择 Ed25519 或 HMAC 验签。fail-closed：
+        - 未注册节点：拒绝
+        - 无签名：仅当 allow_unsigned_peers=True 时允许
+        - Ed25519 公钥存在：非对称验签，非法/损坏签名一律拒绝
+        - 仅 shared_secret：HMAC 恒定时间比较
         """
         peer = self.peers.get(peer_id)
         if not peer:
@@ -438,8 +642,24 @@ class FederatedMemory:
             # 无签名时仅允许显式配置的未签名节点
             return self.allow_unsigned_peers
 
+        msg = self._canonical_message(data)
+
+        if peer.public_key:
+            try:
+                from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+                from cryptography.exceptions import InvalidSignature
+                pub = Ed25519PublicKey.from_public_bytes(_b64d(peer.public_key))
+                try:
+                    pub.verify(_b64d(signature), msg)
+                    return True
+                except (InvalidSignature, ValueError, binascii.Error):
+                    return False
+            except (ValueError, binascii.Error) as e:
+                logger.error("节点 %s 的 Ed25519 公钥无效: %s", peer_id, e)
+                return False
+
         if not peer.shared_secret:
-            return False  # fail-closed: 无共享密钥节点直接拒绝
+            return False  # fail-closed: 无任何密钥材料的节点直接拒绝
 
         expected = self._compute_signature(data, peer_id)
         if not expected:
@@ -448,8 +668,10 @@ class FederatedMemory:
 
     def compute_federated_stats(self) -> Dict:
         """计算联邦统计"""
+        self._maybe_purge_shared()
         return {
             "local_peer_id": self.local_peer_id,
+            "local_public_key": self._local_pub_b64,
             "total_peers": len(self.peers),
             "online_peers": sum(1 for p in self.peers.values() if p.status == PeerStatus.ONLINE),
             "trusted_peers": sum(1 for p in self.peers.values() if p.trust_level >= 0.7),

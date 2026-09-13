@@ -1887,24 +1887,27 @@ def cmd_serve(args):
         import hashlib as _hl
         import hmac as _hmac
         import time as _time
+        import threading as _threading
 
         web_dir = Path(__file__).parent.parent / "website"
         _MAX_REQUEST_SIZE = 10 * 1024 * 1024  # 10MB 上限
         _RATE_LIMIT = 60  # 每分钟请求上限
-        _rate_window: Dict[str, List[float]] = {"_last_purge": _time.time()}
+        _rate_window: Dict[str, List[float]] = {"_last_purge": _time.monotonic()}
+        _rate_lock = _threading.Lock()  # v5.6.5 P3 #21：多线程 Web 服务器下保护限流表
 
         def _check_web_rate(client_ip: str) -> bool:
-            now = _time.time()
-            if now - _rate_window["_last_purge"] > 3600:
-                _rate_window.clear()
-                _rate_window["_last_purge"] = now
-            if client_ip not in _rate_window:
-                _rate_window[client_ip] = []
-            _rate_window[client_ip] = [t for t in _rate_window[client_ip] if now - t < 60]
-            if len(_rate_window[client_ip]) >= _RATE_LIMIT:
-                return False
-            _rate_window[client_ip].append(now)
-            return True
+            now = _time.monotonic()  # v5.6.5 P3 #23：进程内间隔计时
+            with _rate_lock:
+                if now - _rate_window["_last_purge"] > 3600:
+                    _rate_window.clear()
+                    _rate_window["_last_purge"] = now
+                if client_ip not in _rate_window:
+                    _rate_window[client_ip] = []
+                _rate_window[client_ip] = [t for t in _rate_window[client_ip] if now - t < 60]
+                if len(_rate_window[client_ip]) >= _RATE_LIMIT:
+                    return False
+                _rate_window[client_ip].append(now)
+                return True
 
         class SecureWebUIHandler(http.server.SimpleHTTPRequestHandler):
             """安全加固的 Web UI Handler
@@ -1938,8 +1941,16 @@ def cmd_serve(args):
                     return
                 if not self._check_web_auth():
                     return
-                # 请求大小限制
-                content_length = int(self.headers.get("Content-Length", "0") or "0")
+                # 请求大小限制（v5.6.5 P1 #8：非数值 Content-Length 返回 400，
+                # 不再抛 ValueError 导致裸 500）
+                try:
+                    content_length = int(self.headers.get("Content-Length", "0") or "0")
+                except (ValueError, TypeError):
+                    self.send_error(400, "Bad Request")
+                    return
+                if content_length < 0:
+                    self.send_error(400, "Bad Request")
+                    return
                 if content_length > _MAX_REQUEST_SIZE:
                     self.send_error(413, "Payload Too Large")
                     return
@@ -1973,10 +1984,19 @@ def cmd_serve(args):
             def log_message(self, format, *args):
                 pass  # 静默访问日志
 
-        with socketserver.TCPServer((args.host, args.port), SecureWebUIHandler) as httpd:
-            httpd.serve_forever()
-    except KeyboardInterrupt:
-        print("\n服务已停止")
+        # v5.6.5 P3 #21：使用多线程服务器（daemon_threads=True），Ctrl+C 后
+        # serve_forever 退出，with 退出时 server_close 关闭监听 socket；工作线程为
+        # 守护线程，不会拖住进程，也无需在服务线程自身调用会自锁的 shutdown()。
+        class _ThreadingWebServer(socketserver.ThreadingMixIn,
+                                http.server.HTTPServer):
+            daemon_threads = True
+            allow_reuse_address = True
+
+        with _ThreadingWebServer((args.host, args.port), SecureWebUIHandler) as httpd:
+            try:
+                httpd.serve_forever()
+            except KeyboardInterrupt:
+                print("\n服务已停止")
     except (OSError, ValueError) as e:
         print(c(f"启动失败：{e}", "red"))
         return 1
@@ -2594,7 +2614,10 @@ def main(argv=None):
                         choices=["bash", "zsh", "fish"],
                         help="安装 Shell 自动补全（v5.4.6 新增，支持 bash/zsh/fish）")
 
-    parser.add_argument("--db-path", default="./data/memory.db", help="数据库路径")
+    # v5.6.5 P2 #18：默认 None，解析后由 core.paths 统一为跨 cwd 稳定的
+    # 用户级路径（~/.MindForge/data/store/memory.db），与 MCP 入口一致；
+    # 仍可用 --db-path 或 MINDFORGE_DB_PATH 覆盖。
+    parser.add_argument("--db-path", default=None, help="数据库路径")
     parser.add_argument("--key-file", default="./data/.key", help="密钥文件路径")
     parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 格式输出（供插件/脚本集成使用）")
 
@@ -3847,6 +3870,11 @@ def main(argv=None):
                                   help="查看嵌入向量状态（v5.4.5 新增）")
 
     args = parser.parse_args(argv)
+
+    # v5.6.5 P2 #18：统一入口默认数据库路径（CLI/MCP 一致）
+    if not getattr(args, "db_path", None):
+        from core.paths import get_default_db_path
+        args.db_path = get_default_db_path()
 
     global _json_mode
     _json_mode = getattr(args, 'json_output', False)

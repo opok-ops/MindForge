@@ -225,8 +225,10 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
         allowed_origin = os.environ.get("MINDFORGE_CORS_ORIGIN", "")
         if allowed_origin:
             self.send_header("Access-Control-Allow-Origin", allowed_origin)
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+            # v5.6.5 P2 #15：Allow-Methods/Headers 仅在显式配置 Allow-Origin
+            # （即确实允许跨域）时才下发，避免未开启 CORS 却无条件暴露跨域策略。
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.end_headers()
         self.wfile.write(body)
 
@@ -270,21 +272,39 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
             return ""
         return mem_id
 
-    def _extract_actor(self, qs: Dict[str, list]) -> str:
-        """F1：从请求中提取调用者身份（用于 list/export 的隐私过滤）
+    def _client_identity_trusted(self) -> bool:
+        """v5.6.5 P1 #9：是否信任客户端自报身份（X-Agent-Id / agent）。
 
-        优先级：``X-Agent-Id`` 请求头 > ``agent`` 查询参数。
-        未声明身份时返回 ""，此时核心层保持"不过滤"语义以兼容既有调用
-        （完整的强制隔离属于 v6.0 方案，见 docs/F1_list_privacy_filtering.md）。
+        ``X-Agent-Id`` 可被任意客户端伪造，默认**不信任**，防止通过冒充其他
+        Agent 身份绕过 list/export 的隐私过滤。仅当运维显式设置
+        ``MINDFORGE_TRUST_AGENT_HEADER=1`` 且已配置网关级 Bearer 认证
+        （MINDFORGE_API_KEY）时才接受该头——适用于身份由可信网关鉴权后
+        透传的部署。完整的端到端 Agent 身份联邦属于 v6.0 方案。
         """
-        try:
-            header_actor = (self.headers.get("X-Agent-Id") or "").strip()
-        except Exception:
-            header_actor = ""
-        if header_actor:
-            return header_actor[:128]
-        query_actor = (qs.get("agent", [""])[0] or "").strip()
-        return query_actor[:128]
+        if not os.environ.get("MINDFORGE_API_KEY", ""):
+            return False  # 无网关认证的裸 noauth 模式绝不信任自报身份
+        flag = os.environ.get("MINDFORGE_TRUST_AGENT_HEADER", "").strip().lower()
+        return flag in ("1", "true", "yes", "on")
+
+    def _extract_actor(self, qs: Dict[str, list]) -> str:
+        """提取用于 list/export 隐私过滤的调用者身份（F1，v5.6.5 P1 #9 加固）。
+
+        - 可信部署（见 _client_identity_trusted）：``X-Agent-Id`` 头 > ``agent`` 查询参数；
+        - 默认可信度不足：忽略客户端自报身份，回落到服务端固定的
+          ``MINDFORGE_AGENT_ID``（未配置则为 ""，即本地单属主不过滤），
+          杜绝伪造 Agent 身份跨租户读取。
+        """
+        if self._client_identity_trusted():
+            try:
+                header_actor = (self.headers.get("X-Agent-Id") or "").strip()
+            except Exception:
+                header_actor = ""
+            if header_actor:
+                return header_actor[:128]
+            query_actor = (qs.get("agent", [""])[0] or "").strip()
+            return query_actor[:128]
+        # 默认：不采信任何客户端自报身份
+        return (os.environ.get("MINDFORGE_AGENT_ID", "") or "").strip()[:128]
 
     def _check_auth(self):
         """验证 Bearer Token（通过 MINDFORGE_API_KEY 环境变量配置）
@@ -351,7 +371,14 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
 
         try:
             if path == "/api/health":
-                result = self.mindforge.health_check()
+                try:
+                    result = self.mindforge.health_check()
+                except Exception as he:
+                    # v5.6.5 P3 #22：存储不可用属服务暂时不可用，返回 503 而非 500
+                    logger.error("health_check storage failure: %s", he)
+                    self._send_json(
+                        {"status": "unhealthy", "error": "storage unavailable"}, 503)
+                    return
                 # v5.4.8 安全修复：未认证时只返回基本状态
                 api_key = os.environ.get("MINDFORGE_API_KEY", "")
                 if not api_key:
@@ -456,17 +483,12 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                 })
 
             elif path == "/":
+                # v5.6.5 P2 #16：根路径不再枚举完整 API 端点清单，
+                # 避免在信息探测阶段向未授权方暴露攻击面。
                 self._send_json({
                     "name": "MindForge REST API",
                     "version": MF_VERSION,
-                    "endpoints": [
-                        "GET /api/memories", "POST /api/memories",
-                        "GET /api/memories/{id}", "PUT /api/memories/{id}",
-                        "DELETE /api/memories/{id}",
-                        "GET /api/search", "GET /api/stats",
-                        "GET /api/health", "GET /api/tags",
-                        "POST /api/import", "GET /api/export",
-                    ],
+                    "health": "/api/health",
                 })
 
             else:

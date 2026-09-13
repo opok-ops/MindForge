@@ -2,6 +2,46 @@
 
 All notable changes to MindForge will be documented in this file.
 
+## [5.6.5] - 2026-09-13
+
+第三轮安全与健壮性加固（共 24 项：P0×3 / P1×7 / P2×8 / P3×6）。本轮在不引入新依赖的前提下，把联邦跨节点信任从对称 HMAC 升级为真正的非对称签名，并补齐重放防护、计数落库持久性、内存结构上限与入口层一致性。
+
+### Security (P0 — 必修)
+- **#1 联邦签名升级为 Ed25519 非对称签名（modules/federated.py）**：此前 HMAC-SHA256 要求双方共享同一对称密钥，任一方泄露即可伪造对方全部消息。新增模块级 `generate_keypair()`（Ed25519，urlsafe-base64 无填充 seed/public key）；`FederatedMemory` 支持 `local_private_key`/`local_public_key`（未给则生成一次性密钥对）并暴露 `local_public_key`；`register_peer` 推荐传对端 `public_key`。配了公钥即走 Ed25519 验签（捕获 InvalidSignature/ValueError），仅有 shared_secret 时回退 HMAC 以向后兼容，两者皆无 fail-closed。`FederatedPeer.to_dict()` 导出公钥但永不导出 shared_secret。
+- **#2 联邦通信增加重放攻击防护（modules/federated.py）**：新增 `sign_payload()`，在被签名载荷中注入 `_ts`（墙上时钟，跨节点必须用绝对时间）与 `_mid`（nonce）。`receive_memory` 增加 `_replay_check`：签名通道强制时间戳有效（偏差窗口 `federated_allowed_skew_seconds` 默认 300s）、nonce 去重（`_seen_nonces`，容量上限 `federated_replay_max_nonces` 默认 100000，满则拒收防止内存打满，加锁并按窗口清理），截获的合法消息无法二次重放。
+- **#3 访问计数先 commit 成功后才扣减挂账（core/storage.py `_flush_access_locked`）**：此前先从 `_access_pending` pop 再 `commit()`，commit 失败（磁盘满/锁超时）这批计数永久丢失。改为 UPDATE+commit 成功后才做差额扣减；失败记录 error 并完整保留挂账等下轮重试。
+
+### Security (P1)
+- **#4 `_access_last_flush` 定期回收（core/storage.py）**：新增 `_maybe_prune_access_locked()`，在挂账更新/全量刷盘成功后按阈值回收久未访问且无挂账的 id（间隔 1h），删除/过期路径同步清理，字典不再随记忆总量线性增长。
+- **#5 IndexEngine 内存结构加上限（core/indexer.py）**：`_doc_texts` / 稀疏 `vectors` / 倒排链三者默认上限 `DEFAULT_MAX_DOCS=100000`（构造参数 `max_docs`，可用 `MINDFORGE_INDEX_MAX_DOCS` 覆盖，<=0 不限），超限按插入顺序近似 LRU 从三处一致淘汰（`evicted_count` 可观测）。多路召回中被淘汰文档仍由 SQLite FTS5/fuzzy 覆盖，最终召回不损失。
+- **#6 auto_archive 失败不再静默吞掉（core/storage.py，用户原标 modules/evolution.py，实际实现位于 StorageEngine.auto_archive）**：循环异常改为收集 `failed`/`failed_ids` 并 `logger.error`，返回值暴露失败计数，磁盘满/锁超时不再被掩盖。
+- **#7 过期 Privacy grants 定期清理（modules/privacy.py）**：新增 `purge_expired_grants()`（内存字典 + `DELETE FROM access_grants`）与节流 `_maybe_purge_expired_grants()`；grant/revoke/check 全部在 `_grants_lock` 内执行，check 遍历前 copy。
+- **#8 Web UI 非法 Content-Length 不再崩溃（cli/main.py）**：非数值或负值返回 400 而非抛 ValueError 导致裸 500/线程退出。
+- **#9 X-Agent-Id 默认不可伪造（api/server.py）**：新增 `_client_identity_trusted()`——无 `MINDFORGE_API_KEY` 时绝不信任客户端自报身份；还需显式 `MINDFORGE_TRUST_AGENT_HEADER=1` 才接受 `X-Agent-Id`/`agent`（适用于可信网关注入）。默认忽略自报身份、回落到服务端固定 `MINDFORGE_AGENT_ID`，杜绝冒充其他 Agent 绕过隐私隔离。完整端到端身份联邦仍属 v6.0。
+- **#10 过期共享记录自动清理（modules/federated.py）**：新增 `purge_expired_shared_memories()` 与节流 `_maybe_purge_shared()`（`shared_purge_interval` 默认 300s），share/get/stats 路径触发；get_shared_memories 同步过滤过期。
+
+### Robustness (P2)
+- **#11 fuzzy_search 改游标惰性反序列化（core/storage.py）**：不再 `fetchall()` 后对全表构造完整对象列表，逐条游标打分，降低万条以上内存峰值。
+- **#12 vector_search 分块流式 + 全局有界最小堆（core/storage.py）**：按 2048 行分块读取/反序列化，heapq 只保留 top_k*2 候选，消除约 10 万条 ~150MB 的瞬时峰值；有引擎走批量余弦，无引擎走 float32 fallback，排序语义不变（scan_limit=100000）。
+- **#13 MemoryCache 锁（核验项）**：v5.6.2 已为 MemoryCache 配置 `threading.Lock`，get/set/invalidate/clear/stats 全部持锁，临界区为 O(1) 字典操作，不构成实质瓶颈；保留单一锁以确保正确性，8 线程并发正确性用例持续守护，故本轮不强行分片。
+- **#14 备份文件自动轮转（core/storage.py）**：`create_backup(..., auto_rotate=True, keep_count=10)` 在备份成功后自动调用 `delete_old_backups`，返回新增 `rotated`；Path 版 `backup()` 同样自动轮转。
+- **#15 CORS 头条件下发（api/server.py）**：`Access-Control-Allow-Methods/Allow-Headers` 仅在配置了 `Access-Control-Allow-Origin` 时才下发。
+- **#16 根路径不再枚举端点（api/server.py）**：`/` 仅返回 name/version/health，未认证时不泄露完整 API 列表。
+- **#17 MCP 认证状态线程安全（mcp/server.py）**：删除裸全局 bool，新增加锁的 `_AuthState`（reset/login/is_authed/authorize），读改写在锁内原子完成；空闲计时改用 `time.monotonic()`。
+- **#18 入口默认数据库路径统一（新增 core/paths.py）**：CLI 与 MCP 默认库统一为 `~/.MindForge/data/store/memory.db`（可被 `MINDFORGE_DB_PATH` 覆盖），消除此前 CLI 用 cwd 相对 `./data/memory.db`、MCP 用用户目录导致的“不同入口看不到同一数据”。库级 StorageEngine/MemoryConfig 默认保持 `./data/memory.db` 不变。
+
+### Code Quality (P3)
+- **#19 `_safe_path` 单点实现（核验项）**：`core/mindforge.py` 的 `_safe_path` 已是对 `core.storage._safe_path` 的委托封装，不存在两份重复实现，新增回归锁定该委托关系。
+- **#20 磁盘探测降量并缓存（核验项）**：探测写入已由 5MB 降至 `_probe_bytes = 1024*1024`（1MB），且有 `HardwareProfiler._cached_disk_type` 进程级缓存，仅每进程探测一次；新增回归锁定。
+- **#21 Web UI 线程化优雅关闭（cli/main.py）**：改用 `ThreadingMixIn + HTTPServer`（`daemon_threads=True`、`allow_reuse_address=True`），KeyboardInterrupt 走优雅关闭，限流表加锁。
+- **#22 /api/health 存储异常返回 503（api/server.py）**：区分“服务不可用（下游存储故障）”与通用 500。
+- **#23 进程内间隔计时改用 monotonic**：`_RateLimiter`、MemoryCache TTL、Web 限流窗口、MCP 空闲计时、2FA 内存会话窗口改用 `time.monotonic()`，避免系统时钟回拨导致 TTL 逻辑异常；跨节点/持久化的绝对时间戳（created_at/expires_at/last_accessed_at、联邦 `_ts`、持久 grant/token 时间）保持 `time.time()` 不变。
+- **#24 依赖策略（核验项）**：`requirements.txt` 精确锁定（供确定性安装/pip-audit）与 `pyproject.toml` 范围约束（含上界供应链护栏）是刻意分层；新增回归自动校验锁定版本落在声明范围内，防止二者漂移。
+
+### Tests
+- 新增 `tests/test_v565_security.py`（31 用例）：Ed25519 往返/篡改与乱签名拒绝/nonce 去重/不同消息可各过/超窗时间戳拒绝/签名通道强制信封/HMAC 旧链路兼容；访问计数 commit 失败保留挂账并补刷；last_flush 回收；IndexEngine LRU 三处一致淘汰与 0 不限；auto_archive 成功/失败计数；过期授权内存+DB 双清；共享过期清理；X-Agent-Id 三态信任；向量分块召回最佳匹配；备份轮转；CORS 条件下发；MCP `_AuthState` 状态机；默认路径统一（env/home/MCP 委托）；`_safe_path` 单点委托、磁盘探测 1MB+缓存、依赖锁与范围一致。
+- 适配 2 个既有测试到加固后的时间基/认证持有者：`tests/test_v562_p2_fixes.py`（限流清理用 monotonic 种子）、`tests/test_v563_entry_coverage.py`（MCP 过期用负阈值触发，不再依赖已删除的全局时间戳）。
+
 ## [5.6.4] - 2026-09-13
 
 ### Performance

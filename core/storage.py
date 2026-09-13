@@ -318,7 +318,7 @@ class _RateLimiter:
     def __init__(self):
         self._windows: Dict[str, List[float]] = {}
         # v5.3.5 安全：记录最后清理时间，防止内存泄漏
-        self._last_purge: float = time.time()
+        self._last_purge: float = time.monotonic()  # v5.6.5 P3 #23：进程内间隔计时
         self._purge_interval: int = 3600  # 每小时清理一次
         import threading as _threading
         self._lock = _threading.Lock()
@@ -334,7 +334,8 @@ class _RateLimiter:
         Returns:
             True=允许，False=超限
         """
-        now = time.time()
+        # v5.6.5 P3 #23：限流仅做进程内间隔比较，用 monotonic 不受时钟回拨影响
+        now = time.monotonic()
         with self._lock:
             # v5.3.5 安全：定期清理全部过期条目，防止内存泄漏
             self._maybe_purge(now)
@@ -677,6 +678,9 @@ _ENTRY_CACHE_TTL = 30.0
 # UPDATE+COMMIT，热路径读写放大、闪存磨损、与写事务互斥。
 _ACCESS_PERSIST_INTERVAL = 60.0
 
+# v5.6.5 P1 #4：_access_last_flush 过期 ID 的回收检查间隔（秒）。
+_ACCESS_STATE_PRUNE_INTERVAL = 3600.0
+
 
 class StorageEngine:
     """存储引擎"""
@@ -698,6 +702,7 @@ class StorageEngine:
         # v5.6.3: get 访问计数进程内挂账，到间隔或 close 时批量落库
         self._access_pending: Dict[str, int] = {}
         self._access_last_flush: Dict[str, float] = {}
+        self._access_last_prune: float = 0.0  # v5.6.5 P1 #4
         # v5.6.4: 挂账与刷盘的并发保护（flush 的 IO 部分在锁外执行）
         self._access_lock = threading.RLock()
         self._init_db()
@@ -1293,7 +1298,7 @@ class StorageEngine:
         cached = self._memory_cache.get(memory_id)
         if isinstance(cached, dict) and "entry" in cached:
             try:
-                if time.time() - float(cached.get("ts", 0)) <= _ENTRY_CACHE_TTL:
+                if time.monotonic() - float(cached.get("ts", 0)) <= _ENTRY_CACHE_TTL:
                     entry = MemoryEntry(**cached["entry"])
             except Exception:
                 entry = None
@@ -1310,7 +1315,7 @@ class StorageEngine:
             entry = self._row_to_entry(row)
             try:
                 self._memory_cache.set(memory_id, {
-                    "entry": asdict(entry), "ts": time.time()})
+                    "entry": asdict(entry), "ts": time.monotonic()})
             except Exception:
                 pass
 
@@ -1333,6 +1338,7 @@ class StorageEngine:
                     pass
                 self._memory_cache.invalidate(memory_id)
                 self._access_pending.pop(memory_id, None)
+                self._access_last_flush.pop(memory_id, None)
             except Exception as e:
                 logger.error("auto-expire failed for %s: %s", memory_id, e)
                 # 过期失败时仍返回原始记忆，避免数据不一致
@@ -1991,6 +1997,7 @@ class StorageEngine:
         # v5.6.3: 删除路径让读缓存立即失效
         self._memory_cache.invalidate(entry_id)
         self._access_pending.pop(entry_id, None)
+        self._access_last_flush.pop(entry_id, None)
         """删除记忆
 
         v5.0.5 修复：硬删除时同步清理 FTS 索引，避免搜索时返回已删除的记忆。
@@ -6278,6 +6285,11 @@ class StorageEngine:
 
         import shutil
         shutil.copy2(self.db_path, dest)
+        # v5.6.5 P2 #14：与 create_backup 对齐，备份后自动轮转（保留最新 10 份）
+        try:
+            self.delete_old_backups(str(backup_path), keep_count=10)
+        except Exception as _re:
+            logger.error("backup rotation failed: %s", _re)
         return dest
 
     @staticmethod
@@ -6360,11 +6372,14 @@ class StorageEngine:
         """
         now = time.time()
         with self._access_lock:
-            self._access_pending[entry.id] =                 self._access_pending.get(entry.id, 0) + 1
+            self._access_pending[entry.id] = (
+                self._access_pending.get(entry.id, 0) + 1)
             last = self._access_last_flush.get(entry.id, 0.0)
             if last > 0 and now - last < _ACCESS_PERSIST_INTERVAL:
+                self._maybe_prune_access_locked(now)
                 return
             self._flush_access_locked(entry.id, now)
+            self._maybe_prune_access_locked(now)
 
     def _flush_access(self, memory_id: str, now: Optional[float] = None) -> None:
         """把单条记忆挂账的访问增量落库（线程安全入口）"""
@@ -6373,17 +6388,48 @@ class StorageEngine:
                 memory_id, now if now is not None else time.time())
 
     def _flush_access_locked(self, memory_id: str, now: float) -> None:
-        """调用方必须持有 _access_lock"""
-        inc = self._access_pending.pop(memory_id, 0)
+        """调用方必须持有 _access_lock
+
+        v5.6.5 P0 #3：先执行 UPDATE 并 commit，**成功后**才移除挂账增量。
+        旧实现先 pop 再 commit，commit 失败（磁盘满/busy_timeout）时这批
+        访问计数永久丢失。现失败保留增量等待下轮重试，绝不丢计数。
+        """
+        inc = self._access_pending.get(memory_id, 0)
         if inc <= 0:
             return
         conn = self._get_conn()
-        conn.execute("""
-            UPDATE memories SET access_count = access_count + ?, last_accessed_at = ?
-            WHERE id = ?
-        """, (inc, now, memory_id))
-        conn.commit()
+        try:
+            conn.execute("""
+                UPDATE memories SET access_count = access_count + ?, last_accessed_at = ?
+                WHERE id = ?
+            """, (inc, now, memory_id))
+            conn.commit()
+        except Exception as e:
+            # 落库失败：挂账增量原样保留，下次 _update_access/flush 重试
+            logger.error("flush_access failed for %s: %s", memory_id, e)
+            return
+        # 成功后才扣减已落库部分（持锁执行；做差额扣减以兼容极端并发）
+        pending_now = self._access_pending.get(memory_id, 0)
+        if pending_now <= inc:
+            self._access_pending.pop(memory_id, None)
+        else:
+            self._access_pending[memory_id] = pending_now - inc
         self._access_last_flush[memory_id] = now
+
+    def _maybe_prune_access_locked(self, now: float) -> None:
+        """调用方必须持有 _access_lock
+
+        v5.6.5 P1 #4：周期回收 _access_last_flush 中已长期不再访问、且无
+        挂账增量的记忆 ID，避免该字典随记忆总量/年龄无限线性增长。
+        """
+        if now - self._access_last_prune < _ACCESS_STATE_PRUNE_INTERVAL:
+            return
+        self._access_last_prune = now
+        ttl = max(_ACCESS_PERSIST_INTERVAL * 2.0, 600.0)
+        stale = [mid for mid, ts in self._access_last_flush.items()
+                 if mid not in self._access_pending and now - ts > ttl]
+        for mid in stale:
+            self._access_last_flush.pop(mid, None)
 
     def flush_access(self) -> None:
         """把全部挂账访问计数落库（close 前调用）"""
@@ -6420,6 +6466,7 @@ class StorageEngine:
         with self._access_lock:
             for _, _, mid in items:
                 self._access_last_flush[mid] = now
+            self._maybe_prune_access_locked(now)
 
     def _add_audit(self, action: str, memory_id: str, actor: str,
                    session_id: str, privacy_level: str, details: Optional[dict] = None,
@@ -7418,9 +7465,11 @@ class StorageEngine:
         ).fetchall()
 
         if not rows:
-            return {"archived": 0, "layer": layer, "max_age_hours": max_age_hours}
+            return {"archived": 0, "failed": 0, "failed_ids": [],
+                    "layer": layer, "max_age_hours": max_age_hours}
 
         archived_count = 0
+        failed_ids: List[str] = []
         for row in rows:
             try:
                 import uuid as _uuid
@@ -7458,7 +7507,10 @@ class StorageEngine:
                     (row["id"],)
                 )
                 archived_count += 1
-            except Exception:
+            except Exception as e:
+                # v5.6.5 P1 #6：不再静默吞掉锁超时/磁盘满等严重错误，记录并计数
+                failed_ids.append(row["id"])
+                logger.error("auto_archive 归档失败 memory=%s: %s", row["id"], e)
                 continue
 
         conn.commit()
@@ -7475,10 +7527,12 @@ class StorageEngine:
                                  "max_age_hours": max_age_hours}), now)
                 )
                 conn.commit()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error("auto_archive 审计日志写入失败: %s", e)
 
-        return {"archived": archived_count, "layer": layer, "max_age_hours": max_age_hours}
+        return {"archived": archived_count, "failed": len(failed_ids),
+                "failed_ids": failed_ids, "layer": layer,
+                "max_age_hours": max_age_hours}
 
     def archive_memories_by_ids(self, memory_ids: List[str],
                                 reason: str = "decayed",
@@ -7719,6 +7773,20 @@ class StorageEngine:
         scored.sort(key=lambda x: x[1], reverse=True)
         return scored[:top_k]
 
+    def _score_vector_chunk(self, vec, chunk, engine, heap, pool):
+        """计算一个分块的余弦分并并入全局有界最小堆（v5.6.5 P2 #12）"""
+        import heapq
+        if engine is not None and engine.is_available:
+            part = engine.cosine_similarity_batch(vec, chunk, top_k=len(chunk))
+        else:
+            part = self._cosine_similarity_batch_fallback(vec, chunk, top_k=len(chunk))
+        for mem_id, score in part:
+            score = float(score)
+            if len(heap) < pool:
+                heapq.heappush(heap, (score, mem_id))
+            elif score > heap[0][0]:
+                heapq.heapreplace(heap, (score, mem_id))
+
     def vector_search(self, query: str = "", top_k: int = 20,
                       categories=None,
                       layers=None,
@@ -7753,32 +7821,39 @@ class StorageEngine:
             if vec is None:
                 return []
 
-        # 获取所有嵌入向量
-        all_embeddings = self._get_all_embeddings()
-        if not all_embeddings:
-            return []
-
-        # 反序列化并计算相似度
-        candidates = []
-        for mem_id, blob in all_embeddings:
+        # v5.6.5 P2 #12：分块流式扫描嵌入表并用有界最小堆维护全局 top-(top_k*2)，
+        # 不再一次性 fetchall 全部 blob 并把每条都反序列化成 float 列表
+        # （10 万条 ~384 维时峰值约 150MB）。峰值内存降到 单分块 + top_k。
+        pool = top_k * 2
+        scan_chunk = 2048
+        scan_limit = 100000
+        heap = []  # (score, mem_id) 最小堆
+        cur = self._get_conn().execute(
+            "SELECT me.memory_id, me.embedding"
+            " FROM memory_embeddings me"
+            " INNER JOIN memories m ON m.id = me.memory_id"
+            " WHERE m.category != 'trash'"
+            " LIMIT ?",
+            (scan_limit,))
+        chunk = []
+        for mem_id, blob in cur:
             if engine and engine.is_available:
-                deserialized = engine.deserialize(blob)
-                if deserialized and len(deserialized) == len(vec):
-                    candidates.append((mem_id, deserialized))
+                dv = engine.deserialize(blob)
+                if dv and len(dv) == len(vec):
+                    chunk.append((mem_id, dv))
             else:
                 # engine 不可用时，使用通用反序列化（float32 小端序）
-                deserialized = self._deserialize_vector_fallback(blob, len(vec))
-                if deserialized:
-                    candidates.append((mem_id, deserialized))
-
-        if not candidates:
+                dv = self._deserialize_vector_fallback(blob, len(vec))
+                if dv:
+                    chunk.append((mem_id, dv))
+            if len(chunk) >= scan_chunk:
+                self._score_vector_chunk(vec, chunk, engine, heap, pool)
+                chunk = []
+        if chunk:
+            self._score_vector_chunk(vec, chunk, engine, heap, pool)
+        if not heap:
             return []
-
-        # 批量计算余弦相似度，取 top_k
-        if engine and engine.is_available:
-            scored = engine.cosine_similarity_batch(vec, candidates, top_k=top_k * 2)
-        else:
-            scored = self._cosine_similarity_batch_fallback(vec, candidates, top_k=top_k * 2)
+        scored = [(mid, sc) for sc, mid in sorted(heap, key=lambda x: x[0], reverse=True)]
 
         results = []
         for mem_id, score in scored:
@@ -7932,8 +8007,13 @@ class StorageEngine:
             base_query += " AND layer = ?"
             params.append(layer.value)
 
-        rows = conn.execute(base_query, params).fetchall()
-        entries = [self._row_to_entry(r) for r in rows]
+        # v5.6.5 P2 #11：不再 fetchall 全表后一次性反序列化为 entries 列表
+        # （万条以上时整行+全文同时驻留内存）。改为游标惰性生成，逐条
+        # 反序列化并打分，仅保留过阈值结果，峰值内存与单行相当。
+        def _entry_iter():
+            for _r in conn.execute(base_query, params):
+                yield self._row_to_entry(_r)
+        entries = _entry_iter()
 
         # v5.6.3 性能修复：difflib.SequenceMatcher 对每条记忆的完整内容做序列
         # 比对（O(len(query)*len(content))），是 fuzzy_search 在千条以上规模的
@@ -9905,7 +9985,9 @@ class StorageEngine:
 
     # ===== 数据备份与恢复（v5.2.0 新增）=====
 
-    def create_backup(self, backup_dir: str = "./data/backups") -> Dict[str, Any]:
+    def create_backup(self, backup_dir: str = "./data/backups",
+                      auto_rotate: bool = True,
+                      keep_count: int = 10) -> Dict[str, Any]:
         """创建数据库备份（v5.2.0 新增）
 
         Args:
@@ -9926,12 +10008,22 @@ class StorageEngine:
         try:
             shutil.copy2(str(self.db_path), str(backup_file))
             size_mb = round(backup_file.stat().st_size / (1024 * 1024), 2)
+            # v5.6.5 P2 #14：备份成功后自动轮转，默认只保留最新 10 份，
+            # 避免长期运行备份无限堆积占满磁盘。轮转失败不影响本次备份。
+            rotated = 0
+            if auto_rotate:
+                try:
+                    rotated = self.delete_old_backups(str(backup_path),
+                                                   keep_count=keep_count)
+                except Exception as re:
+                    logger.error("backup rotation failed: %s", re)
             return {
                 "success": True,
                 "path": str(backup_file),
                 "size_mb": size_mb,
                 "timestamp": timestamp,
                 "filename": backup_file.name,
+                "rotated": rotated,
             }
         except (OSError, IOError) as e:
             return {

@@ -10,6 +10,7 @@ import time
 import uuid
 import sqlite3
 import logging
+import threading
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple, Any
 
@@ -65,9 +66,15 @@ class PrivacyEngine:
     # v5.6.2 安全修复：2FA 验证会话有效期（5 分钟）
     _2FA_VERIFY_WINDOW = 300  # 秒
 
+    # v5.6.5 P1 #7：过期授权的后台清理节流间隔（秒）
+    _GRANT_PURGE_INTERVAL = 300
+
     def __init__(self, storage: StorageEngine):
         self.storage = storage
         self._grants: Dict[str, List[AccessGrant]] = {}
+        # v5.6.5 P1 #7：保护 _grants 的线程锁 + 过期清理节流水位
+        self._grants_lock = threading.Lock()
+        self._last_grant_purge = 0.0
         # v5.3.3 安全修复：二次验证令牌存储（替代始终返回 True 的漏洞）
         # v5.6.2 安全修复：存储 token hash，用于验证码比对（不明文驻留）
         self._second_factor_token_hashes: Dict[str, str] = {}
@@ -242,9 +249,11 @@ class PrivacyEngine:
             access_level=access_level,
         )
 
-        if memory_id not in self._grants:
-            self._grants[memory_id] = []
-        self._grants[memory_id].append(grant)
+        self._maybe_purge_expired_grants()
+        with self._grants_lock:
+            if memory_id not in self._grants:
+                self._grants[memory_id] = []
+            self._grants[memory_id].append(grant)
 
         # v5.4.2：持久化到 SQLite
         try:
@@ -264,10 +273,11 @@ class PrivacyEngine:
         if memory_id not in self._grants:
             return False
 
-        self._grants[memory_id] = [
-            g for g in self._grants[memory_id]
-            if g.grantee != grantee
-        ]
+        with self._grants_lock:
+            self._grants[memory_id] = [
+                g for g in self._grants[memory_id]
+                if g.grantee != grantee
+            ]
         # v5.4.2：同步删除持久化记录
         try:
             conn = self.storage._get_conn()
@@ -277,13 +287,55 @@ class PrivacyEngine:
             logger.error("撤销授权持久化失败: %s", e)
         return True
 
+    def purge_expired_grants(self) -> int:
+        """删除已过期授权（内存字典 + SQLite 持久层），返回删除条数。
+
+        v5.6.5 P1 #7：此前 _check_grant 只在检查时跳过过期 grant，过期条目
+        永久驻留 _grants 与 access_grants 表，长期运行持续膨胀。
+        """
+        now = time.time()
+        removed = 0
+        with self._grants_lock:
+            for mid in list(self._grants.keys()):
+                alive = [g for g in self._grants[mid]
+                         if not (g.expires_at is not None and g.expires_at < now)]
+                removed += len(self._grants[mid]) - len(alive)
+                if alive:
+                    self._grants[mid] = alive
+                else:
+                    self._grants.pop(mid, None)
+        if removed:
+            try:
+                conn = self.storage._get_conn()
+                conn.execute(
+                    "DELETE FROM access_grants "
+                    "WHERE expires_at IS NOT NULL AND expires_at < ?",
+                    (now,))
+                conn.commit()
+            except sqlite3.Error as e:
+                logger.error("清理过期授权持久化失败: %s", e)
+        return removed
+
+    def _maybe_purge_expired_grants(self) -> None:
+        """节流触发过期授权清理，失败不影响主流程"""
+        now = time.time()
+        if now - self._last_grant_purge < self._GRANT_PURGE_INTERVAL:
+            return
+        self._last_grant_purge = now
+        try:
+            self.purge_expired_grants()
+        except Exception as e:
+            logger.error("purge_expired_grants failed: %s", e)
+
     def _check_grant(self, memory_id: str, actor: str) -> bool:
-        """检查授权"""
-        import time
-        grants = self._grants.get(memory_id, [])
+        """检查授权（v5.6.5 P1 #7：节流清理 + 遍历加锁）"""
+        self._maybe_purge_expired_grants()
+        now = time.time()
+        with self._grants_lock:
+            grants = list(self._grants.get(memory_id, []))
         for grant in grants:
             if grant.grantee == actor:
-                if grant.expires_at and grant.expires_at < time.time():
+                if grant.expires_at is not None and grant.expires_at < now:
                     continue
                 return True
         return False
@@ -307,7 +359,7 @@ class PrivacyEngine:
             return False
         # 检查是否在验证会话有效期内
         verified_at = self._verified_2fa_sessions.get(actor, 0)
-        if time.time() - verified_at > self._2FA_VERIFY_WINDOW:
+        if time.monotonic() - verified_at > self._2FA_VERIFY_WINDOW:
             return False
         return True
 
@@ -364,7 +416,7 @@ class PrivacyEngine:
         ok = hmac.compare_digest(token_hash, code_hash)
         if ok:
             # 验证通过，记录会话时间戳
-            self._verified_2fa_sessions[actor] = time.time()
+            self._verified_2fa_sessions[actor] = time.monotonic()
         return ok
 
     def generate_compliance_report(self) -> dict:

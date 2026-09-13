@@ -1129,18 +1129,57 @@ def _check_auth(msg: Dict[str, Any], expected_secret: str) -> bool:
     return _hmac.compare_digest(str(client_secret), expected_secret)
 
 
-_authenticated = False
-_auth_last_activity: float = 0.0
+# v5.6.5 P2 #17：认证态改为下方加锁的 _AuthState 持有者（不再用裸全局 bool）
 _AUTH_IDLE_TIMEOUT = 30 * 60  # 30 分钟无活动自动登出（P2 #16 修复）
+
+
+class _AuthState:
+    """线程安全的认证状态（v5.6.5 P2 #17）。
+
+    此前认证态是裸全局 bool，多线程下读改写无原子保护；空闲时间戳改用
+    time.monotonic（P3 #23），不受系统墙上时钟回拨影响。
+    """
+
+    def __init__(self):
+        import threading
+        self._lock = threading.Lock()
+        self.authed = False
+        self.last_activity = 0.0
+
+    def reset(self) -> None:
+        with self._lock:
+            self.authed = False
+            self.last_activity = 0.0
+
+    def login(self, now: float) -> None:
+        with self._lock:
+            self.authed = True
+            self.last_activity = now
+
+    def is_authed(self) -> bool:
+        with self._lock:
+            return self.authed
+
+    def authorize(self, now: float, timeout: float):
+        """已认证则刷新活跃时间返回 True；过期登出返回 'expired'；未认证 False。"""
+        with self._lock:
+            if not self.authed:
+                return False
+            if now - self.last_activity > timeout:
+                self.authed = False
+                self.last_activity = 0.0
+                return "expired"
+            self.last_activity = now
+            return True
 
 
 def serve_forever(db_path: Optional[str] = None, key_file: Optional[str] = None,
                   auth_secret: Optional[str] = None) -> int:
     from MindForge import MindForge
     if not db_path:
-        default_root = os.path.join(os.path.expanduser("~"), ".MindForge", "data", "store")
-        os.makedirs(default_root, exist_ok=True)
-        db_path = os.path.join(default_root, "memory.db")
+        # v5.6.5 P2 #18：与 CLI 统一默认数据库路径（core.paths 单点真值）
+        from core.paths import get_default_db_path
+        db_path = get_default_db_path()
     _log(f"db: {db_path}")
     kwargs: Dict[str, Any] = {"db_path": db_path, "encrypted": False}
     if key_file:
@@ -1148,9 +1187,8 @@ def serve_forever(db_path: Optional[str] = None, key_file: Optional[str] = None,
         kwargs["encrypted"] = True
     mf = MindForge(**kwargs)
 
-    global _authenticated, _auth_last_activity
-    _authenticated = False
-    _auth_last_activity = 0.0
+    # v5.6.5 P2 #17：认证状态收敛到加锁的 _AuthState 持有者
+    _auth = _AuthState()
     expected_secret = auth_secret or os.environ.get("MINDFORGE_MCP_SECRET", "")
 
     # v5.6.3 安全增强：未设置认证密钥时，MCP 服务对所有能连上的客户端开放。
@@ -1178,27 +1216,25 @@ def serve_forever(db_path: Optional[str] = None, key_file: Optional[str] = None,
         try:
             if method == "initialize":
                 if _check_auth(msg, expected_secret):
-                    _authenticated = True
+                    _auth.login(_time.monotonic())
                     _respond(msg, _handle_initialize(msg))
                 else:
-                    _authenticated = False
+                    _auth.reset()
                     if rid is not None:
                         _respond_error(msg, code=-32001, message="Authentication failed")
             elif method == "notifications/initialized":
                 pass
-            elif expected_secret and not _authenticated:
+            elif expected_secret and not _auth.is_authed():
                 if rid is not None:
                     _respond_error(msg, code=-32001, message="Not authenticated")
-            elif expected_secret and _authenticated:
-                # P2 #16 修复：认证过期检查（30 分钟无活动自动登出）
-                now = _time.time()
-                if now - _auth_last_activity > _AUTH_IDLE_TIMEOUT:
-                    _authenticated = False
-                    _auth_last_activity = 0.0
+            elif expected_secret and _auth.is_authed():
+                # P2 #16 修复：认证过期检查（30 分钟无活动自动登出）。
+                # v5.6.5：状态读改写在 _AuthState 锁内原子完成，计时用 monotonic。
+                _authz = _auth.authorize(_time.monotonic(), _AUTH_IDLE_TIMEOUT)
+                if _authz == "expired":
                     if rid is not None:
                         _respond_error(msg, code=-32001, message="Session expired")
                     continue
-                _auth_last_activity = now
                 if method == "tools/list":
                     _respond(msg, _handle_tools_list(msg))
                 elif method == "tools/call":

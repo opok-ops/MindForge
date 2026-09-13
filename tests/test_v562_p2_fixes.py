@@ -76,7 +76,7 @@ class TestRateLimitCleanupLogic(unittest.TestCase):
 
         key = "test-ip"
         # 手动灌入一条 100 秒前的过期记录
-        limiter._windows[key] = [time.time() - 100]
+        limiter._windows[key] = [time.monotonic() - 100]  # v5.6.5 P3 #23: monotonic 时间基
 
         # 调用一次限流检查（窗口 60 秒，过期后应放行）
         ok = limiter.check(key, max_calls=5, window_seconds=60)

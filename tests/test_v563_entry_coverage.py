@@ -221,9 +221,9 @@ class TestMCPAuthExpiry(unittest.TestCase):
             out = _FakeStream()
             with mock.patch.object(mcp.sys, "stdin", stream), \
                  mock.patch.object(mcp.sys, "stdout", out):
-                # 把最后活动时间推到过期窗口之外，模拟 30 分钟无活动
-                with mock.patch.object(mcp, "_auth_last_activity",
-                                       time.time() - mcp._AUTH_IDLE_TIMEOUT - 60):
+                # v5.6.5 P2 #17/P3 #23：认证态收敛到加锁的 _AuthState 且用
+                # monotonic 计时；把空闲阈值压成负值即可模拟立即过期，无需 patch 内部状态。
+                with mock.patch.object(mcp, "_AUTH_IDLE_TIMEOUT", -1):
                     rc = mcp.serve_forever(db_path=db, auth_secret="sekret")
 
             self.assertEqual(rc, 0)  # 流结束正常退出

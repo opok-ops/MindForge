@@ -47,7 +47,7 @@
   "applicationSubCategory": "AI Agent Memory System",
   "operatingSystem": "Windows, macOS, Linux",
   "programmingLanguage": "Python",
-  "softwareVersion": "5.6.5",
+  "softwareVersion": "5.6.6",
   "toolCount": 33,
   "moduleCount": 15,
   "testCount": 518,
@@ -177,7 +177,7 @@
         </svg>
       </span>
       <span class="brand-name">MindForge</span>
-      <span class="brand-ver" data-ver>v5.6.5</span>
+      <span class="brand-ver" data-ver>v5.6.6</span>
     </a>
 
     <ul class="nav-links">
@@ -233,7 +233,7 @@
   <div class="hero-inner">
     <p class="hero-badge" data-reveal>
       <span class="pulse" aria-hidden="true"></span>
-      <b data-ver>v5.6.5</b>
+      <b data-ver>v5.6.6</b>
       <span>四层记忆架构 · 六路混合检索 · 端侧加密</span>
     </p>
 
@@ -406,7 +406,7 @@
     <div class="section-head" data-reveal>
       <span class="tag"><span class="tag-dot" aria-hidden="true"></span>About Developer</span>
       <h2 id="dev-title">写这套系统的，<span class="gradient-text">只有一个人</span></h2>
-      <p>没有团队，没有融资——<b>小顾</b> 一个人从第一行代码敲到 <span data-ver>v5.6.5</span>。项目进展与技术干货，抖音、小红书同步更新。</p>
+      <p>没有团队，没有融资——<b>小顾</b> 一个人从第一行代码敲到 <span data-ver>v5.6.6</span>。项目进展与技术干货，抖音、小红书同步更新。</p>
     </div>
 
     <div class="dvt-grid">
@@ -1345,7 +1345,7 @@
     <div class="section-head" data-reveal>
       <span class="tag"><span class="tag-dot" aria-hidden="true"></span>Changelog</span>
       <h2 id="cl-title">每次迭代，<span class="gradient-text">都在进化</span></h2>
-      <p>从 v5.3.3 到 <span data-ver>v5.6.5</span>，功能扩展、安全加固与 Bug 修复的完整轨迹。</p>
+      <p>从 v5.3.3 到 <span data-ver>v5.6.6</span>，功能扩展、安全加固与 Bug 修复的完整轨迹。</p>
     </div>
 
     <div class="cl-list">
@@ -1367,9 +1367,26 @@
 
       <article class="cl-item is-latest" data-reveal>
         <div class="cl-meta">
-          <span class="cl-ver" data-ver>v5.6.5</span>
+          <span class="cl-ver" data-ver>v5.6.6</span>
           <span class="cl-date">2026-09-13</span>
           <span class="cl-kind">最新</span>
+        </div>
+        <div class="cl-body">
+          <h4>加密记忆跨进程搜索修复 · 联邦共享字典并发安全</h4>
+          <ul>
+            <li><b>加密记忆跨进程搜索 0 命中修复（v5.5.7 遗留）</b>：加密库 content 列为空、FTS5 不落明文，进程重启后 TF-IDF 水合与模糊 / 相似度 / 去重比对对加密记忆全部失效。现水合与各文本检索在内存中逐条解密后再索引、打分，单条坏密文只跳过该条不中断；明文仅驻留进程内存、绝不写盘或写入 FTS5，磁盘静态加密不被削弱</li>
+            <li><b>联邦共享字典并发安全</b>：过期共享清理的遍历 + 删除与 share / get / revoke / 重放校验统一在 <code>_fed_lock</code> 临界区内，消除并发“字典迭代中被修改”竞态；非重入锁、节流清理在加锁前执行，无死锁</li>
+            <li><b>版本号同步</b>：存储引擎文件头版本号对齐当前发布版</li>
+            <li><b>测试</b>：新增 7 个专项回归（加密跨进程关键词 / 模糊 / 相似度 / 去重、坏密文容错、8 线程联邦共享并发），全量 608 项通过</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="cl-item" data-reveal>
+        <div class="cl-meta">
+          <span class="cl-ver">v5.6.5</span>
+          <span class="cl-date">2026-09-13</span>
+          <span class="cl-kind">安全</span>
         </div>
         <div class="cl-body">
           <h4>Ed25519 联邦签名 · 防重放 · 计数持久 · 内存与流式加固</h4>
@@ -1746,8 +1763,8 @@
 
       <div class="dev-story" style="text-align:left;line-height:1.85;font-size:15px;color:var(--txt-2);max-width:680px;margin:0 auto 32px">
         <p style="margin-bottom:16px">大家好，我是小顾，一个 2010 年出生的年轻人。学历不高，中专毕业，但这从没拦住我对技术的热爱。别人在刷短视频的时候，我在读源码；别人在打游戏的时候，我在调 Bug。没有名校背景，没有大厂履历，只有一台电脑和一堆自己写的代码。</p>
-        <p style="margin-bottom:16px">MindForge 是我打磨的一套 AI Agent 终身记忆系统——四层记忆架构、知识图谱、六路混合检索、端侧 AES-256-GCM 加密、联邦网络，全部本地运行，数据不上云。从第一行代码到现在 v5.6.5，每一版都是我自己一行一行敲出来的。没有团队，没有融资，就一个人，一台电脑，一个个版本往上堆。</p>
-        <p style="margin-bottom:16px">有人说中专生做不了开源项目，我就做给你看。601 个测试用例全部通过，33 个 MCP 工具，15 个核心模块，百度收录、Google 收录、GitHub Actions CI 全绿。这不是什么天赋，是无数个深夜 debug 出来的。学历不能定义一个人的上限，但代码可以证明一个人的态度。</p>
+        <p style="margin-bottom:16px">MindForge 是我打磨的一套 AI Agent 终身记忆系统——四层记忆架构、知识图谱、六路混合检索、端侧 AES-256-GCM 加密、联邦网络，全部本地运行，数据不上云。从第一行代码到现在 v5.6.6，每一版都是我自己一行一行敲出来的。没有团队，没有融资，就一个人，一台电脑，一个个版本往上堆。</p>
+        <p style="margin-bottom:16px">有人说中专生做不了开源项目，我就做给你看。608 个测试用例全部通过，33 个 MCP 工具，15 个核心模块，百度收录、Google 收录、GitHub Actions CI 全绿。这不是什么天赋，是无数个深夜 debug 出来的。学历不能定义一个人的上限，但代码可以证明一个人的态度。</p>
         <p style="margin-bottom:16px">如果你也对我的项目感兴趣，或者也是一个不服输的人，欢迎来找我聊。抖音和小红书都会更新项目进展和技术分享，不整虚的，都是实操干货。有什么问题直接留言，我看到就会回。</p>
         <p>最后想说一句：别被学历困住。中专怎么了？代码又不会看你文凭。想做什么就去做，用作品说话，用行动证明。</p>
       </div>
@@ -1791,7 +1808,7 @@
         </span>
         <div>
           <div class="fb-t">MindForge</div>
-          <p class="fb-s">AI Agent 终身记忆系统<br><span data-ver>v5.6.5</span> · 100% 本地加密 · 零云端依赖</p>
+          <p class="fb-s">AI Agent 终身记忆系统<br><span data-ver>v5.6.6</span> · 100% 本地加密 · 零云端依赖</p>
           <div class="fb-links">
             <a href="https://github.com/opok-ops/MindForge" target="_blank" rel="noopener noreferrer" aria-label="MindForge GitHub 仓库">
               <svg class="icon icon-md icon-fill" aria-hidden="true"><use href="#i-github"/></svg>

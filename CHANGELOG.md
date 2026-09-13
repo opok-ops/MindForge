@@ -2,6 +2,20 @@
 
 All notable changes to MindForge will be documented in this file.
 
+## [5.6.4] - 2026-09-13
+
+### Performance
+- **向量索引稀疏化 + 倒排链**：`core/indexer.py` 的 `VectorIndex` 此前把每篇文档向量稠密化到词表大小（中文 bigram 词表随语料涨到上万维），单次搜索退化为 O(N×V) 全表稠密点积（N=文档数、V=词表大小，二者随语料同时增长），3,000 条记忆的混合搜索延迟达 ~0.9s。改为向量稀疏 dict 存储，并维护维度 → {doc_id: 权重} 的倒排链 `_postings`，查询只累加共享非零维候选；覆盖写入先清旧链，稠密 list/tuple 输入继续兼容。优化前/后同机各 3 次独立运行取中位数（N=3,000）：混合检索 654ms→11ms（约 59×），1,000 条后延迟基本不随数据量增长。
+- **fuzzy_search difflib 剪枝**：`core/storage.py` 模糊搜索此前全表 `SELECT *` 后对每条记忆的完整内容运行 `difflib.SequenceMatcher`。新增零成本字符门槛剪枝：长文本（n > max(2m,12)）与查询无共享 bigram 且共享单字不足 4 个时跳过 SequenceMatcher（数学上相似度不可能超过 0.4 阈值）；短文本与标签路径保留原逻辑，打分、高亮与阈值语义不变。3,000 条模糊检索中位数 514ms→432ms。
+- **读路径缓存真正接入（修复 v5.5.5 死代码）**：`MemoryCache`（v5.5.5 建立、v5.6.2 加锁）此前从未被任何读路径使用，`get_memory` 每次都 SQL 查询 + 行反序列化。现读请求先查缓存（带 30s TTL 兜底），命中跳过 SQL；update/delete/restore/bulk_update/merge 等写路径主动失效。
+- **访问计数写库节流**：此前每次 `get` 都执行 `UPDATE memories SET access_count=access_count+1 ... COMMIT`（读路径写放大、闪存磨损、与写事务互斥）。改为进程内挂账，距上次落库超过 60s 才单事务批量累加；most_accessed/recently_accessed/merge/衰减评分/自动分层/reinforce/去重等消费访问统计的入口在读取前主动刷盘，close 兜底刷盘；崩溃最多丢失一个窗口的启发式计数，语义契约（排序、合并相加、阈值筛选）保持不变；挂账与刷盘由 RLock 保护并采用 swap 字典刷盘，杜绝并发计数丢失与双写。热读（缓存命中）p50 0.71ms→0.0044ms（约 160×），冷读/写入/更新/删除在噪声范围内无回归。
+
+### Tests
+- 新增 `tests/test_v563_perf_fixes.py`（16 用例）：覆盖稀疏向量打分与稠密数学一致、覆盖写不残留旧倒排链、删除链维护、稠密输入兼容、IndexEngine 端到端排序、fuzzy 长文本剪枝不丢精确/近似命中、读缓存命中与写后失效、访问计数节流与 close 精确刷盘、并发 get 与批量刷盘交错下计数精确无丢失。全部 570 项测试通过。
+
+### Tooling
+- 新增 `benchmarks/perf_benchmark.py`：12 阶段可复跑性能基准（增删改查/分页/搜索延迟曲线/加密/AES-GCM 原语吞吐/备份恢复/8 线程并发正确性/RSS），结果写入 `benchmarks/results/perf_results.json`，支持 `MF_BENCH_N` 缩放规模。
+- 新增 `benchmarks/generate_report.py`：汇总基准、pytest JUnit 与覆盖率数据，自动生成含图表的中文 PDF 测试与性能报告。
 ## [5.6.3] - 2026-09-13
 
 ### Security (P0 — 必修)

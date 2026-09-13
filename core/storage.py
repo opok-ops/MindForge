@@ -669,6 +669,15 @@ class MemoryCache:
             }
 
 
+# v5.6.3 性能修复：记忆读缓存 TTL（秒）。除写路径主动失效外的兜底，
+# 任何遗漏的写路径最多造成该窗口内的短时脏读，避免长期脏数据。
+_ENTRY_CACHE_TTL = 30.0
+
+# v5.6.3 性能修复：访问计数落库节流间隔（秒）。此前每次 get 都执行
+# UPDATE+COMMIT，热路径读写放大、闪存磨损、与写事务互斥。
+_ACCESS_PERSIST_INTERVAL = 60.0
+
+
 class StorageEngine:
     """存储引擎"""
 
@@ -686,6 +695,11 @@ class StorageEngine:
         self._hardware_profile = HardwareProfiler.detect()
         cache_size = self._hardware_profile["recommended_limit"] * 50  # 按推荐 limit 估算缓存条目
         self._memory_cache = MemoryCache(max_size=cache_size)
+        # v5.6.3: get 访问计数进程内挂账，到间隔或 close 时批量落库
+        self._access_pending: Dict[str, int] = {}
+        self._access_last_flush: Dict[str, float] = {}
+        # v5.6.4: 挂账与刷盘的并发保护（flush 的 IO 部分在锁外执行）
+        self._access_lock = threading.RLock()
         self._init_db()
 
     def _get_conn(self) -> sqlite3.Connection:
@@ -1270,20 +1284,42 @@ class StorageEngine:
         """获取记忆
 
         v5.5.2: 自动过期检查——若 expires_at > 0 且已过期，自动移入回收站并返回 None。
+        v5.6.3: 接入 v5.5.5 建立但此前读路径从未使用的 MemoryCache（命中时跳过
+        SQL 与行反序列化）；缓存项带 _ENTRY_CACHE_TTL 兜底，写路径主动失效。
         """
-        conn = self._get_conn()
-        # v5.5.5 fix: 排除回收站记忆
-        row = conn.execute("SELECT * FROM memories WHERE id = ? AND category != 'trash'", (memory_id,)).fetchone()
-        if not row:
-            return None
+        from dataclasses import asdict
 
-        entry = self._row_to_entry(row)
+        entry: Optional[MemoryEntry] = None
+        cached = self._memory_cache.get(memory_id)
+        if isinstance(cached, dict) and "entry" in cached:
+            try:
+                if time.time() - float(cached.get("ts", 0)) <= _ENTRY_CACHE_TTL:
+                    entry = MemoryEntry(**cached["entry"])
+            except Exception:
+                entry = None
+
+        if entry is None:
+            conn = self._get_conn()
+            # v5.5.5 fix: 排除回收站记忆
+            row = conn.execute(
+                "SELECT * FROM memories WHERE id = ? AND category != 'trash'",
+                (memory_id,)).fetchone()
+            if not row:
+                return None
+
+            entry = self._row_to_entry(row)
+            try:
+                self._memory_cache.set(memory_id, {
+                    "entry": asdict(entry), "ts": time.time()})
+            except Exception:
+                pass
 
         # v5.5.2: auto-expire check
         # v5.5.3 fix: 使用 UPDATE WHERE 防止并发竞态条件；静默失败避免重复写入
         if entry.expires_at and entry.expires_at > 0 and entry.expires_at <= time.time():
             try:
                 now = time.time()
+                conn = self._get_conn()
                 result = conn.execute(
                     "UPDATE memories SET category = 'trash', updated_at = ? WHERE id = ? AND category != 'trash'",
                     (now, memory_id)
@@ -1295,6 +1331,8 @@ class StorageEngine:
                 else:
                     # 已被其他线程/进程处理，无需重复操作
                     pass
+                self._memory_cache.invalidate(memory_id)
+                self._access_pending.pop(memory_id, None)
             except Exception as e:
                 logger.error("auto-expire failed for %s: %s", memory_id, e)
                 # 过期失败时仍返回原始记忆，避免数据不一致
@@ -1484,6 +1522,9 @@ class StorageEngine:
 
         updates = []
         params = []
+        # v5.6.3: 内容变更，读缓存主动失效
+        self._memory_cache.invalidate(entry_id)
+
         fts_dirty = False  # 是否需要刷新 FTS
 
         if content is not None:
@@ -1677,6 +1718,8 @@ class StorageEngine:
                 f"UPDATE memories SET {set_clause} WHERE id = ?", params
             )
             count += cursor.rowcount
+            # v5.6.3: 字段批量更新后失效对应读缓存
+            self._memory_cache.invalidate(entry_id)
 
         conn.commit()
         return count
@@ -1945,6 +1988,9 @@ class StorageEngine:
     def delete_memory(self, entry_id: str,
                       actor: str = "", session_id: str = "",
                       hard_delete: bool = False) -> bool:
+        # v5.6.3: 删除路径让读缓存立即失效
+        self._memory_cache.invalidate(entry_id)
+        self._access_pending.pop(entry_id, None)
         """删除记忆
 
         v5.0.5 修复：硬删除时同步清理 FTS 索引，避免搜索时返回已删除的记忆。
@@ -2146,6 +2192,8 @@ class StorageEngine:
     @_with_rollback
     def restore_memory(self, entry_id: str,
                        actor: str = "", session_id: str = "") -> bool:
+        # v5.6.3: 从回收站恢复后内容可见性变化，读缓存失效
+        self._memory_cache.invalidate(entry_id)
         """从回收站恢复记忆（v5.1.1 新增）
 
         将 category='trash' 的记忆恢复到软删除前的原分类；
@@ -5124,6 +5172,8 @@ class StorageEngine:
         since = now - days * 86400
 
         # v5.3.4 安全：参数化 SQL
+        # v5.6.3: 衰减评分读取 access_count 前刷挂账
+        self._flush_all_access()
         rows = conn.execute(
             "SELECT id, content, importance, created_at, access_count "
             "FROM memories "
@@ -6298,14 +6348,78 @@ class StorageEngine:
         )
 
     def _update_access(self, entry: MemoryEntry, actor: str, session_id: str):
-        """更新访问计数（v5.1.2 优化：不再每次 get 都写审计日志，减轻低配电脑负担）"""
-        conn = self._get_conn()
+        """更新访问计数
+
+        v5.1.2：不再每次 get 都写审计日志。
+        v5.6.3 性能修复：此前每次 get 都立即 UPDATE+COMMIT（读路径写放大、
+        闪存磨损、与写事务互斥）。改为进程内挂账：距上次落库超过
+        _ACCESS_PERSIST_INTERVAL 秒才把累计增量一次落库；flush_access()/close()
+        兜底刷盘。崩溃最多丢失一个间隔窗口的启发式访问计数。
+        v5.6.4：挂账/刷盘加 RLock，批量刷盘用 swap 新字典，杜绝快照与 clear
+        之间并发增量被清掉、以及单条与批量 flush 并发双写。
+        """
         now = time.time()
+        with self._access_lock:
+            self._access_pending[entry.id] =                 self._access_pending.get(entry.id, 0) + 1
+            last = self._access_last_flush.get(entry.id, 0.0)
+            if last > 0 and now - last < _ACCESS_PERSIST_INTERVAL:
+                return
+            self._flush_access_locked(entry.id, now)
+
+    def _flush_access(self, memory_id: str, now: Optional[float] = None) -> None:
+        """把单条记忆挂账的访问增量落库（线程安全入口）"""
+        with self._access_lock:
+            self._flush_access_locked(
+                memory_id, now if now is not None else time.time())
+
+    def _flush_access_locked(self, memory_id: str, now: float) -> None:
+        """调用方必须持有 _access_lock"""
+        inc = self._access_pending.pop(memory_id, 0)
+        if inc <= 0:
+            return
+        conn = self._get_conn()
         conn.execute("""
-            UPDATE memories SET access_count = access_count + 1, last_accessed_at = ?
+            UPDATE memories SET access_count = access_count + ?, last_accessed_at = ?
             WHERE id = ?
-        """, (now, entry.id))
+        """, (inc, now, memory_id))
         conn.commit()
+        self._access_last_flush[memory_id] = now
+
+    def flush_access(self) -> None:
+        """把全部挂账访问计数落库（close 前调用）"""
+        self._flush_all_access()
+
+    def _flush_all_access(self) -> None:
+        """单事务批量落库所有挂账增量。
+
+        锁内把挂账字典 swap 成新字典（SQL IO 在锁外）：swap 之后新到达的
+        访问增量进入新字典，绝不随旧字典丢弃；失败时把旧增量合并回当前
+        字典，计数不丢。
+        """
+        with self._access_lock:
+            if not self._access_pending:
+                return
+            now = time.time()
+            pending = self._access_pending
+            self._access_pending = {}
+
+        items = [(inc, now, mid) for mid, inc in pending.items()]
+        conn = self._get_conn()
+        try:
+            conn.executemany("""
+                UPDATE memories SET access_count = access_count + ?, last_accessed_at = ?
+                WHERE id = ?
+            """, items)
+            conn.commit()
+        except Exception as e:
+            with self._access_lock:
+                for inc, _, mid in items:
+                    self._access_pending[mid] =                         self._access_pending.get(mid, 0) + inc
+            logger.error("flush_all_access failed: %s", e)
+            return
+        with self._access_lock:
+            for _, _, mid in items:
+                self._access_last_flush[mid] = now
 
     def _add_audit(self, action: str, memory_id: str, actor: str,
                    session_id: str, privacy_level: str, details: Optional[dict] = None,
@@ -6388,7 +6502,11 @@ class StorageEngine:
         conn.commit()
 
     def close(self):
-        self._close_conns()
+        # v5.6.3: 落库节流挂账的访问计数，避免 close 丢计数
+        try:
+            self.flush_access()
+        finally:
+            self._close_conns()
 
     def cleanup_expired(self, max_age_hours: int = 24, layer: str = "sensory") -> int:
         """清理过期记忆（v5.1.3 新增）
@@ -7817,6 +7935,15 @@ class StorageEngine:
         rows = conn.execute(base_query, params).fetchall()
         entries = [self._row_to_entry(r) for r in rows]
 
+        # v5.6.3 性能修复：difflib.SequenceMatcher 对每条记忆的完整内容做序列
+        # 比对（O(len(query)*len(content))），是 fuzzy_search 在千条以上规模的
+        # 主要耗时（3k 条时约 0.5s/query）。这里预计算查询 bigram 与单字集合，
+        # 对长文本先做零成本字符门槛剪枝（数学上不可能达到 ratio>0.4 的直接
+        # 跳过 SequenceMatcher），短文本保留原逻辑。
+        _ql = query_lower
+        q_bigrams = {_ql[i:i + 2] for i in range(len(_ql) - 1)}
+        q_chars = set(_ql)
+
         scored = []
         for entry in entries:
             content_lower = entry.content.lower()
@@ -7847,21 +7974,37 @@ class StorageEngine:
 
             # 2. SequenceMatcher 近似匹配（支持拼写纠错 / 近似词）
             if score < 0.8:
-                seq_ratio = SequenceMatcher(None, query_lower, content_lower).ratio()
-                if seq_ratio > 0.4:
-                    score += seq_ratio * 0.5
-                    if not highlights:
-                        pos = content_lower.find(query_lower[0])
-                        if pos >= 0:
-                            highlights.append({
-                                "field": "content",
-                                "start": max(0, pos - 20),
-                                "end": min(len(entry.content), pos + len(query) + 20),
-                                "text": entry.content[max(0, pos - 20):pos + len(query) + 20],
-                                "match_type": "fuzzy"
-                            })
+                # 长文本剪枝：ratio = 2M/(m+n) > 0.4 要求 M > 0.2(m+n) 个匹配
+                # 字符。若与查询无任何共享 bigram 且共享单字不足 4 个，则
+                # M<=3，对 n > max(2m,12) 的长文本必有 2M/(m+n) <= 0.4，
+                # 不可能进入 >0.4 分支，直接跳过昂贵的序列比对。
+                run_content_seq = True
+                if len(content_lower) > max(2 * len(query_lower), 12):
+                    if q_bigrams:
+                        shared_singles = len(q_chars & set(content_lower))
+                        run_content_seq = (
+                            shared_singles >= 4
+                            or any(bg in content_lower for bg in q_bigrams)
+                        )
+                    else:
+                        run_content_seq = bool(q_chars & set(content_lower))
 
-                # 标签近似匹配
+                if run_content_seq:
+                    seq_ratio = SequenceMatcher(None, query_lower, content_lower).ratio()
+                    if seq_ratio > 0.4:
+                        score += seq_ratio * 0.5
+                        if not highlights:
+                            pos = content_lower.find(query_lower[0])
+                            if pos >= 0:
+                                highlights.append({
+                                    "field": "content",
+                                    "start": max(0, pos - 20),
+                                    "end": min(len(entry.content), pos + len(query) + 20),
+                                    "text": entry.content[max(0, pos - 20):pos + len(query) + 20],
+                                    "match_type": "fuzzy"
+                                })
+
+                # 标签近似匹配（标签短、数量少，逐条比对成本可忽略）
                 for tag in tags_lower:
                     tag_ratio = SequenceMatcher(None, query_lower, tag).ratio()
                     if tag_ratio > 0.5:
@@ -8594,6 +8737,10 @@ class StorageEngine:
         conn = self._get_conn()
         now = time.time()
 
+        # v5.6.3: 合并要相加访问计数，先把这两条的挂账落库
+        self._flush_access(source_id)
+        self._flush_access(target_id)
+
         source_row = conn.execute(
             "SELECT * FROM memories WHERE id = ? AND category != 'trash'",
             (source_id,)
@@ -8607,6 +8754,10 @@ class StorageEngine:
 
         source = self._row_to_entry(source_row)
         target = self._row_to_entry(target_row)
+
+        # v5.6.3: 合并改变 source/target，读缓存与访问挂账均失效
+        self._memory_cache.invalidate(source_id)
+        self._memory_cache.invalidate(target_id)
 
         # 内容按行去重合并
         target_lines = target.content.splitlines() if target.content else []
@@ -8760,6 +8911,8 @@ class StorageEngine:
         """
         from .types import Importance
 
+        # v5.6.3: 权重读取 access_count/last_accessed_at 前刷该条挂账
+        self._flush_access(memory_id)
         conn = self._get_conn()
         row = conn.execute(
             "SELECT * FROM memories WHERE id = ?",
@@ -8837,6 +8990,8 @@ class StorageEngine:
         """
         from .types import MemoryLayer
 
+        # v5.6.3: 自动分层依赖 decay 权重（含访问统计），先刷全部挂账
+        self._flush_all_access()
         conn = self._get_conn()
         now = time.time()
 
@@ -9093,6 +9248,8 @@ class StorageEngine:
             query += " AND layer = ?"
             params.append(layer.value)
 
+        # v5.6.3: 排序前刷挂账，保证访问计数排序正确
+        self._flush_all_access()
         query += " ORDER BY access_count DESC, last_accessed_at DESC LIMIT ?"
         params.append(max(1, min(limit, 1000)))
 
@@ -9125,6 +9282,8 @@ class StorageEngine:
             query += " AND layer = ?"
             params.append(layer.value)
 
+        # v5.6.3: 排序前刷挂账，保证最近访问时间排序正确
+        self._flush_all_access()
         query += " ORDER BY last_accessed_at DESC LIMIT ?"
         params.append(max(1, min(limit, 1000)))
 
@@ -14652,6 +14811,8 @@ class StorageEngine:
 
         # 查找高频记忆
         # v5.5.5 fix: 添加 privacy 用于审计日志
+        # v5.6.3: min_access_count 筛选前刷挂账，避免漏掉窗口内访问
+        self._flush_all_access()
         rows = conn.execute(
             "SELECT id, content, importance, access_count, privacy FROM memories "
             "WHERE source_agent = ? AND category != 'trash' AND access_count >= ?",
@@ -15231,6 +15392,8 @@ class StorageEngine:
         if not aid:
             return {"error": "Agent ID 不能为空"}
 
+        # v5.6.3: 去重按访问计数排序，先刷挂账
+        self._flush_all_access()
         rows = conn.execute(
             "SELECT id, content, category, tags, importance, access_count FROM memories "
             "WHERE source_agent = ? AND category != 'trash' ORDER BY access_count DESC",

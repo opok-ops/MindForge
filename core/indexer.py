@@ -86,57 +86,91 @@ class TFIDFVectorizer:
 
 
 class VectorIndex:
-    """向量索引（简易版，v5.4.7 加入预计算范数缓存）"""
+    """向量索引
+
+    v5.6.3 性能修复：向量以稀疏字典存储。TF-IDF 中文 bigram 词表可达上万维，
+    旧实现把每篇文档展开成词表长度的稠密 list，单次搜索退化为 O(N*V) 全表
+    浮点点积（N=文档数、V=词表大小，二者随语料同时增长），3k 条记忆的混合
+    搜索因此达到 ~0.9s。现在：
+      - 文档/查询向量一律稀疏化（只保留非零维，单条中文记忆通常仅几十个
+        非零 bigram 权重）；
+      - 维护维度 -> {doc_id: 权重} 的倒排链 _postings，查询只累计共享非零
+        维的候选文档，点积复杂度降到 O(候选数 * 查询非零维)；
+      - add/remove 同步维护倒排链，覆盖写入先清旧链。
+    为兼容外部直接使用本类，仍接受稠密 list/tuple 输入。
+    """
 
     def __init__(self, dim: int = 384):
         self.dim = dim
-        self.vectors: Dict[str, List[float]] = {}
+        self.vectors: Dict[str, Dict[int, float]] = {}
         self.metadata: Dict[str, Dict] = {}
         self._norms: Dict[str, float] = {}  # 预计算 L2 范数缓存
+        self._postings: Dict[int, Dict[str, float]] = {}  # 倒排链
 
-    def add(self, doc_id: str, vector: List[float], metadata: Optional[Dict] = None):
-        self.vectors[doc_id] = vector
+    @staticmethod
+    def _as_sparse(vector) -> Dict[int, float]:
+        """稀疏 dict（dict 输入）或稠密 list/tuple 统一转成 {dim: weight}"""
+        if isinstance(vector, dict):
+            return {int(k): float(v) for k, v in vector.items() if v != 0.0}
+        return {i: float(v) for i, v in enumerate(vector) if v != 0.0}
+
+    def _remove_from_postings(self, doc_id: str, sparse: Dict[int, float]):
+        for idx in sparse:
+            chain = self._postings.get(idx)
+            if chain is not None:
+                chain.pop(doc_id, None)
+                if not chain:
+                    del self._postings[idx]
+
+    def add(self, doc_id: str, vector, metadata: Optional[Dict] = None):
+        sparse = self._as_sparse(vector)
+        if doc_id in self.vectors:
+            # 覆盖旧向量：先清理旧倒排链，避免过期权重残留
+            self._remove_from_postings(doc_id, self.vectors[doc_id])
+        self.vectors[doc_id] = sparse
         if metadata:
             self.metadata[doc_id] = metadata
-        self._norms[doc_id] = math.sqrt(sum(v * v for v in vector))
+        self._norms[doc_id] = math.sqrt(sum(v * v for v in sparse.values()))
+        for idx, val in sparse.items():
+            self._postings.setdefault(idx, {})[doc_id] = val
 
     def remove(self, doc_id: str):
-        self.vectors.pop(doc_id, None)
+        sparse = self.vectors.pop(doc_id, None)
         self.metadata.pop(doc_id, None)
         self._norms.pop(doc_id, None)
+        if sparse is not None:
+            self._remove_from_postings(doc_id, sparse)
 
-    def search(self, query_vector: List[float], top_k: int = 10) -> List[Tuple[str, float]]:
+    def search(self, query_vector, top_k: int = 10) -> List[Tuple[str, float]]:
         if not self.vectors:
             return []
 
-        # 预计算查询向量范数（只算一次）
-        query_norm = math.sqrt(sum(v * v for v in query_vector))
+        q = self._as_sparse(query_vector)
+        query_norm = math.sqrt(sum(v * v for v in q.values()))
         if query_norm == 0:
             return [(doc_id, 0.0) for doc_id in list(self.vectors.keys())[:top_k]]
 
-        scores = []
-        for doc_id, vec in self.vectors.items():
-            score = self._cosine_cached(query_vector, vec, query_norm, self._norms[doc_id])
-            scores.append((doc_id, score))
+        # 倒排链累加点积：只访问与查询共享非零维度的候选文档
+        dots: Dict[str, float] = {}
+        for idx, qval in q.items():
+            for doc_id, dval in self._postings.get(idx, {}).items():
+                dots[doc_id] = dots.get(doc_id, 0.0) + qval * dval
 
+        scores = [(doc_id, dot / (query_norm * self._norms[doc_id]))
+                  for doc_id, dot in dots.items()
+                  if self._norms.get(doc_id, 0.0) > 0]
         scores.sort(key=lambda x: x[1], reverse=True)
         return scores[:top_k]
 
-    def _cosine(self, v1: List[float], v2: List[float]) -> float:
-        """保留原始接口（向后兼容），内部走缓存版本"""
-        n1 = math.sqrt(sum(a * a for a in v1))
-        n2 = math.sqrt(sum(b * b for b in v2))
+    def _cosine(self, v1, v2) -> float:
+        """保留原始接口（向后兼容），稀疏/稠密输入均支持"""
+        s1 = self._as_sparse(v1)
+        s2 = self._as_sparse(v2)
+        n1 = math.sqrt(sum(a * a for a in s1.values()))
+        n2 = math.sqrt(sum(a * a for a in s2.values()))
         if n1 == 0 or n2 == 0:
-            return 0
-        dot = sum(a * b for a, b in zip(v1, v2))
-        return dot / (n1 * n2)
-
-    def _cosine_cached(self, v1: List[float], v2: List[float],
-                       n1: float, n2: float) -> float:
-        """使用预计算范数的余弦相似度（search 内部专用）"""
-        if n1 == 0 or n2 == 0:
-            return 0
-        dot = sum(a * b for a, b in zip(v1, v2))
+            return 0.0
+        dot = sum(val * s2.get(k, 0.0) for k, val in s1.items())
         return dot / (n1 * n2)
 
 
@@ -186,12 +220,10 @@ class IndexEngine:
             self._fit_vectorizer()
 
         if self._fitted:
+            # v5.6.3 性能修复：直接存稀疏向量（{dim: weight}），不再展开为
+            # 词表长度的稠密 list
             vector_dict = self.vectorizer.transform(text)
-            vec_len = len(self.vectorizer.vocab)
-            vector = [0.0] * vec_len
-            for idx, val in vector_dict.items():
-                vector[idx] = val
-            self.vector_index.add(doc_id, vector, metadata)
+            self.vector_index.add(doc_id, vector_dict, metadata)
 
     def remove_memory(self, doc_id: str):
         """移除索引"""
@@ -206,13 +238,9 @@ class IndexEngine:
         if not self._fitted:
             return self._keyword_search(query, top_k)
 
+        # v5.6.3 性能修复：查询向量同样保持稀疏，走倒排链检索
         query_vec_dict = self.vectorizer.transform(query)
-        vec_len = len(self.vectorizer.vocab)
-        query_vec = [0.0] * vec_len
-        for idx, val in query_vec_dict.items():
-            query_vec[idx] = val
-
-        return self.vector_index.search(query_vec, top_k)
+        return self.vector_index.search(query_vec_dict, top_k)
 
     def _keyword_search(self, query: str, top_k: int) -> List[Tuple[str, float]]:
         """关键词搜索（降级方案）"""
@@ -237,11 +265,7 @@ class IndexEngine:
 
         for doc_id, text in self._doc_texts.items():
             vector_dict = self.vectorizer.transform(text)
-            vec_len = len(self.vectorizer.vocab)
-            vector = [0.0] * vec_len
-            for idx, val in vector_dict.items():
-                vector[idx] = val
-            self.vector_index.add(doc_id, vector)
+            self.vector_index.add(doc_id, vector_dict)
 
         self._fitted = True
 

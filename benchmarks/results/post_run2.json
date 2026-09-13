@@ -1,0 +1,199 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-09-13 12:07:19",
+  "scale": {
+    "N": 3000,
+    "encrypted_N": 1000,
+    "search_checkpoints": [
+      500,
+      1000,
+      2000,
+      3000
+    ],
+    "mutation_N": 500,
+    "concurrency_threads": 8,
+    "concurrency_per_thread": 250
+  },
+  "env": {
+    "python": "3.13.14",
+    "platform": "win32",
+    "cpu_count": 12,
+    "mem_total_gb": 13.9,
+    "mindforge_version": "5.6.4"
+  },
+  "write_single": {
+    "records": 3000,
+    "elapsed_s": 7.731,
+    "throughput_ops_s": 388.1,
+    "n": 3000,
+    "mean_ms": 2.5753,
+    "p50_ms": 2.2877,
+    "p95_ms": 3.2617,
+    "p99_ms": 12.3872,
+    "max_ms": 15.9611,
+    "stdev_ms": 1.5075,
+    "rss_before_mb": 30.2,
+    "rss_after_mb": 39.3,
+    "rss_delta_mb": 9.1
+  },
+  "write_batch": {
+    "records": 3000,
+    "elapsed_s": 0.246,
+    "throughput_ops_s": 12185.7,
+    "chunk_size": 500
+  },
+  "search_curve": [
+    {
+      "records": 500,
+      "hybrid_ms": 51.811,
+      "fuzzy_ms": 34.19
+    },
+    {
+      "records": 1000,
+      "hybrid_ms": 9.801,
+      "fuzzy_ms": 97.654
+    },
+    {
+      "records": 2000,
+      "hybrid_ms": 11.475,
+      "fuzzy_ms": 241.465
+    },
+    {
+      "records": 3000,
+      "hybrid_ms": 11.449,
+      "fuzzy_ms": 438.01
+    }
+  ],
+  "read_get": {
+    "n": 1000,
+    "mean_ms": 0.8025,
+    "p50_ms": 0.7506,
+    "p95_ms": 1.049,
+    "p99_ms": 1.3603,
+    "max_ms": 21.6378,
+    "stdev_ms": 0.679
+  },
+  "read_get_cached": {
+    "n": 500,
+    "mean_ms": 0.0048,
+    "p50_ms": 0.0044,
+    "p95_ms": 0.008,
+    "p99_ms": 0.0101,
+    "max_ms": 0.0207,
+    "stdev_ms": 0.0018
+  },
+  "read_list_page50": {
+    "n": 20,
+    "mean_ms": 9.5016,
+    "p50_ms": 9.7226,
+    "p95_ms": 12.1638,
+    "p99_ms": 13.3061,
+    "max_ms": 13.3061,
+    "stdev_ms": 1.6774
+  },
+  "update": {
+    "n": 500,
+    "mean_ms": 3.3998,
+    "p50_ms": 2.9982,
+    "p95_ms": 4.3527,
+    "p99_ms": 23.664,
+    "max_ms": 25.7946,
+    "stdev_ms": 2.8793
+  },
+  "delete": {
+    "n": 500,
+    "mean_ms": 1.8437,
+    "p50_ms": 1.7577,
+    "p95_ms": 2.3557,
+    "p99_ms": 4.0639,
+    "max_ms": 6.3385,
+    "stdev_ms": 0.4657
+  },
+  "encrypted_mode": {
+    "records": 1000,
+    "add_throughput_ops_s": 450.4,
+    "add": {
+      "n": 1000,
+      "mean_ms": 2.2186,
+      "p50_ms": 2.0622,
+      "p95_ms": 2.9063,
+      "p99_ms": 6.7507,
+      "max_ms": 10.8569,
+      "stdev_ms": 0.8105
+    },
+    "get": {
+      "n": 500,
+      "mean_ms": 0.8062,
+      "p50_ms": 0.7669,
+      "p95_ms": 1.095,
+      "p99_ms": 1.3199,
+      "max_ms": 2.9097,
+      "stdev_ms": 0.1964
+    },
+    "search_ms": 38.981
+  },
+  "crypto_primitive": {
+    "1KB": {
+      "encrypt_mb_s": 169.5,
+      "decrypt_mb_s": 241.4,
+      "encrypt_mean_ms": 0.00576,
+      "decrypt_mean_ms": 0.00405
+    },
+    "10KB": {
+      "encrypt_mb_s": 507.6,
+      "decrypt_mb_s": 1170.2,
+      "encrypt_mean_ms": 0.01924,
+      "decrypt_mean_ms": 0.00834
+    }
+  },
+  "backup_restore": {
+    "records": 1000,
+    "backup_s": 0.091,
+    "restore_s": 0.018,
+    "backup_mb_s": 2.09,
+    "zip_size_mb": 0.42,
+    "restored_records": 1000,
+    "backup_info_keys": [
+      "created_at",
+      "encrypted",
+      "memory_count",
+      "path",
+      "size_bytes",
+      "size_mb",
+      "version"
+    ]
+  },
+  "concurrency": {
+    "threads": 8,
+    "ops_per_thread": 250,
+    "total_ops": 2000,
+    "elapsed_s": 7.133,
+    "throughput_ops_s": 280.4,
+    "errors": 0,
+    "error_samples": [],
+    "threads_still_alive": 0,
+    "ops_breakdown": {
+      "add": 504,
+      "get": 504,
+      "search": 496,
+      "list": 496
+    },
+    "db_records": 504,
+    "expected_adds": 504,
+    "adds_consistent": true
+  },
+  "misc": {
+    "disk_type_first": "ssd",
+    "disk_type_second": "ssd",
+    "disk_probe_first_ms": 5.279,
+    "disk_probe_cached_ms": 0.0022,
+    "disk_probe_cached": true,
+    "rate_limiter_ops_s": 701144.0,
+    "main_db_mb": 6.68,
+    "main_db_records": 3000,
+    "bytes_per_record": 2334.8,
+    "rss_peak_mb": 60.7
+  },
+  "failures": [],
+  "passed": true
+}

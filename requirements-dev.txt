@@ -11,5 +11,8 @@ pip-audit==2.7.3
 
 # 性能基准与 PDF 报告（benchmarks/）
 psutil==7.2.2
-matplotlib==3.11.2
+# matplotlib 3.11 要求 Python>=3.11；仅用于生成 PDF 性能报告（benchmarks/），
+# 运行时代码与 tests/ 均不导入。加环境标记后 3.9/3.10 CI 可正常安装并运行测试，
+# 需生成报告时在 Python 3.11+ 环境执行（仍使用此锁定版本）。
+matplotlib==3.11.2; python_version >= "3.11"
 reportlab==5.0.1

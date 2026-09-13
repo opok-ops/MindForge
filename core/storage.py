@@ -1,5 +1,5 @@
 """
-MindForge v5.6.1 存储引擎
+MindForge v5.6.6 存储引擎
 支持四层记忆架构：感官记忆 → 短期记忆 → 长期记忆 → 永久记忆
 """
 
@@ -1397,12 +1397,30 @@ class StorageEngine:
             return self.encryption.decrypt(blob)
         return entry.content
 
+    def _plaintext_for_index(self, entry: MemoryEntry) -> str:
+        """返回用于进程内检索（TF-IDF 水合 / fuzzy 打分）的明文。
+
+        v5.6.6 P2 修复（v5.5.7 遗留）：非加密条目直接返回 content；加密条目用
+        生命周期内稳定的 ``self.encryption`` 在内存中解密。明文仅用于进程内
+        索引，调用方不得写入磁盘或 FTS5（保持磁盘静态加密）。解密失败
+        （密钥不符/密文损坏）返回空串，由调用方跳过该条。
+        """
+        if not getattr(entry, "encrypted", False):
+            return entry.content or ""
+        if not self.encryption:
+            return ""
+        try:
+            return self.decrypt_content(entry) or ""
+        except Exception:
+            logger.warning("记忆 %s 解密失败，内存检索跳过", entry.id)
+            return ""
+
     def get_indexable_documents(self, limit: int = 100000) -> Dict[str, str]:
         """返回可索引的 {memory_id: content} 映射（v5.2.8 新增）
 
         用于 IndexEngine 在新进程启动时水合 TF-IDF 内存索引，
         修复 CLI 跨进程搜索不到历史记忆的问题。
-        跳过回收站与加密条目（密文无法直接索引）。
+        跳过回收站。加密条目在内存中解密后返回（明文仅驻留进程内存，不写盘）。
 
         Args:
             limit: 最大加载条数（安全上限）
@@ -1411,13 +1429,29 @@ class StorageEngine:
             {memory_id: content} 字典
         """
         conn = self._get_conn()
+        # v5.6.6 P2 修复（v5.5.7 遗留）：加密库 content 列为空，且 FTS5 刻意不
+        # 落明文以保持磁盘静态加密。此前 WHERE encrypted = 0 直接排除加密条目，
+        # 进程重启后 TF-IDF 内存索引不含任何加密记忆 → 关键词/模糊跨进程搜索
+        # 0 命中（query 结果构建处的解密因此成为死路径）。现对加密条目在内存中
+        # 逐条解密后返回：明文只存在于进程内存（运行期本就持有密钥与明文），
+        # 绝不写入磁盘或 FTS5。
         rows = conn.execute(
-            "SELECT id, content FROM memories"
-            " WHERE category != 'trash' AND encrypted = 0"
+            "SELECT * FROM memories"
+            " WHERE category != 'trash'"
             " ORDER BY created_at DESC LIMIT ?",
             (limit,),
         ).fetchall()
-        return {row["id"]: (row["content"] or "") for row in rows}
+        docs: Dict[str, str] = {}
+        for row in rows:
+            try:
+                entry = self._row_to_entry(row)
+                text = self._plaintext_for_index(entry)
+            except Exception:
+                # 单条反序列化/解密失败不影响其余记忆被索引
+                continue
+            if text:
+                docs[entry.id] = text
+        return docs
 
     def list_memories(self,
                       category: Optional[str] = None,
@@ -6698,8 +6732,9 @@ class StorageEngine:
         import re
 
         conn = self._get_conn()
+        # v5.6.6 P2：纳入加密条目（其 content 列为空），比较前在内存解密，明文不落盘
         rows = conn.execute("""
-            SELECT * FROM memories WHERE category != 'trash' AND encrypted = 0
+            SELECT * FROM memories WHERE category != 'trash'
         """).fetchall()
 
         def jaccard_similarity(s1: str, s2: str) -> float:
@@ -6713,7 +6748,7 @@ class StorageEngine:
 
         similarities = []
         for row in rows:
-            entry_content = row["content"] or ""
+            entry_content = self._plaintext_for_index(self._row_to_entry(row))
             if entry_content:
                 sim = jaccard_similarity(content, entry_content)
                 if sim >= threshold:
@@ -6723,10 +6758,7 @@ class StorageEngine:
         results = []
         for sim, row in similarities[:limit]:
             entry = self._row_to_entry(row)
-            if self.encrypted and self.encryption:
-                entry.content = self.encryption.decrypt(
-                    EncryptedBlob(ciphertext=entry.ciphertext, nonce=entry.nonce, salt=entry.salt)
-                )
+            entry.content = self._plaintext_for_index(entry)
             results.append(entry)
 
         return results
@@ -8026,6 +8058,10 @@ class StorageEngine:
 
         scored = []
         for entry in entries:
+            # v5.6.6 P2（v5.5.7 遗留）：加密条目 content 为空，打分前在内存解密。
+            # entry 为逐行新建的临时对象（非缓存/非共享），回填明文与正常读路径
+            # get_memory 解密语义一致，后续高亮片段复用 entry.content 即可。
+            entry.content = self._plaintext_for_index(entry)
             content_lower = entry.content.lower()
             tags_lower = [t.lower() for t in entry.tags]
             cat_lower = entry.category.lower()
@@ -8322,7 +8358,8 @@ class StorageEngine:
         import re
 
         conn = self._get_conn()
-        query = "SELECT * FROM memories WHERE category != 'trash' AND encrypted = 0"
+        # v5.6.6 P2：纳入加密条目，比较前在内存解密（明文不写盘）
+        query = "SELECT * FROM memories WHERE category != 'trash'"
         params = []
         if category:
             query += " AND category = ?"
@@ -8335,7 +8372,8 @@ class StorageEngine:
         results = []
         for row in rows:
             entry = self._row_to_entry(row)
-            entry_content = (entry.content or "").lower().strip()
+            # v5.6.6 P2：加密条目在内存解密后再比较
+            entry_content = self._plaintext_for_index(entry).lower().strip()
             if not entry_content:
                 continue
 

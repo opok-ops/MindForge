@@ -2,6 +2,20 @@
 
 All notable changes to MindForge will be documented in this file.
 
+
+## [5.6.6] - 2026-09-13
+
+修复一轮针对加密库与联邦并发的遗留问题（P2×1 / P3×2），其中加密跨进程搜索为 v5.5.7 起的遗留缺陷。
+
+### Fixed
+- **P2 加密记忆跨进程搜索 0 命中（v5.5.7 遗留，core/storage.py、core/query.py）**：加密库磁盘 `content` 列为空，且 FTS5 刻意不落明文以保持静态加密，导致进程重启后 TF-IDF 水合（`get_indexable_documents` 用 `WHERE encrypted=0` 排除了加密条目）与 fuzzy 逐行比对全部对加密记忆失效，`query.py` 结果构建处的解密因此成为永不触发的死路径。现新增 `_plaintext_for_index()`：水合与 `fuzzy_search`/`find_similar`/`check_duplicates` 在内存中逐条解密后再参与索引与打分，单条密文损坏只跳过该条、不中断整体检索。**安全边界不变**：解密明文仅驻留进程内存（运行期本就持有密钥与明文），绝不写回磁盘或 FTS5，磁盘 `content` 列仍为空，静态加密不被削弱。
+- **P3 联邦共享字典并发竞态（modules/federated.py）**：`purge_expired_shared_memories()` 此前遍历并 pop `shared_memories` 未持锁，与重放校验/`share_memory`/`get_shared_memories`/`revoke_share` 并发时可能触发 `dictionary changed size during iteration` 或读写互相覆盖。现上述四个方法对共享字典的访问统一在既有 `_fed_lock` 临界区内完成（purge 快照+删除、get 快照、share 写入、revoke 检查+删除原子化）；非重入锁，节流清理均在加锁前调用，无嵌套死锁。新增 8 线程并发回归。
+- **P3 版本号 docstring 漂移（core/storage.py）**：文件头版本由过期的 v5.6.1 同步为 v5.6.6（运行时版本真值仍以 `core/version.py` 为准）。
+
+### Tests
+- 新增 `tests/test_v566_encrypted_search.py`（7 项）：加密库“重启”后 `get_indexable_documents` 内存解密且磁盘明文为空、全新 QueryEngine 关键词（TF-IDF 水合）命中、fuzzy 命中、`find_similar`/`check_duplicates` 可见加密记忆、坏密文跳过不炸、联邦共享字典 8 线程并发无竞态且数据一致。
+
+
 ## [5.6.5] - 2026-09-13
 
 第三轮安全与健壮性加固（共 24 项：P0×3 / P1×7 / P2×8 / P3×6）。本轮在不引入新依赖的前提下，把联邦跨节点信任从对称 HMAC 升级为真正的非对称签名，并补齐重放防护、计数落库持久性、内存结构上限与入口层一致性。

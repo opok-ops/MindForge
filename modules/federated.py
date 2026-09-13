@@ -280,7 +280,9 @@ class FederatedMemory:
             access_policy=access_policy,
         )
 
-        self.shared_memories[memory_id] = shared
+        # v5.6.6 P3：与 purge/get/revoke 在同一把锁内变更共享字典
+        with self._fed_lock:
+            self.shared_memories[memory_id] = shared
 
         for pid in eligible:
             if len(self._outgoing_queue) < self._MAX_QUEUE_SIZE:
@@ -297,17 +299,19 @@ class FederatedMemory:
 
     def revoke_share(self, memory_id: str, peer_ids: Optional[List[str]] = None) -> bool:
         """撤销共享"""
-        if memory_id not in self.shared_memories:
-            return False
+        # v5.6.6 P3：检查与删除需在同一临界区原子完成，避免与 purge 竞态
+        with self._fed_lock:
+            if memory_id not in self.shared_memories:
+                return False
 
-        shared = self.shared_memories[memory_id]
+            shared = self.shared_memories[memory_id]
 
-        if peer_ids:
-            shared.shared_with = [pid for pid in shared.shared_with if pid not in peer_ids]
-            if not shared.shared_with:
+            if peer_ids:
+                shared.shared_with = [pid for pid in shared.shared_with if pid not in peer_ids]
+                if not shared.shared_with:
+                    del self.shared_memories[memory_id]
+            else:
                 del self.shared_memories[memory_id]
-        else:
-            del self.shared_memories[memory_id]
 
         return True
 
@@ -532,10 +536,13 @@ class FederatedMemory:
         """
         if now is None:
             now = time.time()
-        expired = [mid for mid, s in self.shared_memories.items()
-                   if s.expires_at is not None and s.expires_at <= now]
-        for mid in expired:
-            self.shared_memories.pop(mid, None)
+        # v5.6.6 P3：遍历 + pop 必须与 _replay_check/share/revoke/get 互斥，
+        # 否则并发迭代字典时可能 RuntimeError 或与写入相互覆盖。统一用 _fed_lock。
+        with self._fed_lock:
+            expired = [mid for mid, s in self.shared_memories.items()
+                       if s.expires_at is not None and s.expires_at <= now]
+            for mid in expired:
+                self.shared_memories.pop(mid, None)
         if expired:
             logger.info("清理 %d 条过期联邦共享记录", len(expired))
         return len(expired)
@@ -555,14 +562,16 @@ class FederatedMemory:
         """获取共享记忆列表（自动过滤掉已过期记录）"""
         self._maybe_purge_shared()
         now = time.time()
-        if peer_id:
-            return [
-                s for s in self.shared_memories.values()
-                if peer_id in s.shared_with
-                and (s.expires_at is None or s.expires_at > now)
-            ]
-        return [s for s in self.shared_memories.values()
-                if s.expires_at is None or s.expires_at > now]
+        # v5.6.6 P3：在锁内快照，避免与 purge/share/revoke 并发迭代竞态
+        with self._fed_lock:
+            if peer_id:
+                return [
+                    s for s in list(self.shared_memories.values())
+                    if peer_id in s.shared_with
+                    and (s.expires_at is None or s.expires_at > now)
+                ]
+            return [s for s in list(self.shared_memories.values())
+                    if s.expires_at is None or s.expires_at > now]
 
     def get_peers(self, status: Optional[PeerStatus] = None) -> List[FederatedPeer]:
         """获取节点列表"""

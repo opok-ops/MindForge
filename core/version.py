@@ -19,10 +19,10 @@ core/mindforge.py、cli/main.py、mcp/server.py），每处都带一份硬编码
 from typing import Tuple
 
 #: 当前发布版本（唯一真值）
-__version__: str = "5.6.5"
+__version__: str = "5.6.6"
 
 #: 结构化版本元组，便于比较（如 `VERSION_INFO >= (6, 0, 0)`）
-VERSION_INFO: Tuple[int, int, int] = (5, 6, 5)
+VERSION_INFO: Tuple[int, int, int] = (5, 6, 6)
 
 #: 下一个大版本的目标版本号（供 v6 端口预留引用）
 NEXT_MAJOR_TARGET: str = "6.0.0"

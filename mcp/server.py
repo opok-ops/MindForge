@@ -88,7 +88,13 @@ def _read_message() -> Dict[str, Any]:
     MAX_CONTENT_LENGTH = 10 * 1024 * 1024
     while True:
         line = sys.stdin.buffer.readline()
-        if not line or line in (b"\r\n", b"\n"):
+        if not line:
+            # P2 #17 补强：stdin 关闭（EOF）直接退出，而不是落入
+            # "无 Content-Length → ValueError → 重试" 的 100% CPU 空转。
+            # 此前把 EOF 与"空头部行"同样当作 break，随后 length<=0 抛
+            # ValueError，serve_forever 会无限重读同一 EOF。
+            raise EOFError("stdin closed")
+        if line in (b"\r\n", b"\n"):
             break
         try:
             decoded = line.decode("ascii", errors="replace").strip()
@@ -186,7 +192,9 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
     },
     {
         "name": "memory_list",
-        "description": "分页列出记忆条目，支持按分类/层级/重要性过滤和排序。",
+        "description": "分页列出记忆条目，支持按分类/层级/重要性过滤和排序。"
+                       "传入 actor 后会按隐私引擎过滤（仅返回该调用者有权访问的记忆），"
+                       "不传则返回全部（兼容既有客户端）。",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -196,6 +204,9 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
                 "offset": {"type": "integer", "minimum": 0, "default": 0},
                 "sort_by": {"type": "string", "enum": ["created_at", "updated_at", "importance"],
                            "default": "created_at"},
+                "actor": {"type": "string",
+                          "description": "调用者身份（Agent ID）。传入后启用隐私过滤，见 F1 方案。"},
+                "session_id": {"type": "string", "description": "调用者会话 ID（配合 actor 使用）"},
             },
         },
     },
@@ -711,6 +722,10 @@ def h_memory_list(mf, args: Dict[str, Any]) -> Dict[str, Any]:
         limit=_safe_int(args.get("limit", 20), 20, 1, 10000),
         offset=_safe_int(args.get("offset", 0), 0, 0),
         sort_by=str(args.get("sort_by", "created_at")),
+        # F1 修复：MCP 列表入口接入隐私过滤。传了 actor 才过滤，
+        # 未传时保持原有"返回全部"语义（兼容既有客户端）。
+        actor=str(args.get("actor") or ""),
+        session_id=str(args.get("session_id") or ""),
     )
     return {"count": len(entries), "results": [_entry_to_dict(e) for e in entries]}
 

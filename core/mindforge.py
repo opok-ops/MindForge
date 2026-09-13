@@ -42,26 +42,10 @@ from .version import __version__
 
 # ===== 路径安全校验（v5.2.9 新增：核心层统一防护，防止路径遍历 / 符号链接攻击）=====
 
-# v5.3.5 安全加固：检测 Windows 短文件名（8.3）绕过尝试
-def _is_suspicious_windows_path_mf(comp: str) -> bool:
-    """检测 Windows 短文件名绕过模式"""
-    if not comp or len(comp) == 0:
-        return False
-    # v5.4.5 修复 #11：豁免 Unix 根路径 '/'，否则 Linux/Mac 上所有导出功能不可用
-    if comp == '/':
-        return False
-    import re as _re
-    # v5.3.7 修复：豁免 Windows 盘符根（如 C:\、D:），之前误报导致所有导出功能失效
-    if len(comp) <= 3 and _re.match(r'^[A-Za-z]:\\?$', comp):
-        return False
-    if _re.match(r'^[^~]{1,6}~\d(\..{1,3})?$', comp, _re.IGNORECASE):
-        return True
-    # v5.5.1 fix: colon only dangerous on Windows
-    import sys as _sys
-    _dangerous = ('..', '/', '\\', '\x00', ':') if _sys.platform == 'win32' else ('..', '/', '\\', '\x00')
-    if any(s in comp for s in _dangerous):
-        return True
-    return False
+# P3 #25 修复：此处原有 `_is_suspicious_windows_path_mf` 与下方的 `_safe_path`
+# 副本，现已被 core/storage.py 中的单一实现取代（见下方 `_safe_path` 委托）。
+# 重复实现是安全隐患——加固一份、遗漏另一份会造成安全语义漂移，
+# 因此整体删除，只保留 storage 层权威实现。
 
 
 def _safe_path(path_str, must_exist=False, allow_symlinks=False,
@@ -82,60 +66,44 @@ def _safe_path(path_str, must_exist=False, allow_symlinks=False,
     Raises:
         ValueError / OSError: 路径不安全
     """
-    if not path_str or not isinstance(path_str, str):
-        raise ValueError("路径不能为空")
-    if len(path_str) > max_len:
-        raise ValueError(f"路径过长（上限 {max_len} 字符）")
-    # v5.3.5 安全：过滤 Unicode 双向和控制字符
-    import unicodedata
-    for ch in path_str:
-        cat = unicodedata.category(ch)
-        if cat in ('Cf', 'Cc') and ch not in '\n\r\t':
-            raise ValueError("路径中包含非法控制字符")
-    # v5.3.5 安全：逐组件检测 Windows 短文件名绕过
-    target = Path(path_str)
-    if not target.is_absolute():
-        target = Path.cwd() / target
-    for comp in target.parts:
-        if comp and _is_suspicious_windows_path_mf(comp):
-            raise ValueError(f"路径组件不安全: {comp}")
+    # P3 #25 修复：删除与 core.storage._safe_path 重复的实现，统一委托到存储层。
+    # 两份实现此前逻辑等价（同样的控制字符过滤、短文件名绕过检测、符号链接检查、
+    # 扩展名/存在性/大小校验），但重复维护极易出现安全语义漂移 —— 一份被加固、
+    # 另一份被遗漏。此处收敛为单点实现，签名保持完全兼容。
+    from .storage import _safe_path as _storage_safe_path
+    return _storage_safe_path(
+        path_str,
+        must_exist=must_exist,
+        allow_symlinks=allow_symlinks,
+        max_size=max_size,
+        allowed_exts=allowed_exts,
+        max_len=max_len,
+    )
 
-    try:
-        resolved = target.resolve()
-    except (OSError, RuntimeError) as e:
-        raise ValueError(f"路径解析失败: {e}")
 
-    # 符号链接检查 — 使用 lstat() 逐组件检查原始路径，非解析后路径
-    if not allow_symlinks:
-        import os as _os
-        check_path = target
-        while check_path != check_path.parent:
-            try:
-                if _os.path.islink(str(check_path)):
-                    raise ValueError(f"不允许操作符号链接: {check_path}")
-            except OSError:
-                pass
-            check_path = check_path.parent
+class _ArchivedEntryView:
+    """F1：把 ``archived_memories`` 的 dict 行适配成 PrivacyEngine 期望的只读视图
 
-    # 扩展名检查
-    if allowed_exts is not None:
-        ext = resolved.suffix.lower()
-        if ext not in allowed_exts:
-            raise ValueError(
-                f"不支持的文件类型: {ext}（允许: {', '.join(sorted(allowed_exts))}）"
-            )
+    ``PrivacyEngine.check_access`` 只读取 ``id`` / ``privacy`` /
+    ``source_agent`` / ``source_session`` 四个属性，因此无需构造完整
+    MemoryEntry（避免归档行缺字段导致解析失败）。
+    """
 
-    # 存在性检查
-    if must_exist and not resolved.exists():
-        raise FileNotFoundError(f"文件不存在: {resolved}")
+    __slots__ = ("id", "privacy", "source_agent", "source_session")
 
-    # 大小检查
-    if max_size is not None and resolved.exists() and resolved.is_file():
-        size = resolved.stat().st_size
-        if size > max_size:
-            raise ValueError(f"文件过大: {size} 字节（上限 {max_size}）")
-
-    return resolved
+    def __init__(self, row: Dict[str, Any]):
+        from .types import PrivacyLevel
+        self.id = str(row.get("original_id") or row.get("id") or "")
+        # 未知/缺失的隐私值按最保守的 STRICT 处理（fail-closed）
+        raw = row.get("privacy")
+        if isinstance(raw, PrivacyLevel):
+            self.privacy = raw
+        elif raw:
+            self.privacy = PrivacyLevel.from_string(str(raw))
+        else:
+            self.privacy = PrivacyLevel.STRICT
+        self.source_agent = str(row.get("source_agent") or "")
+        self.source_session = str(row.get("source_session") or "")
 
 
 class MindForge:
@@ -616,12 +584,20 @@ class MindForge:
              limit: int = 50,
              offset: int = 0,
              sort_by: str = "created_at",
-             sort_order: str = "desc") -> List[MemoryEntry]:
+             sort_order: str = "desc",
+             actor: str = "",
+             session_id: str = "") -> List[MemoryEntry]:
         """列出记忆
 
         v5.5.6 新增 pinned 参数（置顶筛选）。
+
+        F1 修复（隐私过滤统一守卫）：新增 ``actor`` / ``session_id``。
+        - 传了 ``actor``：逐条走 PrivacyEngine.check_access 过滤，越权条目直接剔除
+        - 未传 ``actor``：不过滤，保持内部模块（decay/evolution/integrator）与
+          CLI 本地调用的既有语义不变
+        对外入口（REST API / MCP / GenericAPIAdapter）必须显式传 actor。
         """
-        return self._storage.list_memories(
+        entries = self._storage.list_memories(
             category=category,
             layer=layer,
             starred=starred,
@@ -633,6 +609,27 @@ class MindForge:
             sort_by=sort_by,
             sort_order=sort_order,
         )
+        return self._filter_by_privacy(entries, actor, session_id)
+
+    def _filter_by_privacy(self, entries: List[Any], actor: str,
+                           session_id: str = "") -> List[Any]:
+        """F1：按隐私引擎过滤条目
+
+        - ``actor`` 为空 → 原样返回（兼容内部调用）
+        - 隐私引擎异常 → fail-closed，剔除该条目（绝不因异常而放行）
+        """
+        if not actor or not entries:
+            return entries
+        engine = self.privacy_engine
+        allowed: List[Any] = []
+        for entry in entries:
+            try:
+                ok, _reason = engine.check_access(entry, actor, session_id)
+            except Exception:
+                ok = False  # fail-closed：检查失败即视为无权访问
+            if ok:
+                allowed.append(entry)
+        return allowed
 
     def star(self, memory_id: str, actor: str = "", session_id: str = "") -> bool:
         """收藏记忆（加星标）"""
@@ -1241,6 +1238,26 @@ class MindForge:
                     # P1 安全修复：校验 key_file 路径在预期位置，防 from_config 加载
                     # 恶意 JSON 时将系统密钥文件打包进备份（路径遍历）
                     _safe_path(str(key_path), must_exist=True)
+                    # P1-5 补强：_safe_path 只拦截 '..' 这类危险路径组件，并会豁免
+                    # Windows 盘符根（'C:\\' 形状）与 POSIX 绝对路径的根组件，
+                    # 因此 C:\\Users\\x\\.ssh\\id_rsa、/etc/shadow 这类路径都能通过，
+                    # 仍可被恶意 config 用于把系统密钥/凭证打包进可分发 ZIP。
+                    # 这里追加「必须位于项目根目录内」的包含性校验。
+                    # 确需使用外部路径时显式设置 MINDFORGE_ALLOW_EXTERNAL_KEY_FILE=1。
+                    import os as _os
+                    if _os.environ.get(
+                        "MINDFORGE_ALLOW_EXTERNAL_KEY_FILE", "0"
+                    ).strip().lower() not in ("1", "true", "yes", "on"):
+                        _project_root = Path(__file__).resolve().parent.parent
+                        try:
+                            key_path.resolve().relative_to(_project_root)
+                        except ValueError:
+                            raise ValueError(
+                                f"backup() 拒绝打包：key_file {key_path} 不在项目根目录 "
+                                f"{_project_root} 内，疑似由恶意 config 注入。"
+                                f"如确需使用外部路径，请设置 "
+                                f"MINDFORGE_ALLOW_EXTERNAL_KEY_FILE=1"
+                            )
                     zf.write(key_path, ".key")
 
             # 3. 配置快照
@@ -1747,9 +1764,30 @@ class MindForge:
     def list_archived(self, layer: Optional[str] = None,
                       category: Optional[str] = None,
                       limit: int = 50,
-                      offset: int = 0) -> List[Dict[str, Any]]:
-        """列出归档记忆（v5.4.6 新增）"""
-        return self._storage.list_archived(layer, category, limit, offset)
+                      offset: int = 0,
+                      actor: str = "",
+                      session_id: str = "") -> List[Dict[str, Any]]:
+        """列出归档记忆（v5.4.6 新增）
+
+        F1 修复：新增 ``actor`` / ``session_id``。传了 actor 时按隐私引擎过滤，
+        未传时保持原语义（不过滤）以兼容内部调用。归档行是 dict，因此用
+        ``_ArchivedEntryView`` 轻量适配后交给 PrivacyEngine 判定。
+        """
+        rows = self._storage.list_archived(layer, category, limit, offset)
+        if not actor or not rows:
+            return rows
+        engine = self.privacy_engine
+        allowed: List[Dict[str, Any]] = []
+        for row in rows:
+            try:
+                ok, _reason = engine.check_access(
+                    _ArchivedEntryView(row), actor, session_id
+                )
+            except Exception:
+                ok = False  # fail-closed
+            if ok:
+                allowed.append(row)
+        return allowed
 
     def restore_archived(self, archive_id: str) -> Dict[str, Any]:
         """从归档恢复记忆（v5.4.6 新增）"""
@@ -2496,7 +2534,17 @@ class MindForge:
             if "manifest.json" not in zf.namelist():
                 raise ValueError("备份文件无效：缺少 manifest.json")
 
-            manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
+            # P2 #23 修复：manifest 是外部输入（用户提供的备份 ZIP），
+            # 必须走安全 JSON 解析（深度+大小限制），防止深度嵌套栈溢出
+            from .storage import _safe_json_loads as _safe_load_manifest
+            manifest_raw = zf.read("manifest.json")
+            if len(manifest_raw) > 10 * 1024 * 1024:
+                raise ValueError("备份文件无效：manifest.json 过大")
+            manifest = _safe_load_manifest(
+                manifest_raw.decode("utf-8"), max_depth=16
+            )
+            if not isinstance(manifest, dict):
+                raise ValueError("备份文件无效：manifest.json 格式错误")
 
             # 验证数据库文件
             if "memory.db" not in zf.namelist():

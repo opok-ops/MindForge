@@ -84,7 +84,7 @@ class GenericAPIAdapter:
 
     def _handle_add(self, params: Dict) -> Dict:
         entry = self.cm.add(
-            content=params["content"],
+            content=self._require(params, "content"),
             category=params.get("category", "general"),
             tags=params.get("tags", []),
             source_agent=params.get("agent", "api"),
@@ -94,7 +94,7 @@ class GenericAPIAdapter:
 
     def _handle_get(self, params: Dict) -> Optional[Dict]:
         entry = self.cm.get(
-            params["id"],
+            self._require(params, "id"),
             actor=params.get("actor", "api"),
             session_id=params.get("session_id", ""),
         )
@@ -105,7 +105,7 @@ class GenericAPIAdapter:
             query=params["query"],
             max_results=params.get("limit", 10),
             categories=params.get("categories"),
-            actor=params.get("actor", "api"),
+            agent_id=params.get("actor", "api"),
             session_id=params.get("session_id", ""),
         )
         return {
@@ -123,16 +123,20 @@ class GenericAPIAdapter:
         }
 
     def _handle_list(self, params: Dict) -> List[Dict]:
+        # F1 修复：适配器列表入口接入隐私过滤（params.actor / params.session_id）。
+        # 未传 actor 时保持原有"返回全部"语义，兼容既有集成方。
         entries = self.cm.list(
             category=params.get("category"),
             limit=params.get("limit", 50),
             offset=params.get("offset", 0),
+            actor=str(params.get("actor") or ""),
+            session_id=str(params.get("session_id") or ""),
         )
         return [e.to_dict() for e in entries]
 
     def _handle_update(self, params: Dict) -> bool:
         return self.cm.update(
-            memory_id=params["id"],
+            memory_id=self._require(params, "id"),
             content=params.get("content"),
             category=params.get("category"),
             tags=params.get("tags"),
@@ -142,7 +146,7 @@ class GenericAPIAdapter:
 
     def _handle_delete(self, params: Dict) -> bool:
         return self.cm.delete(
-            params["id"],
+            self._require(params, "id"),
             actor=params.get("actor", "api"),
             session_id=params.get("session_id", ""),
         )
@@ -159,7 +163,7 @@ class GenericAPIAdapter:
         from ..modules.knowledge_graph import KnowledgeGraph
         kg = KnowledgeGraph(storage=self.cm.storage)
         related = kg.get_related_entities(
-            params["entity"],
+            self._require(params, "entity"),
             depth=params.get("depth", 2),
         )
         return [{"name": n, "relation": r, "weight": w} for n, r, w in related]

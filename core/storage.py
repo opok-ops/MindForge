@@ -161,12 +161,27 @@ def _safe_path(path_str, must_exist=False, allow_symlinks=False,
 
 
 # v5.3.5 安全加固：JSON 反序列化深度限制，防止深度攻击
-def _safe_json_loads(data: str, max_depth: int = 32, max_size: int = 10_000_000):
-    """安全加载 JSON，限制嵌套深度和总大小"""
+_SENTINEL_UNSET = object()
+
+
+def _safe_json_loads(data: str, max_depth: int = 32, max_size: int = 10_000_000,
+                     default=_SENTINEL_UNSET):
+    """安全加载 JSON，限制嵌套深度和总大小
+
+    P2 #22 修复：新增 ``default`` 参数，与 ``StorageEngine._safe_json_loads``
+    的行为对齐，消除两个同名实现语义不一致的问题。
+    - 不传 ``default``：异常时抛 ``ValueError``（保持原有 fail-fast 语义，向后兼容）
+    - 传 ``default``：异常时返回 default，不中断调用方
+    """
+    def _fail(msg: str):
+        if default is _SENTINEL_UNSET:
+            raise ValueError(msg)
+        return default
+
     if not isinstance(data, str):
-        raise ValueError("JSON 数据类型错误")
+        return _fail("JSON 数据类型错误")
     if len(data) > max_size:
-        raise ValueError(f"JSON 数据过大（{len(data)} > {max_size} 字节）")
+        return _fail(f"JSON 数据过大（{len(data)} > {max_size} 字节）")
 
 
     def _check_depth(s: str) -> int:
@@ -197,11 +212,11 @@ def _safe_json_loads(data: str, max_depth: int = 32, max_size: int = 10_000_000)
         return mx
 
     if _check_depth(data) > max_depth:
-        raise ValueError(f"JSON 嵌套过深（上限 {max_depth} 层）")
+        return _fail(f"JSON 嵌套过深（上限 {max_depth} 层）")
     try:
         return json.loads(data)
     except json.JSONDecodeError:
-        raise ValueError("JSON 解析失败")
+        return _fail("JSON 解析失败")
 
 
 # v5.3.5 安全加固：限制 SQL 查询返回行数，防止大数据量 DoS
@@ -537,7 +552,10 @@ class HardwareProfiler:
 
         # Fallback: 通过小文件写入速度粗略判断
         try:
-            test_data = os.urandom(5 * 1024 * 1024)  # 5MB
+            # P3 #24 修复：探测载荷由 5MB 降到 1MB，避免每次探测都做 5MB 内存
+            # 分配 + 全量落盘（结果虽有缓存，但首次调用/缓存失效时开销过大）。
+            _probe_bytes = 1024 * 1024  # 1MB
+            test_data = os.urandom(_probe_bytes)
             with tempfile.NamedTemporaryFile(delete=False, suffix=".tmp") as f:
                 tmp_path = f.name
                 start = time.time()
@@ -551,7 +569,7 @@ class HardwareProfiler:
                 pass
 
             if elapsed > 0:
-                speed_mbps = (5 * 1024 * 1024 / elapsed) / (1024 * 1024)  # MB/s
+                speed_mbps = (_probe_bytes / elapsed) / (1024 * 1024)  # MB/s
                 result = "ssd" if speed_mbps > 50 else "hdd"
         except Exception:
             pass
@@ -1311,15 +1329,26 @@ class StorageEngine:
         return [entry_map.get(mid) for mid in memory_ids]
 
     def decrypt_content(self, entry: MemoryEntry) -> str:
-        """解密记忆内容"""
+        """解密记忆内容
+
+        解密固定使用 ``self.encryption``（构造期注入、生命周期内稳定）。
+        rekey 期间 ``_global_engine`` 会被新引擎替换，但 ``self.encryption``
+        不变，因此不会出现「用新引擎去解旧密文」的失败。
+
+        P1-6 修复：重建 EncryptedBlob 时补齐 ``kdf_params``。此前丢弃该字段，
+        导致密文级 KDF 参数版本化信息在解密路径上被抹掉（v5.6.0 设计的
+        「旧密文用旧 KDF 参数解密」能力失效）。缺失时回退到当前引擎参数。
+        """
         if not entry.encrypted or not self.encryption:
             return entry.content
 
         if entry.ciphertext and entry.nonce and entry.salt:
+            entry_kdf = getattr(entry, "kdf_params", None)
             blob = EncryptedBlob(
                 ciphertext=entry.ciphertext,
                 nonce=entry.nonce,
                 salt=entry.salt,
+                kdf_params=entry_kdf or self.encryption.kdf_params,
             )
             return self.encryption.decrypt(blob)
         return entry.content
@@ -1429,7 +1458,9 @@ class StorageEngine:
 
         # v5.4.0 安全加固：长度限制
         # v5.5.7 fix: 与 add_memory 一致，拒绝空内容/空白内容
-        MAX_CONTENT_LEN = 50000
+        # P1-8 修复：删除本地 50000 影子常量，统一走模块级 MAX_CONTENT_LEN(1MB)。
+        # 此前 add_memory 放行 1MB 而 update_memory 只放行 50K，导致
+        # “能创建却永远无法更新”的不一致（超长记忆一旦落库即不可编辑）。
         if content is not None:
             if isinstance(content, str) and not content.strip():
                 raise ValueError("content cannot be empty or whitespace-only")

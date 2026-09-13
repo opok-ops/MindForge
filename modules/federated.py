@@ -6,6 +6,7 @@ MindForge v5.0 联邦记忆网络
 import json
 import hashlib
 import hmac
+import logging
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -82,15 +83,38 @@ class FederatedMemory:
 
     def register_peer(self, peer_id: str, name: str,
                       trust_level: float = 0.5,
-                      shared_categories: Optional[List[str]] = None) -> FederatedPeer:
-        """注册联邦节点"""
+                      shared_categories: Optional[List[str]] = None,
+                      shared_secret: str = "",
+                      public_key: str = "") -> FederatedPeer:
+        """注册联邦节点
+
+        N4 修复（破坏性变更）：新增 ``shared_secret`` / ``public_key`` 参数。
+
+        背景：P0 修复把 HMAC 密钥从 ``public_key`` 改成了 ``shared_secret``
+        （公钥是公开的，用它做 HMAC 密钥任何第三方都能伪造签名）。但
+        ``register_peer()`` 从未提供设置 ``shared_secret`` 的入口，导致通过该
+        API 注册的节点一律 ``shared_secret=""``，而 ``_compute_signature`` /
+        ``_verify_signature`` 对空密钥是 fail-closed 的 —— 结果是**所有**
+        联邦节点的签名与验签全部失效，联邦功能整体不可用。
+
+        注意：不传 ``shared_secret`` 时节点仍会被注册（向后兼容），但其签名
+        相关操作会被拒绝，并记录一条 WARNING 提示补齐密钥。
+        """
         peer = FederatedPeer(
             peer_id=peer_id,
             name=name,
             trust_level=trust_level,
             shared_categories=shared_categories or [],
+            public_key=public_key or "",
+            shared_secret=shared_secret or "",
             last_seen=time.time(),
         )
+        if not peer.shared_secret:
+            logging.getLogger(__name__).warning(
+                "联邦节点 %s 未设置 shared_secret，签名/验签将 fail-closed 拒绝"
+                "（如需启用联邦签名，请通过 register_peer(shared_secret=...) 补设）",
+                peer_id,
+            )
         self.peers[peer_id] = peer
         return peer
 

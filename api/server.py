@@ -36,6 +36,7 @@ from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 from collections import defaultdict
+from typing import Dict, List, Optional, Any
 from MindForge import __version__ as MF_VERSION
 
 try:
@@ -269,6 +270,22 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
             return ""
         return mem_id
 
+    def _extract_actor(self, qs: Dict[str, list]) -> str:
+        """F1：从请求中提取调用者身份（用于 list/export 的隐私过滤）
+
+        优先级：``X-Agent-Id`` 请求头 > ``agent`` 查询参数。
+        未声明身份时返回 ""，此时核心层保持"不过滤"语义以兼容既有调用
+        （完整的强制隔离属于 v6.0 方案，见 docs/F1_list_privacy_filtering.md）。
+        """
+        try:
+            header_actor = (self.headers.get("X-Agent-Id") or "").strip()
+        except Exception:
+            header_actor = ""
+        if header_actor:
+            return header_actor[:128]
+        query_actor = (qs.get("agent", [""])[0] or "").strip()
+        return query_actor[:128]
+
     def _check_auth(self):
         """验证 Bearer Token（通过 MINDFORGE_API_KEY 环境变量配置）
 
@@ -395,10 +412,13 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                 limit = _safe_int(qs.get("limit", ["50"])[0], default=50, min_val=1, max_val=10000)
                 offset = _safe_int(qs.get("offset", ["0"])[0], default=0, min_val=0, max_val=1000000)
                 category = qs.get("category", [None])[0]
+                # F1 修复：列表接口接入隐私过滤（X-Agent-Id 头 / agent 查询参数）
                 entries = self.mindforge.list(
                     category=category,
                     limit=limit,
                     offset=offset,
+                    actor=self._extract_actor(qs),
+                    session_id=(qs.get("session", [""])[0] or ""),
                 )
                 memories = []
                 for e in entries:
@@ -418,7 +438,12 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
 
             elif path == "/api/export":
                 max_export_limit = 5000  # P1-001: 导出上限 5000 条
-                entries = self.mindforge.list(limit=max_export_limit)
+                # F1 修复：导出同样是记忆读取入口，必须带上调用者身份做隐私过滤
+                entries = self.mindforge.list(
+                    limit=max_export_limit,
+                    actor=self._extract_actor(qs),
+                    session_id=(qs.get("session", [""])[0] or ""),
+                )
                 memories = [e.to_dict() if hasattr(e, "to_dict") else vars(e) for e in entries]
                 # P3-3: 截断时添加 truncated 标志
                 truncated = len(entries) >= max_export_limit

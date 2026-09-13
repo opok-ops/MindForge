@@ -38,6 +38,21 @@ import threading
 import urllib.request
 import urllib.error
 from typing import Callable, Optional, List, Dict, Any, Set
+
+
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """SSRF 防护（N3）：拒绝一切 3xx 跳转。
+
+    urllib 默认会跟随跳转，攻击者可注册一个公网 URL，再让它 302 到
+    169.254.169.254（云元数据）或 127.0.0.1，从而绕过注册阶段的地址校验。
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(
+            req.full_url, code,
+            f"redirect blocked by SSRF guard: {newurl}",
+            headers, fp,
+        )
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -106,33 +121,92 @@ class EventBus:
     # ===== 订阅/取消订阅 =====
 
     @staticmethod
-    def _validate_no_ssrf(url: str) -> None:
+    def _resolve_host_ips(hostname: str) -> List[str]:
+        """解析主机名到全部 IP（IPv4 + IPv6）"""
+        import socket as _socket
+        try:
+            infos = _socket.getaddrinfo(hostname, None,
+                                        proto=_socket.IPPROTO_TCP)
+        except (_socket.gaierror, OSError, UnicodeError):
+            return []
+        ips: List[str] = []
+        for info in infos:
+            addr = info[4][0] if len(info) > 4 else ""
+            if addr and addr not in ips:
+                ips.append(addr)
+        return ips
+
+    @staticmethod
+    def _is_blocked_ip(ip_str: str) -> bool:
+        """判断 IP 是否落在受限网段（无法解析按不安全处理，fail-closed）"""
+        import ipaddress
+        try:
+            ip = ipaddress.ip_address(ip_str)
+        except ValueError:
+            return True
+        # IPv6-mapped（::ffff:127.0.0.1）先还原成 IPv4 再判断
+        mapped = getattr(ip, "ipv4_mapped", None)
+        if mapped is not None:
+            ip = mapped
+        return bool(ip.is_private or ip.is_loopback or ip.is_link_local
+                    or ip.is_multicast or ip.is_unspecified or ip.is_reserved)
+
+    @classmethod
+    def _validate_no_ssrf(cls, url: str) -> None:
         """SSRF 防护：拒绝指向内网/回环/链路本地的 Webhook URL
 
         阻止探测云元数据服务（169.254.169.254）、本地服务等。
+
+        N3 修复：原实现只校验「字面量 IP」，遇到域名直接 return，且注释承诺的
+        「投递前再做 DNS 解析检查」在投递路径中并不存在。以下绕过因此全部成立：
+          - http://internal.corp/            内网域名
+          - http://127.1/                    非规范 IPv4 写法
+          - http://2130706433/               十进制 IPv4
+          - http://0x7f000001/               十六进制 IPv4
+          - http://169.254.169.254.nip.io/   域名解析到内网
+          - 公网 URL 302 → 169.254.169.254（urlopen/requests 默认跟随跳转）
+        现在统一为：规范化 IP 写法 + DNS 全量解析 + 任一结果受限即拒绝。
         """
         from urllib.parse import urlparse
         import ipaddress
 
         parsed = urlparse(url)
-        hostname = parsed.hostname or ""
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError(f"Webhook URL 仅支持 http/https: {parsed.scheme!r}")
 
-        # 常见内网主机名
-        if hostname in ("localhost", "loopback", "metadata", "metadata.google.internal"):
+        hostname = (parsed.hostname or "").strip()
+        if not hostname:
+            raise ValueError("Webhook URL 缺少主机名")
+
+        # 常见内网主机名直接拒绝
+        if hostname.lower() in ("localhost", "loopback", "metadata",
+                                "metadata.google.internal"):
             raise ValueError(f"Webhook URL 禁止指向本地/内网主机: {hostname}")
 
-        # 尝试解析 IP 并检查
+        # 先按字面量 IP 判断（并兼容 127.1 / 0x7f000001 等非规范写法）
+        literal = None
         try:
-            ip = ipaddress.ip_address(hostname)
+            literal = ipaddress.ip_address(hostname)
         except ValueError:
-            # 不是 IP 地址，是域名 — 运行时再解析（DNS rebinding 风险）
-            # 注册阶段只做基本格式校验，投递前再做 DNS 解析检查
+            import socket as _socket
+            try:
+                literal = ipaddress.ip_address(_socket.inet_aton(hostname))
+            except (OSError, ValueError, UnicodeError):
+                literal = None
+        if literal is not None:
+            if cls._is_blocked_ip(str(literal)):
+                raise ValueError(f"Webhook URL 禁止指向内网 IP: {hostname}")
             return
 
-        # 拒绝内网/私有/回环/链路本地/组播/未指定
-        if (ip.is_private or ip.is_loopback or ip.is_link_local
-                or ip.is_multicast or ip.is_unspecified or ip.is_reserved):
-            raise ValueError(f"Webhook URL 禁止指向内网 IP: {ip}")
+        # 域名：必须成功解析，且所有解析结果都不得落在受限网段
+        ips = cls._resolve_host_ips(hostname)
+        if not ips:
+            raise ValueError(f"Webhook URL 主机名无法解析: {hostname}")
+        for ip_str in ips:
+            if cls._is_blocked_ip(ip_str):
+                raise ValueError(
+                    f"Webhook URL 解析到受限地址 {ip_str}（host={hostname}）"
+                )
 
     def subscribe(self, event: str, callback: Callable[[Dict[str, Any]], None]) -> None:
         """订阅指定事件
@@ -319,12 +393,17 @@ class EventBus:
         for attempt in range(config.max_retries + 1):
             actual_attempts = attempt + 1
             try:
+                # N3 修复：投递前重新做一次 SSRF 校验（防 DNS rebinding：注册时
+                # 解析到公网、投递时解析到内网），并禁止跟随 3xx 跳转
+                # （否则公网 URL 可 302 到 169.254.169.254）。
+                self._validate_no_ssrf(config.url)
                 import requests
                 response = requests.post(
                     config.url,
                     data=body,
                     headers=headers,
                     timeout=timeout,
+                    allow_redirects=False,
                 )
                 status = response.status_code
                 success = 200 <= status < 300
@@ -368,9 +447,12 @@ class EventBus:
         不再重复序列化。
         """
         try:
+            # N3 修复：与 requests 路径一致 —— 投递前复检 + 禁止跟随跳转
+            self._validate_no_ssrf(config.url)
             req = urllib.request.Request(
                 config.url, data=body, headers=headers, method="POST")
-            with urllib.request.urlopen(req, timeout=config.timeout) as resp:
+            opener = urllib.request.build_opener(_NoRedirectHandler)
+            with opener.open(req, timeout=config.timeout) as resp:
                 status = resp.getcode()
                 success = 200 <= status < 300
                 self._record_delivery(config.url, headers.get("X-MindForge-Event", "unknown"),

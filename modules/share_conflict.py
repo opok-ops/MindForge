@@ -228,8 +228,23 @@ class SharedConflictResolver:
         # （v5.4.4 #8 引入的回归：用 preview 覆盖完整内容导致永久数据丢失）
         incoming_content = incoming_snapshot.get("content", "")
         if not incoming_content:
-            # 兼容旧数据：旧冲突只有 content_preview，此时禁止 LWW 自动覆盖
-            incoming_content = incoming_snapshot.get("content_preview", "")
+            # 数据完整性修复（N1）：v5.6.2 之前的冲突行只存了 200 字符
+            # content_preview，没有完整正文。原实现会回退到 preview 并继续
+            # 走 LWW 覆盖分支 —— 等于用截断文本覆盖本地完整内容，永久丢数据，
+            # v5.6.2 的 P0 修复在旧数据路径上被完全绕过。
+            # 这里改为 fail-safe：既不覆盖本地，也不据此伪造一条截断的分支记忆，
+            # 保持冲突 open 交由人工/重新同步处理。
+            return {
+                "success": False,
+                "error": (
+                    "冲突快照缺少完整 content（仅有 200 字符 content_preview，"
+                    "属于 v5.6.2 之前的旧数据），为防止永久数据丢失已拒绝自动解决。"
+                    "请让对端重新同步该记忆以生成新冲突，或人工核对后再处理。"
+                ),
+                "conflict_id": conflict_id,
+                "legacy_snapshot": True,
+            }
+        incoming_content = str(incoming_content)
         incoming_version = int(incoming_snapshot.get("version", 0) or 0)
         incoming_ts = float(incoming_snapshot.get("timestamp", 0.0) or 0.0)
         from_peer = str(incoming_snapshot.get("from_peer", "") or row["incoming_peer"])
@@ -311,12 +326,52 @@ class SharedConflictResolver:
     def _mark(self, conflict_id: str, status: str, resolution: str,
               resolved_memory_id: str, actor: str):
         conn = self._conn()
-        conn.execute(
-            "UPDATE share_conflicts SET status = ?, resolution = ?,"
-            " resolved_memory_id = ?, resolved_by = ?, resolved_at = ?"
-            " WHERE id = ?",
-            (status, resolution, resolved_memory_id or "",
-             (actor or "")[:128], time.time(), conflict_id))
+        # N2 修复（无界增长）：一旦冲突不再 open，就把 incoming_snapshot 里的
+        # 完整正文压缩成「哈希 + 长度」摘要。该字段保存的是整条记忆正文，
+        # 原先从不清理，每个冲突都会在 share_conflicts 里永久留一份全文副本，
+        # 长期运行（月级无人值守）会导致数据库单表无界膨胀。
+        compact_snapshot = None
+        if status != "open":
+            row = conn.execute(
+                "SELECT incoming_snapshot FROM share_conflicts WHERE id = ?",
+                (conflict_id,)).fetchone()
+            if row is not None and row["incoming_snapshot"] not in (None, "", "{}"):
+                try:
+                    payload = json.loads(row["incoming_snapshot"])
+                except (json.JSONDecodeError, TypeError):
+                    payload = {}
+                content = str(payload.get("content", "") or "")
+                if content:
+                    import hashlib as _hl
+                    compact_snapshot = json.dumps({
+                        "purged": True,
+                        "reason": "conflict_closed",
+                        "content_hash": _hl.sha256(
+                            content.encode("utf-8")).hexdigest()[:16],
+                        "content_length": len(content),
+                        "preview": content[:200],
+                        "version": payload.get("version", 0),
+                        "from_peer": payload.get("from_peer", ""),
+                    }, ensure_ascii=False)
+                else:
+                    compact_snapshot = "{}"
+
+        if compact_snapshot is None:
+            conn.execute(
+                "UPDATE share_conflicts SET status = ?, resolution = ?,"
+                " resolved_memory_id = ?, resolved_by = ?, resolved_at = ?"
+                " WHERE id = ?",
+                (status, resolution, resolved_memory_id or "",
+                 (actor or "")[:128], time.time(), conflict_id))
+        else:
+            conn.execute(
+                "UPDATE share_conflicts SET status = ?, resolution = ?,"
+                " resolved_memory_id = ?, resolved_by = ?, resolved_at = ?,"
+                " incoming_snapshot = ?"
+                " WHERE id = ?",
+                (status, resolution, resolved_memory_id or "",
+                 (actor or "")[:128], time.time(), compact_snapshot,
+                 conflict_id))
         conn.commit()
 
     # ===== 查询与维护 =====

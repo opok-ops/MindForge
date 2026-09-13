@@ -2,6 +2,50 @@
 
 All notable changes to MindForge will be documented in this file.
 
+## [5.6.3] - 2026-09-13
+
+### Security (P0 — 必修)
+- **联邦签名密钥模型修复（#1）**：HMAC 密钥从 `public_key` 改为 `shared_secret`（公钥公开，用它做 HMAC 任何人可伪造签名）。`register_peer()` 新增 `shared_secret` / `public_key` 参数；无密钥节点 fail-closed 拒绝签名与验签并记录 WARNING。
+- **共享冲突 LWW 数据丢失修复（#2）**：v5.4.4 回归——200 字符 `content_preview` 覆盖完整内容导致永久丢数据。现在快照缺完整 `content`（仅 preview）时拒绝自动解决，保持冲突 open 交由人工/重新同步。
+- **rekey 全局引擎切换原子化（#3）**：`rekey_engine()` 在 `_init_lock` 内原子更新 key 文件与 `_global_engine`，消除多线程 rekey 的不一致窗口；`get_engine()` 改为锁内读取。
+- **存储层限流器线程安全（#4）**：`_RateLimiter` 增加 `threading.Lock()`，修复多线程并发 `RuntimeError: dictionary changed size during iteration`。
+
+### Security (P1)
+- **backup() key_file 路径包含性校验（#5）**：除 `_safe_path` 外，追加「key_file 必须在项目根目录内」校验（默认拒绝打包 `~/.ssh/id_rsa` 等系统文件），可用 `MINDFORGE_ALLOW_EXTERNAL_KEY_FILE=1` 显式放行。
+- **decrypt_content 绑定加密参数（#6）**：重建 `EncryptedBlob` 时补齐 `kdf_params`，保留密文级 KDF 参数版本化能力，rekey 中途失败回滚不完整时旧密文仍可按旧参数解密。
+- **EmbeddingEngine 单例失败重试（#7）**：初始化失败时重置 `_instance`，后续实例化可重试，不再静默复用半初始化实例。
+- **内容长度限制统一（#8）**：删除 `update_memory` 本地 50000 字符影子常量，统一走模块级 `MAX_CONTENT_LEN`（1MB），消除「能创建却永远无法更新」的不一致。
+- **Webhook SSRF 深度防护（#9）**：注册与投递双阶段校验；支持非规范 IPv4 写法（127.1 / 0x7f000001 等）、DNS 全量解析（防 rebinding）、拒绝内网/链路本地/回环/组播；投递禁止跟随 3xx 跳转（防 302 → 169.254.169.254）。
+- **grant_access 权限校验（#10）**：`granted_by` 必须是记忆所有者，非所有者拒绝授权 PRIVATE/STRICT 记忆。
+- **evolution.consolidate 原子化（#11）**：双次 `update_memory` 合并为单次调用，消除中途崩溃导致的 layer/consolidation_count 不一致。
+- **API 默认 fail-closed（#12）**：`MINDFORGE_ALLOW_NOAUTH` 默认 `"0"`；未设 `MINDFORGE_API_KEY` 时非 localhost 绑定直接拒绝启动（`SecurityError`）。
+- **Web UI 模式安全加固（#13）**：Basic Auth（`MINDFORGE_API_KEY`）、请求体上限 10MB、速率限制 60 req/min、路径穿越拦截，且不再改变全局 cwd。
+
+### Security (P2)
+- **404 响应脱敏（#14）**：不再回显请求路径，统一返回 `{"error": "Not found"}`。
+- **IPv6 限流 key 归一化（#15）**：IPv6 按 /64 子网前缀计数，堵住临时地址绕过。
+- **MCP 认证过期（#16）**：30 分钟无活动自动登出（`_AUTH_IDLE_TIMEOUT`），不再永久 `_authenticated=True`。
+- **MCP Content-Length 强校验（#17）**：缺失/≤0/非数值/超 10MB 一律拒绝；stdin EOF 直接退出，不再空转（修复此前 EOF 触发 100% CPU 死循环）。
+- **CLI 全局 cwd 修复（#18）**：Web UI 通过 `directory=` 参数定位静态目录，不再 `os.chdir(web_dir)`。
+- **generic_api 必需字段校验 + 异常脱敏（#19）**：`_require` 统一校验必需字段（`memory.add/get/update/delete`、`graph.related`），未预期异常返回脱敏 `Internal error`。
+- **凭据防进程列表泄露（#20）**：`baidu_push.py` 与 `rekey` 命令支持环境变量/交互式不回显输入，CLI 参数使用时打印明确告警。
+- **MemoryCache 线程安全（#21）**：LRU 缓存增 `threading.Lock()`。
+- **_safe_json_loads 签名统一（#22）**：模块级函数新增 `default` 参数，与 `StorageEngine._safe_json_loads` 语义对齐，消除 `[]` 被当 `max_depth` 的 TypeError。
+- **外部输入 JSON 解析统一走安全包装（#23）**：REST body / MCP 消息 / CLI import 与备份恢复 manifest（含核心层 `backup-restore`）/ personality 均改用 `_safe_json_loads`（深度+大小限制）。
+
+### Quality (P3)
+- **磁盘探测载荷降量（#24）**：`_detect_disk_type` 探测文件由 5MB 降至 1MB，结果缓存。
+- **_safe_path 单点实现（#25）**：删除 mindforge.py 与 storage.py 的重复实现，统一委托 storage 层权威实现。
+- **全局加密引擎读取加锁（#26）**：`get_engine()` 在 `_init_lock` 内读取 `_global_engine`。
+- **F1 列表隐私过滤（#27）**：REST `/api/memories`、`/api/export`、MCP `memory_list`、GenericAPIAdapter 列表入口支持 `actor`/`session_id` 隐私过滤；`list_archived` 同步接入。设计见 `docs/F1_list_privacy_filtering.md`。
+- **SQL 拼接白名单固化（#28）**：f-string SQL 全部走硬编码列名或 `ALLOWED_FIELDS` 白名单校验，值一律参数绑定。
+- **personality.py 安全 JSON（#29）**：用户画像解析改用 `_safe_json_loads`。
+- **入口层覆盖率提升（#30）**：新增 `tests/test_v563_entry_coverage.py`（30 用例），覆盖 GenericAPIAdapter 分发/脱敏/F1、MCP 帧协议与认证过期、REST 认证/限流/404/体积上限、CLI 入口分发。整体覆盖率 36% → 41%；入口层：adapters 0% → 80%、api 45% → 56%、mcp 20% → 36%、cli 4% → 16%。
+
+### Fixed
+- `modules/federated.py`：`register_peer` 引用未定义的 `logger`（模块级缺 `import logging`），签名/验签路径修复。
+- `adapters/generic_api.py`：`_handle_search` 向核心层传了不存在的 `actor` 关键字（应为 `agent_id`），搜索接口实际不可用——已修复。
+
 ## [5.6.1] - 2026-09-11
 
 ### Security (P1)

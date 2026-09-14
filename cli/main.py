@@ -100,8 +100,9 @@ except ImportError:
     try:
         from MindForge.core.version import __version__
     except (ImportError, ValueError):
-        # 兜底值：必须与 core/version.py 的 __version__ 保持同步
-        __version__ = "5.6.1"
+        # 兜底值：仅当 core/version 完全不可导入时启用。发版时必须与
+        # core/version.py 的 __version__ 一起更新（见发版清单），否则漂移。
+        __version__ = "5.6.7"
 
 # 懒加载 modules：仅在对应命令执行时才导入，大幅加速 CLI 启动
 _modules_cache = {}

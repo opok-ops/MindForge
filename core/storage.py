@@ -526,6 +526,10 @@ class HardwareProfiler:
         return 4.0
 
     _cached_disk_type: Optional[str] = None  # P3 #24 缓存：磁盘类型只测一次
+    # P2-13 修复：ThreadingHTTPServer 下多个 health_dashboard 线程可能同时 miss
+    # 缓存并各自跑一次写速探测，再竞争回写。加类级锁做双检锁定（double-checked
+    # locking），保证探测只做一次。
+    _disk_type_lock = threading.Lock()
 
     @staticmethod
     def _detect_disk_type() -> str:
@@ -533,10 +537,23 @@ class HardwareProfiler:
 
         P3 #24 优化：结果缓存到类变量，只测一次。此前每次 health_dashboard 调用
         都写 5MB 临时文件测速，浪费 IO。
+        P2-13 修复：双检锁定，避免多线程并发时重复探测与回写竞争。
         """
-        if HardwareProfiler._cached_disk_type is not None:
-            return HardwareProfiler._cached_disk_type
+        cached = HardwareProfiler._cached_disk_type
+        if cached is not None:  # 快路径：已缓存则无锁直接返回
+            return cached
+        with HardwareProfiler._disk_type_lock:
+            # 等锁期间可能已被其它线程测好，二次检查避免重复探测
+            cached = HardwareProfiler._cached_disk_type
+            if cached is not None:
+                return cached
+            result = HardwareProfiler._measure_disk_type()
+            HardwareProfiler._cached_disk_type = result
+            return result
 
+    @staticmethod
+    def _measure_disk_type() -> str:
+        """实际探测磁盘类型（仅在 _detect_disk_type 的临界区内调用一次）。"""
         result = "unknown"
         if _HAS_PSUTIL:
             try:
@@ -575,7 +592,6 @@ class HardwareProfiler:
         except Exception:
             pass
 
-        HardwareProfiler._cached_disk_type = result
         return result
 
     @staticmethod

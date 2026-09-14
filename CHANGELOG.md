@@ -3,6 +3,26 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [5.6.7] - 2026-09-14
+
+一轮针对公开审查发现（P1×2 / P2×5 / P3×4，共 11 项）的安全与健壮性加固，不涉及新依赖、不改变对外数据契约。
+
+### Security
+- **P2-02 `/api/health` 未认证信息泄露（api/server.py）**：该端点在 `do_GET` 分发时被排除在鉴权之外，此前一旦配置了 `MINDFORGE_API_KEY` 反而会把 `health_check()` 的完整负载（`total_memories`、`db_size_bytes`、缺失索引名、`recommendations` 等）返回给任意未认证调用者。现无论是否配置 API Key，公开健康端点一律只回最小化 `status`，详细诊断走已认证端点。
+- **P2-04 `/api/tags` 标签未消毒（api/server.py）**：逗号分隔 fallback 与 JSON 两条解析路径都可能带回非字符串 / 含控制字符 / 超长的标签。新增 `_sanitize_tag()`：统一转字符串、去除首尾空白、剥离 ASCII 控制字符、截断到 64 字符后再计数聚合，异常标签不再进入 JSON 响应。
+- **P3-03 未捕获异常回溯泄露内部路径（api/server.py）**：四处 `logger.exception("API error")` 会把含绝对路径的完整回溯写入常规日志。改为 `_log_unhandled_api_error(e)`：常规级别仅记异常类型名，完整回溯降级到 DEBUG 级按需输出；HTTP 响应始终是通用 `Internal server error`。
+- **P3-07 MCP 工具错误响应含异常详情（mcp/server.py）**：`h_memory_add` 的 `ValueError` 处理直接把 `str(e)` 回给客户端，可能夹带存储层绝对路径。新增 `_safe_error_msg()`：抹平 Windows/POSIX 路径为 `<path>` 并截断到 200 字符。
+- **P2-09 MCP 认证信任模型加固（mcp/server.py）**：MCP 走 stdio、传输层不认证对端，此前无密钥时只告警放行。新增受管/CI fail-closed 开关 `MINDFORGE_MCP_REQUIRE_AUTH`：置真且无密钥时拒绝启动（退出码 2）；并把信任模型与安全建议写清在告警文本里。
+- **P2-11 cryptography 依赖 CVE 核查（requirements.txt）**：核对 2026 公告——`cryptography==50.0.1` 为当前最新版且高于 `CVE-2026-69249`（区间止于 48.0.0，49.0.0 修复）等公告的修复版本线，不受未修复 CVE 影响；已在锁定文件中记录核查结论与下次 `pip-audit` 复核要求。
+
+### Fixed
+- **P1-01 版本号兜底漂移（cli/main.py、mcp/server.py）**：两处最后兜底 `__version__` 仍硬编码过期的 `5.6.1`（真值为 `core/version.py`）。随本轮发版同步为 `5.6.7`，并注明必须与 `core/version.py` 一起更新。
+- **P1-08 2FA 会话计时语义不清（modules/privacy.py）**：澄清并注释 `time.monotonic()` 的选择——monotonic 不受墙上时钟回拨/NTP 校正影响，可防止通过调慢系统时间延长已授予的验证窗口；会话表仅存内存、进程重启即失效，缺省 `0` 在 monotonic 基准下恒判过期。行为不变，仅补注释消除歧义。
+- **P2-13 `_detect_disk_type` 类变量竞态（core/storage.py）**：读-改-写缓存未加锁，多线程下会重复探测并竞争回写。改为双检锁定（新增类级 `_disk_type_lock`），探测逻辑抽入 `_measure_disk_type()` 保持临界区精简，磁盘探测只做一次。
+- **P3-05 联邦队列操作缺锁（modules/federated.py）**：`receive_memory` 入队、`accept_incoming` 出队与 `federated_search` 出队未与 `_fed_lock` 协同，并发可越过容量上限或触发越界。将容量检查+入队、空队列检查+出队统一收敛到 `_fed_lock` 临界区原子完成（出队越界返回 None）。
+- **P3-10 `accept_incoming` 空内容静默丢弃（modules/federated.py）**：空 / 非字符串内容与入库异常此前被 `return None` 静默吞掉，条目无声消失。现显式 `logger.warning` 记录丢弃/失败原因，并把对端传来的非列表 `tags` 归一为列表，避免 `TypeError` 掩盖问题。
+
+
 ## [5.6.6] - 2026-09-13
 
 修复一轮针对加密库与联邦并发的遗留问题（P2×1 / P3×2），其中加密跨进程搜索为 v5.5.7 起的遗留缺陷。

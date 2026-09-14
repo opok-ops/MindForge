@@ -27,6 +27,7 @@ MindForge v5.5.8 REST API Server
 
 import json
 import logging
+import re
 import sys
 import os
 import time
@@ -210,6 +211,34 @@ def _safe_float(value, default=0.3, min_val=0.0, max_val=1.0):
         return default
 
 
+_TAG_CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def _sanitize_tag(tag) -> str:
+    """P2-04 安全修复：归一化标签字符串后再聚合/返回。
+
+    /api/tags 的两条解析路径（JSON 与逗号分隔 fallback）都可能带回未经校验的
+    标签值：非字符串对象、含控制字符或超长二进制串。统一转成 str、去除首尾空白、
+    删除 ASCII 控制字符并截断到 64 字符，避免异常标签进入 JSON 响应。
+    """
+    if not isinstance(tag, str):
+        tag = str(tag)
+    tag = _TAG_CONTROL_RE.sub("", tag).strip()
+    return tag[:64]
+
+
+def _log_unhandled_api_error(exc: Exception) -> None:
+    """P3-03：统一记录未捕获异常，避免 traceback 把内部文件路径写进常规日志。
+
+    logger.exception 会把完整回溯（含绝对路径、帧信息）打到 INFO/ERROR 级日志里。
+    这里降级：常规级别只记异常类型名，完整回溯仅在 DEBUG 级按需输出。
+    HTTP 响应始终是通用的 Internal server error，不含任何异常详情。
+    """
+    logger.error("API error: %s", type(exc).__name__)
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("API error traceback", exc_info=exc)
+
+
 class MindForgeAPIHandler(BaseHTTPRequestHandler):
     """REST API 请求处理器"""
 
@@ -379,14 +408,11 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                     self._send_json(
                         {"status": "unhealthy", "error": "storage unavailable"}, 503)
                     return
-                # v5.4.8 安全修复：未认证时只返回基本状态
-                api_key = os.environ.get("MINDFORGE_API_KEY", "")
-                if not api_key:
-                    result = {
-                        "status": result.get("status", "unknown"),
-                        "total_memories": result.get("total_memories", 0),
-                    }
-                self._send_json(result)
+                # P2-02 安全修复：/api/health 全程无需认证（见 do_GET 的分发条件），
+                # 因此无论是否配置 MINDFORGE_API_KEY，都只回最小化状态，绝不外泄
+                # total_memories / db_size_bytes / 缺失索引名 / recommendations 等指纹信息。
+                # 需要详细健康诊断请使用已认证的 /api/stats 等端点。
+                self._send_json({"status": result.get("status", "unknown")})
 
             elif path == "/api/stats":
                 result = self.mindforge.stats()
@@ -403,8 +429,14 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                         tags = json.loads(row[0]) if row[0].strip().startswith('[') else [t.strip() for t in row[0].split(',') if t.strip()]
                     except (json.JSONDecodeError, TypeError):
                         continue
+                    if not isinstance(tags, list):
+                        continue
                     for tag in tags:
-                        tag_counts[tag] = tag_counts.get(tag, 0) + 1
+                        # P2-04：JSON 与逗号分隔两条路径统一消毒后再计数
+                        clean = _sanitize_tag(tag)
+                        if not clean:
+                            continue
+                        tag_counts[clean] = tag_counts.get(clean, 0) + 1
                 self._send_json({"tags": sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)})
 
             elif path == "/api/search":
@@ -495,7 +527,7 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                 self._send_json({"error": "Not found"}, 404)
 
         except Exception as e:
-            logger.exception("API error")
+            _log_unhandled_api_error(e)
             self._send_json({"error": "Internal server error"}, 500)
 
     def do_POST(self):
@@ -567,7 +599,7 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                 self._send_json({"error": "Not found"}, 404)
 
         except Exception as e:
-            logger.exception("API error")
+            _log_unhandled_api_error(e)
             self._send_json({"error": "Internal server error"}, 500)
 
     def do_PUT(self):
@@ -612,7 +644,7 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                 self._send_json({"error": "Not found"}, 404)
 
         except Exception as e:
-            logger.exception("API error")
+            _log_unhandled_api_error(e)
             self._send_json({"error": "Internal server error"}, 500)
 
 
@@ -642,7 +674,7 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                 self._send_json({"error": "Not found"}, 404)
 
         except Exception as e:
-            logger.exception("API error")
+            _log_unhandled_api_error(e)
             self._send_json({"error": "Internal server error"}, 500)
 
     def log_message(self, format, *args):

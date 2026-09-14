@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time as _time
 import traceback
@@ -30,8 +31,9 @@ except ImportError:
     try:
         from MindForge.core.version import __version__
     except (ImportError, ValueError):
-        # 兜底值：必须与 core/version.py 的 __version__ 保持同步
-        __version__ = "5.6.1"
+        # 兜底值：仅当 core/version 完全不可导入时启用。发版时必须与
+        # core/version.py 的 __version__ 一起更新（见发版清单），否则漂移。
+        __version__ = "5.6.7"
 
 
 def _import_mindforge():
@@ -80,6 +82,16 @@ def _log(msg: str) -> None:
     """Debug output goes to stderr; never write to stdout."""
     sys.stderr.write(f"[mcp-mindforge] {msg}\n")
     sys.stderr.flush()
+
+
+# P3-07：错误详情里可能夹带绝对路径，回给客户端前做脱敏。
+_PATH_RE = re.compile(r"(?:[A-Za-z]:\\[^\s\"']+|/(?:[^\s/\"']+/)+[^\s\"']*)")
+
+
+def _safe_error_msg(exc: Exception) -> str:
+    """把异常转成可安全返回给 MCP 客户端的短消息：抹掉路径、截断超长文本。"""
+    msg = _PATH_RE.sub("<path>", str(exc))
+    return msg[:200]
 
 
 def _read_message() -> Dict[str, Any]:
@@ -683,7 +695,7 @@ def h_memory_add(mf, args: Dict[str, Any]) -> Dict[str, Any]:
         )
         return {"ok": True, "memory": _entry_to_dict(entry)}
     except ValueError as e:
-        return {"ok": False, "error": str(e)}
+        return {"ok": False, "error": _safe_error_msg(e)}
 
 
 def h_memory_search(mf, args: Dict[str, Any]) -> Dict[str, Any]:
@@ -1192,13 +1204,26 @@ def serve_forever(db_path: Optional[str] = None, key_file: Optional[str] = None,
     expected_secret = auth_secret or os.environ.get("MINDFORGE_MCP_SECRET", "")
 
     # v5.6.3 安全增强：未设置认证密钥时，MCP 服务对所有能连上的客户端开放。
-    # 若通过 HTTP/网络暴露（而非本地 stdio），这属于安全暴露面。给出一次性告警，
-    # 并提示用 MINDFORGE_MCP_SECRET 启用 shared-secret 认证（initialize 携带 _meta.authSecret）。
+    # 信任模型：MCP 走 stdin/stdout，传输层本身不认证对端——能拉起本进程或向
+    # stdin 写数据的即被视为受信本地宿主。若把它桥接到网络/多用户环境，则属于
+    # 暴露面，需要 shared-secret 认证（客户端在 initialize 携带 _meta.authSecret）。
     if not expected_secret:
+        # P2-09 加固：受管/CI 环境可设 MINDFORGE_MCP_REQUIRE_AUTH 强制 fail-closed，
+        # 避免误以无认证方式启动。
+        require_auth = os.environ.get("MINDFORGE_MCP_REQUIRE_AUTH", "").strip().lower()
+        if require_auth in ("1", "true", "yes", "on"):
+            _log(
+                "ERROR: MINDFORGE_MCP_REQUIRE_AUTH is set but MINDFORGE_MCP_SECRET "
+                "(or --auth-secret) is empty. Refusing to start an unauthenticated "
+                "MCP server."
+            )
+            return 2
         _log(
             "WARNING: MINDFORGE_MCP_SECRET not set — MCP server accepts all clients. "
-            "If this server is reachable over a network, set MINDFORGE_MCP_SECRET "
-            "to enable shared-secret authentication (client sends _meta.authSecret on initialize)."
+            "This is only safe for a local stdio host you trust. If this server is "
+            "reachable over a network, set MINDFORGE_MCP_SECRET to enable shared-secret "
+            "authentication (client sends _meta.authSecret on initialize), or set "
+            "MINDFORGE_MCP_REQUIRE_AUTH=1 to refuse startup without a secret."
         )
 
     while True:

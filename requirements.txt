@@ -9,4 +9,9 @@
 #
 # 升级策略：由 .github/dependabot.yml 每周自动提交升级 PR，
 # 人为 review 后合入，确保「数月不更新」期间依赖仍安全可控。
+#
+# P2-11 CVE 核查（2026-09）：cryptography 50.0.1 为 PyPI 当前最新版，
+# 高于已知 2026 公告的修复版本线——CVE-2026-69249（影响 42.0.0–48.0.0，
+# 49.0.0 修复）等公告的受影响区间均止于 48.x，本 pin 不受未修复 CVE 影响。
+# 下次 dependabot 升级时应重新跑 pip-audit 复核。
 cryptography==50.0.1

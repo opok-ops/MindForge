@@ -64,7 +64,12 @@ class PrivacyEngine:
     """隐私引擎"""
 
     # v5.6.2 安全修复：2FA 验证会话有效期（5 分钟）
-    _2FA_VERIFY_WINDOW = 300  # 秒
+    # P1-08 语义澄清：会话时间戳统一使用 time.monotonic()（见
+    # _verified_2fa_sessions），而非 time.time()。原因：monotonic 时钟单调递增、
+    # 不受系统墙上时钟回拨 / NTP 校正影响，攻击者无法通过调慢系统时间来延长
+    # 已授予的验证窗口。会话表仅存于内存，进程重启后自动清空（需重新验证），
+    # 因此不存在跨重启的 monotonic 基准漂移问题。
+    _2FA_VERIFY_WINDOW = 300  # 秒（按 time.monotonic() 计算的相对时长）
 
     # v5.6.5 P1 #7：过期授权的后台清理节流间隔（秒）
     _GRANT_PURGE_INTERVAL = 300
@@ -357,7 +362,8 @@ class PrivacyEngine:
         # 检查是否已注册 2FA
         if actor not in self._second_factor_token_hashes:
             return False
-        # 检查是否在验证会话有效期内
+        # 检查是否在验证会话有效期内（时间基准为 time.monotonic()）
+        # 缺省 0 表示「从未验证」：monotonic() 读数恒远大于窗口，故被正确判为过期。
         verified_at = self._verified_2fa_sessions.get(actor, 0)
         if time.monotonic() - verified_at > self._2FA_VERIFY_WINDOW:
             return False
@@ -415,7 +421,7 @@ class PrivacyEngine:
         code_hash = hashlib.sha256(code.encode()).hexdigest()
         ok = hmac.compare_digest(token_hash, code_hash)
         if ok:
-            # 验证通过，记录会话时间戳
+            # 验证通过，记录会话基准（time.monotonic，仅存内存，重启即失效）
             self._verified_2fa_sessions[actor] = time.monotonic()
         return ok
 

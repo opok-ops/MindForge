@@ -361,14 +361,15 @@ class FederatedMemory:
                 return False
 
         # v5.4.2 修复：队列大小上限，超限拒绝新消息
-        if len(self._incoming_queue) >= self._MAX_QUEUE_SIZE:
-            return False
-
-        self._incoming_queue.append({
-            "from": from_peer,
-            "data": memory_data,
-            "received_at": time.time(),
-        })
+        # P3-05 修复：容量检查与入队必须原子，否则并发 peer 可越过上限。
+        with self._fed_lock:
+            if len(self._incoming_queue) >= self._MAX_QUEUE_SIZE:
+                return False
+            self._incoming_queue.append({
+                "from": from_peer,
+                "data": memory_data,
+                "received_at": time.time(),
+            })
 
         return True
 
@@ -425,10 +426,14 @@ class FederatedMemory:
         - resolve_strategy="manual"    冲突挂起，等待人工处理（返回 None）
         未注入 conflict_resolver 时保持原有直接入库行为。
         """
-        if not self._incoming_queue:
-            return None
-
-        item = self._incoming_queue.pop(memory_index)
+        # P3-05 修复：空队列检查与出队必须原子，否则并发 accept 会竞争/越界。
+        with self._fed_lock:
+            if not self._incoming_queue:
+                return None
+            try:
+                item = self._incoming_queue.pop(memory_index)
+            except IndexError:
+                return None
 
         # v5.4.2 新增：冲突检测与解决
         if self.conflict_resolver is not None and self.storage:
@@ -454,11 +459,19 @@ class FederatedMemory:
                 return detection.get("local_memory_id")
 
         if self.storage:
+            data = item.get("data") or {}
+            content = data.get("content", "")
+            # P3-10 修复：空内容不再静默丢弃，显式记录后返回 None
+            if not isinstance(content, str) or not content.strip():
+                logger.warning("accept_incoming 丢弃空内容: from=%s", item.get("from", ""))
+                return None
+            raw_tags = data.get("tags", [])
+            tags = raw_tags if isinstance(raw_tags, list) else [str(raw_tags)]
             try:
                 entry = self.storage.add_memory(
-                    content=item["data"].get("content", ""),
-                    category=item["data"].get("category", "federated"),
-                    tags=item["data"].get("tags", []) + [f"from:{item['from']}"],
+                    content=content,
+                    category=data.get("category", "federated"),
+                    tags=tags + [f"from:{item['from']}"],
                     source_agent=f"federated:{item['from']}",
                     metadata={
                         "federated_origin": item["from"],
@@ -466,7 +479,10 @@ class FederatedMemory:
                     }
                 )
                 return entry.id
-            except (ValueError, TypeError):
+            except (ValueError, TypeError) as e:
+                # P3-10 修复：入库失败记录原因，不再静默吞掉
+                logger.warning("accept_incoming 入库失败: from=%s err=%s: %s",
+                               item.get("from", ""), type(e).__name__, e)
                 return None
 
         return None
@@ -503,15 +519,17 @@ class FederatedMemory:
                 continue
 
             # v5.4.2 修复：队列大小上限保护
-            if len(self._outgoing_queue) < self._MAX_QUEUE_SIZE:
-                self._outgoing_queue.append({
-                    "type": "search_request",
-                    "from": self.local_peer_id,
-                    "to": pid,
-                    "query": query,
-                    "max_results": max_per_peer,
-                    "timestamp": time.time(),
-                })
+            # P3-05 修复：与 share_memory 一致，容量检查与入队需在同一锁内原子完成。
+            with self._fed_lock:
+                if len(self._outgoing_queue) < self._MAX_QUEUE_SIZE:
+                    self._outgoing_queue.append({
+                        "type": "search_request",
+                        "from": self.local_peer_id,
+                        "to": pid,
+                        "query": query,
+                        "max_results": max_per_peer,
+                        "timestamp": time.time(),
+                    })
 
             # 将本地结果在活跃 peer 间分片分配（而非每个 peer 拿相同的副本）
             active_peer_ids = [pid for pid in search_peers

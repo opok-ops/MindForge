@@ -7,17 +7,12 @@
 <meta name="description" content="MindForge 交互演示：四阶段展示记忆写入、语义检索、知识关联与四层记忆架构。">
 <meta name="robots" content="noindex, follow">
 <link rel="canonical" href="https://opok-ops.github.io/MindForge/">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%2322d3ee'/%3E%3Cstop offset='52%25' stop-color='%23818cf8'/%3E%3Cstop offset='100%25' stop-color='%23a855f7'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='url(%23g)' stroke-width='2.4'/%3E%3Cpath d='M9 16a7 7 0 0 1 14 0' fill='none' stroke='url(%23g)' stroke-width='2.4' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='16' r='2.6' fill='url(%23g)'/%3E%3C/svg%3E">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="assets/fonts.css">
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-<noscript><link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet"></noscript>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%236d8dff' stroke-width='2.4'/%3E%3Cpath d='M9 16a7 7 0 0 1 14 0' fill='none' stroke='%236d8dff' stroke-width='2.4' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='16' r='2.6' fill='%236d8dff'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body class="demo-body">
 
-<svg class="sprite-host" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+<svg class="sprite-host" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden">
   <defs>
     <symbol id="d-arrow" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></symbol>
     <symbol id="d-brain" viewBox="0 0 24 24"><path d="M12 5.5A3.5 3.5 0 0 0 8.5 9v.45A3 3 0 0 0 6.5 15a3.5 3.5 0 0 0 2 3.16A3.4 3.4 0 0 0 12 19.5a3.4 3.4 0 0 0 3.5-1.34 3.5 3.5 0 0 0 2-3.16 3 3 0 0 0-2-5.55V9A3.5 3.5 0 0 0 12 5.5Z"/><path d="M12 5.5v14"/><path d="m9.6 9.6-1.4-1.4"/><path d="m14.4 9.6 1.4-1.4"/></symbol>
@@ -30,12 +25,8 @@
     <symbol id="d-play" viewBox="0 0 24 24"><path d="M7 4.5 19 12 7 19.5v-15Z"/></symbol>
     <symbol id="d-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4.5V10h-5.5"/></symbol>
     <symbol id="d-tag" viewBox="0 0 24 24"><path d="M3.5 11.5V4.5h7l9.5 9.5-7 7-9.5-9.5Z"/><circle cx="7.5" cy="8" r="1.2"/></symbol>
-    <symbol id="d-focus" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.2"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/></symbol>
   </defs>
 </svg>
-
-<canvas id="demo-canvas" aria-hidden="true" role="presentation"></canvas>
-<div class="demo-vignette" aria-hidden="true"></div>
 
 <a href="index.html" class="demo-back">
   <svg class="icon icon-sm" aria-hidden="true"><use href="#d-arrow"/></svg>
@@ -60,7 +51,7 @@
 <div class="stage" id="stage" aria-live="polite">
 
   <div class="demo-title" id="titleScreen">
-    <h1><span class="gradient-text">MindForge</span></h1>
+    <h1>MindForge</h1>
     <p>AI Agent 终身记忆系统 · 交互演示</p>
   </div>
 
@@ -135,7 +126,6 @@
   } catch (e) { reduced = false; }
 
   /* ---------------- DOM ---------------- */
-  var canvas = document.getElementById('demo-canvas');
   var input = document.getElementById('searchInput');
   var searchBtn = document.getElementById('searchBtn');
   var searchForm = document.getElementById('searchBox');
@@ -156,16 +146,11 @@
                  'line1', 'line2', 'layerStack'];
 
   /* ---------------- 状态机 ---------------- */
-  var TICK = 90;                        // 轮询步长（ms），用于支持暂停
-  var ABORT = { aborted: true };        // 中止信号
+  var TICK = 90;
+  var ABORT = { aborted: true };
   var state = { paused: false, generation: 0, step: 0 };
   var TOTAL_STEPS = 5;
 
-  /**
-   * 可暂停、可中止的等待。
-   * @param {number} ms 等待时长
-   * @return {Promise<void>}
-   */
   function sleep(ms) {
     return new Promise(function (resolve, reject) {
       var gen = state.generation;
@@ -185,33 +170,20 @@
     });
   }
 
-  /**
-   * 显示元素。
-   * @param {string} id 元素 id
-   */
   function show(id) {
     var el = document.getElementById(id);
     if (el) { el.classList.add('is-on'); }
   }
 
-  /**
-   * 隐藏元素。
-   * @param {string} id 元素 id
-   */
   function hide(id) {
     var el = document.getElementById(id);
     if (el) { el.classList.remove('is-on'); }
   }
 
-  /** 隐藏全部元素。 */
   function hideAll() {
     for (var i = 0; i < ALL_IDS.length; i++) { hide(ALL_IDS[i]); }
   }
 
-  /**
-   * 更新进度条。
-   * @param {number} step 当前阶段序号（0 起）
-   */
   function setStep(step) {
     state.step = step;
     var pct = Math.max(0, Math.min(100, Math.round(((step + 1) / TOTAL_STEPS) * 100)));
@@ -219,13 +191,6 @@
     progress.setAttribute('aria-valuenow', String(pct));
   }
 
-  /**
-   * 逐字打字效果。
-   * @param {HTMLInputElement} el 输入框
-   * @param {string} text 目标文本
-   * @param {number} perChar 每字间隔
-   * @return {Promise<void>}
-   */
   function typeText(el, text, perChar) {
     var gen = state.generation;
     return new Promise(function (resolve, reject) {
@@ -249,7 +214,6 @@
     });
   }
 
-  /** 计算并绘制知识图谱节点之间的连线。 */
   function drawLinks() {
     var r1 = node1.getBoundingClientRect();
     var r2 = node2.getBoundingClientRect();
@@ -266,14 +230,6 @@
     placeLink(line2, x2, y2, x3, y3);
   }
 
-  /**
-   * 定位一条连线。
-   * @param {HTMLElement} el 连线元素
-   * @param {number} ax 起点 x
-   * @param {number} ay 起点 y
-   * @param {number} bx 终点 x
-   * @param {number} by 终点 y
-   */
   function placeLink(el, ax, ay, bx, by) {
     var dx = bx - ax;
     var dy = by - ay;
@@ -286,7 +242,6 @@
 
   /* ---------------- 演示主流程 ---------------- */
 
-  /** 单轮演示。 */
   function runDemo() {
     var gen = state.generation;
 
@@ -298,15 +253,12 @@
     setStep(0);
 
     return Promise.resolve()
-      // —— 标题 ——
       .then(function () { check(); show('titleScreen'); return sleep(2600); })
       .then(function () { check(); hide('titleScreen'); return sleep(500); })
 
-      // —— Phase 1：添加记忆 ——
       .then(function () { check(); setStep(1); show('phase1'); return sleep(400); })
       .then(function () { check(); show('card1'); return sleep(2600); })
 
-      // —— Phase 2：语义检索 ——
       .then(function () { check(); setStep(2); show('phase2'); return sleep(300); })
       .then(function () { check(); show('searchBox'); return sleep(900); })
       .then(function () { check(); return typeText(input, '关于数据库优化的建议', 95); })
@@ -320,14 +272,12 @@
         return sleep(2700);
       })
 
-      // —— Phase 3：知识关联 ——
       .then(function () { check(); setStep(3); show('phase3'); return sleep(300); })
       .then(function () { check(); show('node1'); return sleep(400); })
       .then(function () { check(); show('node2'); return sleep(400); })
       .then(function () { check(); show('node3'); return sleep(400); })
       .then(function () { check(); drawLinks(); show('line1'); show('line2'); return sleep(3200); })
 
-      // —— Phase 4：多层架构（清场，只留层级栈，避免多阶段元素互相遮挡） ——
       .then(function () {
         check();
         hide('card1'); hide('card2'); hide('searchBox');
@@ -338,7 +288,6 @@
       .then(function () { check(); setStep(4); show('phase4'); return sleep(300); })
       .then(function () { check(); show('layerStack'); return sleep(4200); })
 
-      // —— 收尾 ——
       .then(function () { check(); hideAll(); if (scoreBar) { scoreBar.style.width = '0%'; } return sleep(900); })
       .then(function () {
         check();
@@ -351,7 +300,6 @@
       });
   }
 
-  /** 重启演示。 */
   function replay() {
     state.generation++;
     state.paused = false;
@@ -362,7 +310,6 @@
     window.setTimeout(function () { runDemo(); }, 260);
   }
 
-  /** 同步暂停按钮状态（图标切换交由 CSS 依据 aria-pressed 处理）。 */
   function syncPauseButton() {
     btnPause.setAttribute('aria-pressed', state.paused ? 'true' : 'false');
     btnPause.setAttribute('aria-label', state.paused ? '继续演示' : '暂停演示');
@@ -376,10 +323,8 @@
 
   btnReplay.addEventListener('click', replay);
 
-  // 表单提交不刷新页面
   searchForm.addEventListener('submit', function (evt) { evt.preventDefault(); });
 
-  // 手动搜索：跳到检索结果
   searchBtn.addEventListener('click', function () {
     if (!input.value) { return; }
     show('card2');
@@ -390,11 +335,6 @@
     if (evt.key === 'Enter') { evt.preventDefault(); searchBtn.click(); }
   });
 
-  /**
-   * 判断事件目标是否处于文本输入状态（此时不拦截快捷键）。
-   * @param {Event} evt 键盘事件
-   * @return {boolean}
-   */
   function isTypingTarget(evt) {
     var t = evt.target;
     if (!t || !t.tagName) { return false; }
@@ -412,108 +352,11 @@
     }
   });
 
-  /* ---------------- 背景粒子场（轻量版） ---------------- */
-  var ctx = canvas.getContext('2d');
-  var W = 0, H = 0, dpr = 1;
-  var parts = [];
-  var rafId = 0;
-
-  /** 重建画布与粒子。 */
-  function resetField() {
-    W = window.innerWidth;
-    H = window.innerHeight;
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = Math.round(W * dpr);
-    canvas.height = Math.round(H * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-    var cap = W < 768 ? 34 : (W < 1280 ? 58 : 88);
-    var count = Math.max(18, Math.min(Math.round((W * H) / 22000), cap));
-    parts = [];
-    for (var i = 0; i < count; i++) {
-      parts.push({
-        x: Math.random() * W,
-        y: Math.random() * H,
-        vx: (Math.random() - 0.5) * 0.3,
-        vy: (Math.random() - 0.5) * 0.3,
-        r: 0.8 + Math.random() * 1.3,
-        a: 0.18 + Math.random() * 0.3
-      });
-    }
-    if (reduced) { drawField(); }
-  }
-
-  /** 绘制一帧粒子网络。 */
-  function drawField() {
-    ctx.clearRect(0, 0, W, H);
-    var link = W < 768 ? 96 : 124;
-    var link2 = link * link;
-
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = 'rgba(129, 178, 220, 0.07)';
-    ctx.beginPath();
-    for (var i = 0; i < parts.length; i++) {
-      for (var j = i + 1; j < parts.length; j++) {
-        var dx = parts[i].x - parts[j].x;
-        var dy = parts[i].y - parts[j].y;
-        if (dx * dx + dy * dy < link2) {
-          ctx.moveTo(parts[i].x, parts[i].y);
-          ctx.lineTo(parts[j].x, parts[j].y);
-        }
-      }
-    }
-    ctx.stroke();
-
-    for (var k = 0; k < parts.length; k++) {
-      var p = parts[k];
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(150, 190, 240, ' + p.a.toFixed(3) + ')';
-      ctx.fill();
-    }
-  }
-
-  /** 动画循环。 */
-  function loop() {
-    for (var i = 0; i < parts.length; i++) {
-      var p = parts[i];
-      p.x += p.vx;
-      p.y += p.vy;
-      if (p.x < -20) { p.x = W + 20; } else if (p.x > W + 20) { p.x = -20; }
-      if (p.y < -20) { p.y = H + 20; } else if (p.y > H + 20) { p.y = -20; }
-    }
-    drawField();
-    rafId = window.requestAnimationFrame(loop);
-  }
-
-  /** 启动背景动画。 */
-  function startField() {
-    if (reduced || rafId) { return; }
-    rafId = window.requestAnimationFrame(loop);
-  }
-
-  /** 停止背景动画。 */
-  function stopField() {
-    if (rafId) { window.cancelAnimationFrame(rafId); rafId = 0; }
-  }
-
-  window.addEventListener('resize', function () {
-    resetField();
-    if (document.getElementById('line1').classList.contains('is-on')) { drawLinks(); }
-  }, { passive: true });
-
-  document.addEventListener('visibilitychange', function () {
-    if (document.hidden) { stopField(); } else { startField(); }
-  });
-
   /* ---------------- 启动 ---------------- */
-  resetField();
-  startField();
   syncPauseButton();
   setStep(0);
 
   if (reduced) {
-    // 尊重系统「减少动效」设置：只呈现静态终局，不自动播放
     show('titleScreen');
     show('layerStack');
     btnPause.disabled = true;

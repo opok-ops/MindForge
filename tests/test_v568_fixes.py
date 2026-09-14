@@ -191,18 +191,38 @@ class TestStaticStructure(unittest.TestCase):
         self.assertTrue(has_top_import, "cli/main.py 顶层应有 import os（P0-01）")
 
     def test_no_beyond_toplevel_relative_imports(self):
-        """P0-02/P0-03/P1-01：`core`/`adapters` 已是顶层包，`from ..` 必抛 ImportError。"""
-        targets = [
-            "cli/main.py",
-            "adapters/claude_adapter.py",
-            "adapters/generic_api.py",
-            "adapters/openclaw_adapter.py",
-        ]
-        for rel in targets:
-            code = _code_text(rel)
-            bad = re.findall(r"^\s*from\s+\.\.[\w.]*\s+import\b", code, re.M)
-            bad += re.findall(r"^\s*import\s+\.\.[\w.]*", code, re.M)
-            self.assertEqual(bad, [], f"{rel} 仍含越界相对导入：{bad}")
+        """P0-02/P0-03/P1-01：`core`/`modules`/`adapters`/`cli` 都已是顶层包，
+        `from ..x` 必抛 ``ImportError: attempted relative import beyond top-level package``。
+
+        早期版本只扫 4 个显式列出的文件，因此漏掉了 ``core/mindforge.py`` 里
+        10 处「`try: from ..modules.*` → `except ImportError: from modules.*`」。
+        那种写法虽被 except 兜住、功能不受影响，但每次首次访问都要靠抛异常走兜底，
+        且会掩盖内部真实的 ImportError。v5.6.8 收尾一并折叠为绝对导入，
+        这里改成**全仓库 AST 扫描**（按语法树判定 level >= 2，避免把注释/字符串里的
+        `from ..` 误判），防止同类写法再次混入。
+        """
+        offenders = []
+        for path in sorted(_REPO.rglob("*.py")):
+            parts = path.parts
+            if ".git" in parts or "__pycache__" in parts:
+                continue
+            try:
+                tree = ast.parse(path.read_text(encoding="utf-8"))
+            except (SyntaxError, UnicodeDecodeError) as exc:  # pragma: no cover
+                self.fail(f"{path} 无法解析：{exc}")
+            rel = path.relative_to(_REPO)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom) and node.level >= 2:
+                    offenders.append(f"{rel}:{node.lineno}  from ..{node.module or ''}")
+                elif isinstance(node, ast.Import):
+                    for alias in node.names:
+                        if alias.name.startswith(".."):
+                            offenders.append(f"{rel}:{node.lineno}  import {alias.name}")
+        self.assertEqual(
+            offenders,
+            [],
+            "存在越界相对导入（顶层包内必然 ImportError）：\n" + "\n".join(offenders),
+        )
 
     def test_no_undefined_build_config_call(self):
         """P0-02：cmd_rekey 曾调用从未定义的 _build_config。"""

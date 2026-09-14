@@ -7,7 +7,9 @@ All notable changes to MindForge will be documented in this file.
 
 一轮**命令入口可用性**缺陷修复：3 个 CLI 命令（`init` / `rekey` / `backup-restore`）与 3 个适配器
 此前因「越界相对导入」与「未定义名称」在调用时**必然崩溃**，本轮全部修复。另修复 POSIX 下恢复
-加密备份的 NameError（兼具安全影响），并收敛若干残留的版本号硬编码。不涉及新依赖、不改变对外数据契约。
+加密备份的 NameError（兼具安全影响），并收敛若干残留的版本号硬编码。收尾阶段又清理了
+`core/mindforge.py` 里 10 处「恒抛异常再兜底」的相对导入死代码，并把官网同步到 v5.6.8。
+不涉及新依赖、不改变对外数据契约。
 
 ### Fixed
 - **P0 `init` 加密模式必然 NameError（cli/main.py）**：`cmd_init` 读取 `os.environ["MINDFORGE_PASSWORD"]`
@@ -41,13 +43,25 @@ All notable changes to MindForge will be documented in this file.
   `"restore"` / `"backup"` 键。
 - **P3 `cmd_agent_purge` 无效条件分支（cli/main.py）**：`c(..., "bold" if not dry_run else "bold")`
   两个分支取值相同，简化为 `"bold"`。
+- **P3 死代码：`core/mindforge.py` 10 处「try 相对导入 → except 绝对导入」（core/mindforge.py）**：
+  `from ..modules.*` 写在 `try` 首分支，因 `core` 已是顶层包而**恒抛** `ImportError`，于是 10 条
+  懒加载路径（记忆演化、多 Agent、联邦 ACL、共享冲突、联邦网络、意图路由、冲突检测、技能抽取、
+  混合检索、会话焦点）每次首次访问都要靠抛异常改走 `except` 兜底。功能虽被兜住，但属异常驱动的
+  控制流，且会掩盖模块内部真实的 ImportError。现全部折叠为直接绝对导入，10 条路径对外行为不变。
+
+### Docs
+- **官网未随 v5.6.7 / v5.6.8 发版同步（website/index.html）**：品牌徽标、hero 徽标、JSON-LD 的
+  `softwareVersion`、安装示例输出、开发者板块文案、首页统计数字与更新日志均仍停留在 v5.6.6，
+  测试用例数也还是 608。现同步至 v5.6.8，补齐 v5.6.7 / v5.6.8 两条更新日志，测试用例数更新为 650。
 
 ### Tests
 - 新增 `tests/test_v568_fixes.py`（27 项）：`init`/`rekey`/`backup-restore` 三条命令的**真实子进程端到端**回归
   （这 3 条命令此前 100% 崩溃，纯静态扫描抓不到）、`restore_backup` 作用域内 `import os` 校验、
-  适配器导入、event_bus / openclaw 版本号取自真值、越界相对导入静态扫描、
+  适配器导入、event_bus / openclaw 版本号取自真值、**全仓库 AST 越界相对导入扫描**、
   CLI 分发表重复键与「引用了未定义命令函数」AST 校验、模块级重复定义校验、
   以及 hybrid_search 大小写保留的行为断言。测试套件由 623 项增至 **650 项，全部通过**。
+  注：越界相对导入扫描早前只覆盖 4 个显式列出的文件，因此漏掉了 `core/mindforge.py` 的 10 处
+  兜底写法；本轮改为遍历全仓库 `.py` 并按语法树（`ImportFrom.level >= 2`）判定，避免再次漏检。
 
 
 ## [5.6.7] - 2026-09-14

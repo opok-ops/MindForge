@@ -3699,10 +3699,7 @@ class MindForge:
         提供记忆巩固（短期→长期）、遗忘曲线计算等功能。
         """
         if self._evolution is None:
-            try:
-                from ..modules.evolution import MemoryEvolution
-            except (ImportError, ValueError):
-                from modules.evolution import MemoryEvolution
+            from modules.evolution import MemoryEvolution
             self._evolution = MemoryEvolution(self._storage)
         return self._evolution
 
@@ -4745,10 +4742,7 @@ class MindForge:
         隐私护栏（PRIVATE/STRICT 禁止共享）与冲突解决（last-write-wins）。
         """
         if self._multi_agent is None:
-            try:
-                from ..modules.multi_agent import MultiAgentMemoryManager
-            except (ImportError, ValueError):
-                from modules.multi_agent import MultiAgentMemoryManager
+            from modules.multi_agent import MultiAgentMemoryManager
             self._multi_agent = MultiAgentMemoryManager(self._storage)
         return self._multi_agent
 
@@ -4762,10 +4756,7 @@ class MindForge:
         allow/deny 规则，支持优先级、信任阈值与过期时间；默认拒绝。
         """
         if self._federated_acl is None:
-            try:
-                from ..modules.federated_acl import FederatedACLManager
-            except (ImportError, ValueError):
-                from modules.federated_acl import FederatedACLManager
+            from modules.federated_acl import FederatedACLManager
             self._federated_acl = FederatedACLManager(self._storage)
         return self._federated_acl
 
@@ -4777,10 +4768,7 @@ class MindForge:
         lww（版本+时间戳决胜）/ keep_both（分支保留）/ 人工挂起。
         """
         if self._share_conflict is None:
-            try:
-                from ..modules.share_conflict import SharedConflictResolver
-            except (ImportError, ValueError):
-                from modules.share_conflict import SharedConflictResolver
+            from modules.share_conflict import SharedConflictResolver
             self._share_conflict = SharedConflictResolver(self._storage)
         return self._share_conflict
 
@@ -4793,10 +4781,7 @@ class MindForge:
         自动检测共享记忆冲突。
         """
         if self._federated is None:
-            try:
-                from ..modules.federated import FederatedMemory
-            except (ImportError, ValueError):
-                from modules.federated import FederatedMemory
+            from modules.federated import FederatedMemory
             self._federated = FederatedMemory(
                 storage=self._storage,
                 acl=self.federated_acl,
@@ -4812,10 +4797,7 @@ class MindForge:
 
         三层路由：规则正则 → 关键词加权 → （可选）LLM 兜底。
         """
-        try:
-            from ..modules.intent_router import IntentRouter
-        except (ImportError, ValueError):
-            from modules.intent_router import IntentRouter
+        from modules.intent_router import IntentRouter
         if self._intent_router is None:
             self._intent_router = IntentRouter()
         result = self._intent_router.classify((text or "")[:4096], force_override=force)
@@ -4829,10 +4811,7 @@ class MindForge:
                        limit: int = 500,
                        apply_decay: bool = False) -> Dict[str, Any]:
         """扫描记忆中的矛盾（反义词/属性值/时间线）并可自动衰减（v5.3.9 新增）"""
-        try:
-            from ..modules.conflict_detector import ConflictDetector
-        except (ImportError, ValueError):
-            from modules.conflict_detector import ConflictDetector
+        from modules.conflict_detector import ConflictDetector
         entries = self._storage.list_memories(
             category=category, limit=max(1, min(5000, int(limit))), offset=0,
         )
@@ -4879,10 +4858,7 @@ class MindForge:
                        limit: int = 2000,
                        min_cluster_size: int = 2) -> Dict[str, Any]:
         """从记忆中抽取可复用的技能模板（v5.3.9 新增）"""
-        try:
-            from ..modules.skill_extractor import SkillExtractor
-        except (ImportError, ValueError):
-            from modules.skill_extractor import SkillExtractor
+        from modules.skill_extractor import SkillExtractor
         entries = self._storage.list_memories(
             category=category, limit=max(1, min(10000, int(limit))), offset=0,
         )
@@ -4909,10 +4885,7 @@ class MindForge:
                         expand: bool = True,
                         rerank: bool = True) -> Dict[str, Any]:
         """混合检索增强版：查询扩展 + 三路召回 + Cross-Encoder 重排（v5.3.9 新增）"""
-        try:
-            from ..modules.hybrid_search import QueryExpander, CrossEncoderReranker
-        except (ImportError, ValueError):
-            from modules.hybrid_search import QueryExpander, CrossEncoderReranker
+        from modules.hybrid_search import QueryExpander, CrossEncoderReranker
 
         q = (query or "")[:2048]
         expansion = None
@@ -4981,10 +4954,7 @@ class MindForge:
 
         messages: [{id, role, content, timestamp}]
         """
-        try:
-            from ..modules.session_focus import SessionFocus
-        except (ImportError, ValueError):
-            from modules.session_focus import SessionFocus
+        from modules.session_focus import SessionFocus
         engine = SessionFocus(max_messages_per_window=max(5, int(window_size)))
         summary = engine.summarize(messages or [], window_size=max(5, int(window_size)))
         out = summary.to_dict()

@@ -44,9 +44,12 @@
   --shadow-sm: 0 10px 30px -18px rgba(0, 0, 0, 0.7);
 
   /* type */
-  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+  --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
           "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
-  --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Roboto Mono", Menlo,
+  --display: "Sora", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+          "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC",
+          system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", "Roboto Mono", Menlo,
           Consolas, "Liberation Mono", monospace;
 
   --maxw: 1160px;
@@ -174,7 +177,7 @@ a { color: inherit; text-decoration: none; }
   width: 100%; max-width: var(--maxw); margin: 0 auto; padding: 0 24px;
   display: flex; align-items: center; gap: 18px;
 }
-.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; letter-spacing: .02em; }
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 700; font-size: 17px; letter-spacing: .02em; }
 .brand-logo { width: 28px; height: 28px; display: grid; place-items: center; }
 .brand-logo svg { width: 100%; height: 100%; }
 .brand-ver {
@@ -262,6 +265,7 @@ a { color: inherit; text-decoration: none; }
 @keyframes pulse { 50% { opacity: .35; } }
 
 .hero-title {
+  font-family: var(--display);
   font-size: clamp(40px, 7vw, 76px); line-height: 1.04; font-weight: 800;
   letter-spacing: -0.02em; margin-bottom: 22px;
 }
@@ -307,7 +311,7 @@ a { color: inherit; text-decoration: none; }
   border-radius: var(--r-pill); padding: 5px 13px; margin-bottom: 18px; letter-spacing: .03em;
 }
 .tag-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--brand-2); box-shadow: 0 0 8px var(--brand-2); }
-.section-head h2 { font-size: clamp(28px, 4vw, 40px); font-weight: 800; letter-spacing: -0.02em; line-height: 1.15; }
+.section-head h2 { font-family: var(--display); font-size: clamp(28px, 4vw, 40px); font-weight: 800; letter-spacing: -0.02em; line-height: 1.15; }
 .section-head p { color: var(--text-dim); margin-top: 16px; font-size: 16.5px; line-height: 1.7; }
 .hl { color: var(--text); font-weight: 600; }
 

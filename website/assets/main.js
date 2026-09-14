@@ -1,204 +1,97 @@
-/* ============================================================
-   MindForge — assets/main.js
-   原生 JS · IIFE 隔离作用域 · 无粒子动画 · 无第三方依赖
-   模块
-   01 导航：吸顶态 / 抽屉菜单 / 锚点高亮
-   02 代码复制
-   03 版本号与统计数字注入
-   ============================================================ */
-
+/* MindForge — minimal, dependency-free interactions.
+   No frameworks, no external fonts. GPU-friendly only. */
 (function () {
   'use strict';
+  var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  var hasIO = typeof window.IntersectionObserver === 'function';
-
-  function qs(selector, scope) {
-    return (scope || document).querySelector(selector);
+  /* ---- Nav: scrolled state ---- */
+  var nav = document.querySelector('.nav');
+  function onScroll() {
+    if (nav) nav.classList.toggle('scrolled', window.scrollY > 12);
   }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
 
-  function qsa(selector, scope) {
-    return Array.prototype.slice.call((scope || document).querySelectorAll(selector));
-  }
-
-  /* ============================ 01 导航 ============================ */
-
-  /** 吸顶态：用哨兵元素的 IntersectionObserver 代替 scroll 监听。 */
-  function initNavScrollState() {
-    var nav = qs('.nav');
-    var sentinel = qs('#nav-sentinel');
-    if (!nav || !sentinel || !hasIO) { return; }
-
-    var io = new IntersectionObserver(function (entries) {
-      if (entries[0].isIntersecting) {
-        nav.classList.remove('is-scrolled');
-      } else {
-        nav.classList.add('is-scrolled');
-      }
-    }, { threshold: 0 });
-    io.observe(sentinel);
-  }
-
-  /** 移动端抽屉菜单。 */
-  function initNavDrawer() {
-    var toggle = qs('#nav-toggle');
-    var drawer = qs('#nav-drawer');
-    if (!toggle || !drawer) { return; }
-
-    var isOpen = false;
-
-    function setOpen(next) {
-      isOpen = next;
-      toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-      drawer.classList.toggle('is-open', isOpen);
-      drawer.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+  /* ---- Mobile drawer ---- */
+  var toggle = document.getElementById('nav-toggle');
+  var drawer = document.getElementById('nav-drawer');
+  if (toggle && drawer) {
+    function setDrawer(open) {
+      toggle.setAttribute('aria-expanded', String(open));
+      drawer.classList.toggle('open', open);
+      drawer.setAttribute('aria-hidden', String(!open));
     }
-
-    toggle.addEventListener('click', function () { setOpen(!isOpen); });
-
-    qsa('a[href^="#"]', drawer).forEach(function (link) {
-      link.addEventListener('click', function () { setOpen(false); });
+    toggle.addEventListener('click', function () {
+      setDrawer(toggle.getAttribute('aria-expanded') !== 'true');
     });
-
-    document.addEventListener('keydown', function (evt) {
-      if (evt.key === 'Escape' && isOpen) { setOpen(false); toggle.focus(); }
+    drawer.querySelectorAll('a').forEach(function (a) {
+      a.addEventListener('click', function () { setDrawer(false); });
     });
-
-    document.addEventListener('click', function (evt) {
-      if (!isOpen) { return; }
-      if (drawer.contains(evt.target) || toggle.contains(evt.target)) { return; }
-      setOpen(false);
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') setDrawer(false);
     });
-
-    setOpen(false);
   }
 
-  /** 当前区块对应的导航锚点高亮。 */
-  function initActiveAnchor() {
-    var links = qsa('.nav-links a[href^="#"]');
-    if (!links.length || !hasIO) { return; }
-
-    var map = {};
-    var targets = [];
-    links.forEach(function (link) {
-      var id = link.getAttribute('href').slice(1);
-      if (!id) { return; }
-      var section = document.getElementById(id);
-      if (!section) { return; }
-      map[id] = link;
-      targets.push(section);
+  /* ---- Copy buttons ---- */
+  document.querySelectorAll('.copy-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var sel = btn.getAttribute('data-copy');
+      var target = sel && document.querySelector(sel);
+      if (!target) return;
+      var text = target.innerText;
+      var done = function () {
+        var label = btn.querySelector('.copy-label');
+        var prev = label ? label.textContent : '';
+        btn.classList.add('copied');
+        if (label) label.textContent = '已复制';
+        setTimeout(function () {
+          btn.classList.remove('copied');
+          if (label) label.textContent = prev || '复制';
+        }, 1600);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(function () {});
+      } else {
+        var ta = document.createElement('textarea');
+        ta.value = text; document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); done(); } catch (e) {}
+        document.body.removeChild(ta);
+      }
     });
-    if (!targets.length) { return; }
+  });
 
+  /* ---- Reveal on scroll ---- */
+  var revealEls = document.querySelectorAll('.reveal');
+  if (reduceMotion || !('IntersectionObserver' in window)) {
+    revealEls.forEach(function (el) { el.classList.add('in'); });
+  } else {
     var io = new IntersectionObserver(function (entries) {
       entries.forEach(function (entry) {
-        if (!entry.isIntersecting) { return; }
-        var link = map[entry.target.id];
-        if (!link) { return; }
-        links.forEach(function (l) { l.classList.remove('is-active'); });
-        link.classList.add('is-active');
-      });
-    }, { rootMargin: '-40% 0px -55% 0px', threshold: 0 });
-
-    targets.forEach(function (t) { io.observe(t); });
-  }
-
-  /* ============================ 02 代码复制 ============================ */
-
-  function initCopyButtons() {
-    var buttons = qsa('[data-copy]');
-    if (!buttons.length) { return; }
-
-    buttons.forEach(function (btn) {
-      var selector = btn.getAttribute('data-copy');
-      var target = selector ? qs(selector) : null;
-      if (!target) { return; }
-
-      var label = btn.querySelector('.copy-label');
-      var defaultText = label ? label.textContent : '';
-      var timer = null;
-
-      function flash(ok) {
-        btn.classList.add('is-done');
-        if (label) { label.textContent = ok ? '已复制' : '复制失败'; }
-        if (timer) { window.clearTimeout(timer); }
-        timer = window.setTimeout(function () {
-          btn.classList.remove('is-done');
-          if (label) { label.textContent = defaultText; }
-        }, 1900);
-      }
-
-      btn.addEventListener('click', function () {
-        var text = target.textContent || target.innerText || '';
-        text = text.replace(/\s+$/, '');
-
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(text).then(function () { flash(true); }, function () { flash(false); });
-          return;
-        }
-        try {
-          var ta = document.createElement('textarea');
-          ta.value = text;
-          ta.setAttribute('readonly', 'readonly');
-          ta.style.position = 'fixed';
-          ta.style.top = '-1000px';
-          ta.style.opacity = '0';
-          document.body.appendChild(ta);
-          ta.select();
-          var ok = document.execCommand('copy');
-          document.body.removeChild(ta);
-          flash(ok);
-        } catch (err) {
-          flash(false);
+        if (entry.isIntersecting) {
+          entry.target.classList.add('in');
+          io.unobserve(entry.target);
         }
       });
-    });
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
+    revealEls.forEach(function (el) { io.observe(el); });
   }
 
-  /* ============================ 03 版本与统计注入 ============================ */
-
-  /** 从 JSON-LD 读取 softwareVersion / toolCount / moduleCount / testCount 并注入页面。 */
-  function injectMeta() {
-    var data = null;
-    try {
-      var ld = qs('script[type="application/ld+json"]');
-      if (ld) { data = JSON.parse(ld.textContent); }
-    } catch (e) { data = null; }
-    if (!data) { return; }
-
-    if (data.softwareVersion) {
-      qsa('[data-ver]').forEach(function (el) {
-        var v = data.softwareVersion;
-        el.textContent = el.dataset.verTpl ? el.dataset.verTpl.replace('{v}', v) : 'v' + v;
+  /* ---- Active nav link on scroll ---- */
+  var navLinks = Array.prototype.slice.call(document.querySelectorAll('.nav-links a'));
+  var sections = navLinks
+    .map(function (a) { return document.querySelector(a.getAttribute('href')); })
+    .filter(Boolean);
+  if (sections.length && 'IntersectionObserver' in window) {
+    var spy = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          var id = entry.target.id;
+          navLinks.forEach(function (a) {
+            a.classList.toggle('active', a.getAttribute('href') === '#' + id);
+          });
+        }
       });
-    }
-
-    var nums = {
-      toolCount: data.toolCount,
-      moduleCount: data.moduleCount,
-      testCount: data.testCount
-    };
-    qsa('[data-num]').forEach(function (el) {
-      var key = el.dataset.num;
-      if (nums[key] != null) { el.textContent = String(nums[key]); }
-    });
-  }
-
-  /* ============================ 启动 ============================ */
-
-  function boot() {
-    initNavScrollState();
-    initNavDrawer();
-    initActiveAnchor();
-    initCopyButtons();
-    injectMeta();
-
-    var yearEl = qs('#foot-year');
-    if (yearEl) { yearEl.textContent = String(new Date().getFullYear()); }
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', boot);
-  } else {
-    boot();
+    }, { rootMargin: '-45% 0px -50% 0px' });
+    sections.forEach(function (s) { spy.observe(s); });
   }
 })();

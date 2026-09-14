@@ -65,6 +65,7 @@ Commands:
 """
 
 import sys
+import os
 import json
 import sqlite3
 import argparse
@@ -102,7 +103,7 @@ except ImportError:
     except (ImportError, ValueError):
         # 兜底值：仅当 core/version 完全不可导入时启用。发版时必须与
         # core/version.py 的 __version__ 一起更新（见发版清单），否则漂移。
-        __version__ = "5.6.7"
+        __version__ = "5.6.8"
 
 # 懒加载 modules：仅在对应命令执行时才导入，大幅加速 CLI 启动
 _modules_cache = {}
@@ -1724,22 +1725,6 @@ def cmd_personality(args):
             bar = "█" * int(score * 20)
             print(f"  {topic:<20} {bar} {score:.2f}")
 
-    cm.close()
-    return 0
-
-
-def cmd_backup(args):
-    """备份"""
-    cm = _get_memory(args)
-    try:
-        backup_dir = _validate_path(args.output or "./data/backup", allow_symlinks=False)
-    except ValueError as e:
-        print(c(f"❌ 路径校验失败: {e}", "red"))
-        cm.close()
-        return 1
-    backup_path = cm.backup(str(backup_dir))
-    print(c(f"✅ 备份已创建：{backup_path}", "green"))
-    print(f"   大小：{format_size(backup_path.stat().st_size)}")
     cm.close()
     return 0
 
@@ -5090,7 +5075,6 @@ def _main_dispatch(args, parser=None):
         "audit": cmd_audit,
         "recent": cmd_recent,
         "trash": cmd_trash,
-        "restore": cmd_restore,
         "consolidate": cmd_consolidate,
         "graph": cmd_graph,
         "personality": cmd_personality,
@@ -5131,7 +5115,6 @@ def _main_dispatch(args, parser=None):
         "char-interaction": cmd_char_interaction,
         "quality": cmd_quality,
         "similar": cmd_similar,
-        "backup": cmd_backup,
         "backup-restore": cmd_backup_restore,
         "gc": cmd_gc,
         "export": cmd_export,
@@ -5542,7 +5525,7 @@ def cmd_import_url(args):
 
         conn.request("GET", path, headers={
             "Host": parsed.hostname,
-            "User-Agent": "MindForge/5.4 URL Importer",
+            "User-Agent": f"MindForge/{__version__} URL Importer",
         })
         resp = conn.getresponse()
         content = resp.read(5 * 1024 * 1024).decode("utf-8", errors="ignore")
@@ -5747,7 +5730,7 @@ def cmd_export_json(args):
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     export_data = {
-        "version": "5.1.5",
+        "version": __version__,
         "export_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "total": len(entries),
         "memories": []
@@ -6237,10 +6220,19 @@ def cmd_rekey(args):
     import getpass
 
     # 检查是否启用加密
-    from ..core.encryption import get_key_params, PBKDF2_ITERATIONS_CURRENT
+    # v5.6.8 修复：原为 `from ..core.encryption import ...`——`core` 已是顶层包，
+    # `..` 越界相对导入直接抛 ImportError，使 rekey 命令必然崩溃。
+    # 改为与其余命令一致的绝对导入。
+    from core.encryption import get_key_params, PBKDF2_ITERATIONS_CURRENT
 
     # 先拿到配置判断加密状态
-    config = _build_config(args)
+    # v5.6.8 修复：原调用 `_build_config(args)`，该函数从未定义（NameError）。
+    # 改为与 _get_memory 完全一致的配置构造：key_file 存在即视为加密库。
+    config = MemoryConfig(
+        db_path=args.db_path,
+        key_file=args.key_file,
+        encrypted=Path(args.key_file).exists(),
+    )
     if not config.encrypted:
         print(c("❌ 加密未启用，无法执行 rekey", "red"))
         return 1
@@ -6314,7 +6306,9 @@ def cmd_rekey(args):
     print(c("🔄 正在验证旧密码...", "cyan"))
 
     # 通过环境变量传递密码给 _get_memory
-    import os
+    # v5.6.8 修复：移除函数体内的 `import os`。局部导入会让 `os` 在整个 cmd_rekey
+    # 作用域内变成局部名，导致前面的 os.environ.get(...) 抛 UnboundLocalError。
+    # 现统一使用模块顶部的 import os。
     os.environ["MINDFORGE_PASSWORD"] = old_password
 
     try:
@@ -6405,8 +6399,10 @@ def cmd_backup(args):
 
 def cmd_backup_restore(args):
     """从备份文件恢复（v5.6.0 新增）"""
-    from ..core.mindforge import MindForge
-    from ..core.types import MemoryConfig
+    # v5.6.8 修复：删除两处越界相对导入（`from ..core.mindforge` / `from ..core.types`）。
+    # `core` 已是顶层包，`..` 越界导入在本函数被调用时直接抛 ImportError，
+    # 使 `backup-restore` 命令完全不可用；且 MindForge / MemoryConfig 已在模块顶部
+    # 从 core 导入，此处属重复导入。
 
     backup_file = Path(args.backup_file)
     if not backup_file.exists():
@@ -8704,7 +8700,7 @@ def cmd_agent_purge(args):
     """清空指定 Agent 的全部记忆（v5.3.2 新增，高危操作）"""
     cm = _get_memory(args)
     dry_run = not args.force
-    print(c("\n⚠️  Agent 记忆清空（v5.3.2）", "bold" if not dry_run else "bold"))
+    print(c("\n⚠️  Agent 记忆清空（v5.3.2）", "bold"))
     print("=" * 60)
     print(f"  Agent ID:   {args.agent}")
     print(f"  模式:       {'❌ 实际执行！会永久删除！' if not dry_run else '🔍 预览模式 (加 --force 实际执行)'}")

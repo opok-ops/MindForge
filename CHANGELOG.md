@@ -3,6 +3,53 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [5.6.8] - 2026-09-14
+
+一轮**命令入口可用性**缺陷修复：3 个 CLI 命令（`init` / `rekey` / `backup-restore`）与 3 个适配器
+此前因「越界相对导入」与「未定义名称」在调用时**必然崩溃**，本轮全部修复。另修复 POSIX 下恢复
+加密备份的 NameError（兼具安全影响），并收敛若干残留的版本号硬编码。不涉及新依赖、不改变对外数据契约。
+
+### Fixed
+- **P0 `init` 加密模式必然 NameError（cli/main.py）**：`cmd_init` 读取 `os.environ["MINDFORGE_PASSWORD"]`
+  但模块顶层从未 `import os`（仅个别函数内有局部导入），因此默认的加密初始化
+  `MindForge init` 一进入密码分支就抛 `NameError: name 'os' is not defined`——新手第一步即失败。
+  已补模块级 `import os`。
+- **P0 `rekey` 命令三重崩溃（cli/main.py）**：该命令此前**任何情况下都不可用**，三个独立缺陷叠加：
+  ① `from ..core.encryption import ...` 越界相对导入（`core` 已是顶层包）直接抛 `ImportError`；
+  ② 调用从未定义的 `_build_config(args)` 抛 `NameError`；③ 函数体内 `import os` 使 `os` 成为
+  本函数局部名，导致前面的 `os.environ.get(...)` 抛 `UnboundLocalError`。现改为绝对导入、
+  复用与 `_get_memory` 一致的配置构造、移除局部导入。
+- **P0 `backup-restore` 越界相对导入（cli/main.py）**：`from ..core.mindforge` / `from ..core.types`
+  在函数被调用时才求值，导致灾备恢复命令完全不可用。`MindForge` / `MemoryConfig` 已在模块顶部导入，
+  直接删除这两行重复且越界的导入。
+- **P1 POSIX 恢复加密备份 NameError + 密钥权限未收紧（core/mindforge.py）**：`restore_backup()`
+  在非 Windows 平台执行 `os.chmod(target_key, 0o600)` 时缺少 `import os`，既让恢复流程在 Linux/macOS
+  必然失败，又使刚还原的密钥文件以默认（可能组/其他可读）权限落盘。已补齐导入，与
+  `create_backup` 的 0600 收紧逻辑对齐。
+- **P1 三个适配器全部方法不可用（adapters/）**：`claude_adapter` / `generic_api` / `openclaw_adapter`
+  中的 `from ..core` / `from ..modules.*` 均为越界相对导入且**无 try/except 兜底**（`core/mindforge.py`
+  的同名写法有兜底，故未暴露），任何调用都抛 `ImportError: attempted relative import beyond top-level package`。
+  现统一改为与 `modules/*`、`core/*` 一致的绝对导入。
+- **P2 混合检索大小写保留分支恒等（modules/hybrid_search.py）**：`new_parts[idx] = s if chunk.isupper() else s`
+  两个分支相同，全大写原词被替换为小写同义词，大小写保留逻辑形同虚设。改为 `s.upper() if chunk.isupper() else s`。
+- **P2 版本号硬编码漂移（modules/event_bus.py、cli/main.py、adapters/openclaw_adapter.py）**：
+  webhook payload 与 `User-Agent` 长期硬编码 `5.4.9`、`export-json` 输出写死 `5.1.5`、
+  OpenClaw 适配器上报 `5.0.1`、URL 导入器的 `User-Agent` 停在 `MindForge/5.4`。改为引用唯一真值
+  `core/version.py`（adapter/event_bus 新增 `from core.version import __version__`）。
+- **P3 `cmd_backup` 重复定义（cli/main.py）**：模块级存在两份 `cmd_backup`（旧简版被后定义的
+  v5.6.0 版本静默遮蔽），删除已失效的旧定义；同时移除 `_main_dispatch` 分发表中重复的
+  `"restore"` / `"backup"` 键。
+- **P3 `cmd_agent_purge` 无效条件分支（cli/main.py）**：`c(..., "bold" if not dry_run else "bold")`
+  两个分支取值相同，简化为 `"bold"`。
+
+### Tests
+- 新增 `tests/test_v568_fixes.py`（27 项）：`init`/`rekey`/`backup-restore` 三条命令的**真实子进程端到端**回归
+  （这 3 条命令此前 100% 崩溃，纯静态扫描抓不到）、`restore_backup` 作用域内 `import os` 校验、
+  适配器导入、event_bus / openclaw 版本号取自真值、越界相对导入静态扫描、
+  CLI 分发表重复键与「引用了未定义命令函数」AST 校验、模块级重复定义校验、
+  以及 hybrid_search 大小写保留的行为断言。测试套件由 623 项增至 **650 项，全部通过**。
+
+
 ## [5.6.7] - 2026-09-14
 
 一轮针对公开审查发现（P1×2 / P2×5 / P3×4，共 11 项）的安全与健壮性加固，不涉及新依赖、不改变对外数据契约。

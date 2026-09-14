@@ -303,7 +303,9 @@ class QueryExpander:
             if lc in self.synonyms:
                 for s in self.synonyms[lc][:2]:
                     new_parts = lowered_tokens.copy()
-                    new_parts[idx] = s if chunk.isupper() else s
+                    # v5.6.8 修复：原写法 `s if chunk.isupper() else s` 两个分支相同，
+                    # 大小写保留逻辑形同虚设（全大写原词会被替换成小写同义词）。
+                    new_parts[idx] = s.upper() if chunk.isupper() else s
                     rewrites.append("".join(new_parts))
             if lc in self.abbr:
                 new_parts = lowered_tokens.copy()

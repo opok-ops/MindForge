@@ -155,12 +155,12 @@ class GenericAPIAdapter:
         return self.cm.stats()
 
     def _handle_graph_stats(self, params: Dict) -> Dict:
-        from ..modules.knowledge_graph import KnowledgeGraph
+        from modules.knowledge_graph import KnowledgeGraph
         kg = KnowledgeGraph(storage=self.cm.storage)
         return kg.get_entity_stats()
 
     def _handle_graph_related(self, params: Dict) -> List:
-        from ..modules.knowledge_graph import KnowledgeGraph
+        from modules.knowledge_graph import KnowledgeGraph
         kg = KnowledgeGraph(storage=self.cm.storage)
         related = kg.get_related_entities(
             self._require(params, "entity"),
@@ -169,12 +169,12 @@ class GenericAPIAdapter:
         return [{"name": n, "relation": r, "weight": w} for n, r, w in related]
 
     def _handle_personality(self, params: Dict) -> Dict:
-        from ..modules.personality import PersonalityEngine
+        from modules.personality import PersonalityEngine
         pe = PersonalityEngine(self.cm.storage)
         return pe.get_recommended_style(params.get("user_id", "default"))
 
     def _handle_consolidate(self, params: Dict) -> Dict:
-        from ..modules.evolution import MemoryEvolution
+        from modules.evolution import MemoryEvolution
         evo = MemoryEvolution(self.cm.storage)
         return evo.consolidate()
 

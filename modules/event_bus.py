@@ -1,5 +1,5 @@
 """
-MindForge v5.4.9 事件总线与 Webhook 通知
+MindForge 事件总线与 Webhook 通知
 =========================================
 
 提供内存级发布/订阅事件总线，支持：
@@ -19,7 +19,7 @@ MindForge v5.4.9 事件总线与 Webhook 通知
     "event": "memory_created",
     "timestamp": "2026-08-20T10:00:00Z",
     "source": "mindforge",
-    "version": "5.4.9",
+    "version": "<当前版本，取自 core/version.py>",
     "data": { ... 事件相关数据 ... }
   }
 
@@ -55,6 +55,10 @@ class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
         )
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+
+# v5.6.8 修复：payload 与 User-Agent 中的版本号此前硬编码为 5.4.9（早已过期，
+# 与 core/version.py 真值漂移），改为引用唯一真值。
+from core.version import __version__ as _MF_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -309,7 +313,7 @@ class EventBus:
             "event": event,
             "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "source": "mindforge",
-            "version": "5.4.9",
+            "version": _MF_VERSION,
             "data": data or {},
         }
 
@@ -370,7 +374,7 @@ class EventBus:
 
         headers = {
             "Content-Type": "application/json; charset=utf-8",
-            "User-Agent": "MindForge/5.4.9",
+            "User-Agent": f"MindForge/{_MF_VERSION}",
             "X-MindForge-Event": payload["event"],
         }
         if config.secret:

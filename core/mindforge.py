@@ -2575,7 +2575,12 @@ class MindForge:
                 # 限制密钥文件权限
                 import sys
                 if sys.platform != "win32":
+                    import os
                     import stat
+                    # v5.6.8 修复：此处原先缺少 `import os`，POSIX 下还原加密备份
+                    # 必然抛 NameError，导致 restore_backup() 非 Windows 平台不可用，
+                    # 且密钥文件会以默认（可能组/其他可读）权限落盘。补齐导入，
+                    # 与 create_backup 的 0600 收紧逻辑保持一致。
                     os.chmod(target_key, stat.S_IRUSR | stat.S_IWUSR)
                 restored_key = str(target_key.resolve())
 

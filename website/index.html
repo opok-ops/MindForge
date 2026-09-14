@@ -7,12 +7,8 @@
 <meta name="description" content="MindForge 是生产级 AI Agent 终身记忆系统：四层记忆架构、知识图谱、六路混合检索、多模态、联邦网络与端侧 AES-256-GCM 加密。源码安装，本地运行，数据不上云。">
 <meta name="keywords" content="MindForge, AI Agent 记忆, 长期记忆, 知识图谱, 混合检索, MCP, 端侧加密, Python 记忆库, RAG 记忆">
 <meta name="author" content="开发者小顾">
-<meta name="theme-color" content="#05070d">
+<meta name="theme-color" content="#0b0e13">
 <link rel="canonical" href="https://opok-ops.github.io/MindForge/">
-<!-- 站长平台验证码占位符已移除，待获取真实值后添加:
-<meta name="baidu-site-verification" content="BAIDU_CODE">
-<meta name="google-site-verification" content="GOOGLE_CODE">
--->
 <!--BAIDU_VERIFY_SLOT-->
 
 <!-- Open Graph -->
@@ -28,13 +24,8 @@
 <meta name="twitter:title" content="MindForge — 让 AI Agent 拥有终身记忆">
 <meta name="twitter:description" content="四层记忆架构 · 知识图谱 · 六路混合检索 · 联邦网络 · 端侧加密。本地运行，数据不上云。">
 
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%2322d3ee'/%3E%3Cstop offset='52%25' stop-color='%23818cf8'/%3E%3Cstop offset='100%25' stop-color='%23a855f7'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='url(%23g)' stroke-width='2.4'/%3E%3Cpath d='M9 16a7 7 0 0 1 14 0' fill='none' stroke='url(%23g)' stroke-width='2.4' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='16' r='2.6' fill='url(%23g)'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%236d8dff' stroke-width='2.4'/%3E%3Cpath d='M9 16a7 7 0 0 1 14 0' fill='none' stroke='%236d8dff' stroke-width='2.4' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='16' r='2.6' fill='%236d8dff'/%3E%3C/svg%3E">
 
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="assets/fonts/fonts.css">
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-<noscript><link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet"></noscript>
 <link rel="stylesheet" href="assets/style.css">
 
 <script type="application/ld+json">
@@ -50,7 +41,7 @@
   "softwareVersion": "5.6.6",
   "toolCount": 33,
   "moduleCount": 15,
-  "testCount": 518,
+  "testCount": 608,
   "url": "https://opok-ops.github.io/MindForge/",
   "codeRepository": "https://github.com/opok-ops/MindForge",
   "license": "https://github.com/opok-ops/MindForge/blob/master/LICENSE",
@@ -87,16 +78,8 @@
 
 <a class="skip-link" href="#main">跳到主要内容</a>
 
-<!-- ===================== 液态玻璃环境光斑 ===================== -->
-<div class="liquid-bg" aria-hidden="true">
-  <span class="lb lb-1"></span>
-  <span class="lb lb-2"></span>
-  <span class="lb lb-3"></span>
-  <span class="lb lb-4"></span>
-</div>
-
-<!-- ===================== SVG Sprite（线性图标，不使用 emoji） ===================== -->
-<svg class="sprite-host" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+<!-- ===================== SVG 图标库 ===================== -->
+<svg class="sprite-host" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden">
   <defs>
     <symbol id="i-brain" viewBox="0 0 24 24"><path d="M12 5.5A3.5 3.5 0 0 0 8.5 9v.45A3 3 0 0 0 6.5 15a3.5 3.5 0 0 0 2 3.16A3.4 3.4 0 0 0 12 19.5a3.4 3.4 0 0 0 3.5-1.34 3.5 3.5 0 0 0 2-3.16 3 3 0 0 0-2-5.55V9A3.5 3.5 0 0 0 12 5.5Z"/><path d="M12 5.5v14"/><path d="m9.6 9.6-1.4-1.4"/><path d="m14.4 9.6 1.4-1.4"/><path d="m9.4 13.6-1.6.6"/><path d="m14.6 13.6 1.6.6"/></symbol>
     <symbol id="i-graph" viewBox="0 0 24 24"><circle cx="5.5" cy="6.5" r="2.4"/><circle cx="18.5" cy="7.5" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="m7.6 7.7 2.8 8.2"/><path d="m16.5 8.9-2.9 7"/><path d="M7.9 6.3h8.2"/></symbol>
@@ -136,7 +119,6 @@
     <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.8 2.8 20h18.4L12 3.8Z"/><path d="M12 9.5v4.2"/><path d="M12 16.8h.01"/></symbol>
     <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
     <symbol id="i-link" viewBox="0 0 24 24"><path d="m9.5 14.5 5-5"/><path d="M11 6.8 12.8 5a4.3 4.3 0 0 1 6.1 6.1L17 13"/><path d="M13 17.2 11.2 19a4.3 4.3 0 0 1-6.1-6.1L7 11"/></symbol>
-    <symbol id="i-flow" viewBox="0 0 24 24"><path d="M4.5 6.5h6a3 3 0 0 1 3 3v5a3 3 0 0 0 3 3h3"/><path d="m17 14.5 2.5 3-2.5 3"/></symbol>
     <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 4.5h6a3 3 0 0 1 3 3v12a2.5 2.5 0 0 0-2.5-2.5H4v-12.5Z"/><path d="M20 4.5h-6a3 3 0 0 0-3 3v12a2.5 2.5 0 0 1 2.5-2.5H20v-12.5Z"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="m4.5 12.5 5 5 10-11"/></symbol>
     <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12.2 2.7 2.7L16.2 9.4"/></symbol>
@@ -150,8 +132,7 @@
     <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5 19 12 7 19.5v-15Z"/></symbol>
     <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4.5h5.5V10"/><path d="M19.5 4.5 11 13"/><path d="M18 14.5V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3.5"/></symbol>
     <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3.5v11"/><path d="m7.5 10 4.5 4.5L16.5 10"/><path d="M4.5 18.5h15"/></symbol>
-    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 5v14"/><path d="M15 5v14"/></symbol>
-    <symbol id="i-skip" viewBox="0 0 24 24"><path d="m5 5 9 7-9 7V5Z"/><path d="M19 5v14"/></symbol>
+    <symbol id="i-flow" viewBox="0 0 24 24"><path d="M4.5 6.5h6a3 3 0 0 1 3 3v5a3 3 0 0 0 3 3h3"/><path d="m17 14.5 2.5 3-2.5 3"/></symbol>
     <symbol id="i-github" viewBox="0 0 24 24"><path d="M12 .5C5.65.5.7 5.45.7 11.9c0 5.06 3.29 9.35 7.86 10.86.57.1.78-.25.78-.55v-1.94c-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 5.79 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.12 3.05.74.81 1.18 1.84 1.18 3.1 0 4.43-2.69 5.4-5.25 5.69.41.36.78 1.06.78 2.14v3.17c0 .3.2.66.79.55a11.4 11.4 0 0 0 7.85-10.86C23.3 5.45 18.35.5 12 .5Z"/></symbol>
   </defs>
 </svg>
@@ -164,16 +145,9 @@
     <a href="#top" class="brand" aria-label="MindForge 首页">
       <span class="brand-logo" aria-hidden="true">
         <svg viewBox="0 0 32 32" fill="none">
-          <defs>
-            <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" style="stop-color:#22d3ee"/>
-              <stop offset="52%" style="stop-color:#818cf8"/>
-              <stop offset="100%" style="stop-color:#a855f7"/>
-            </linearGradient>
-          </defs>
-          <circle cx="16" cy="16" r="13" stroke="url(#logoGrad)" stroke-width="2.2"/>
-          <path d="M9 16a7 7 0 0 1 14 0" stroke="url(#logoGrad)" stroke-width="2.2" stroke-linecap="round"/>
-          <circle cx="16" cy="16" r="2.6" fill="url(#logoGrad)"/>
+          <circle cx="16" cy="16" r="13" stroke="#6d8dff" stroke-width="2.2"/>
+          <path d="M9 16a7 7 0 0 1 14 0" stroke="#6d8dff" stroke-width="2.2" stroke-linecap="round"/>
+          <circle cx="16" cy="16" r="2.6" fill="#6d8dff"/>
         </svg>
       </span>
       <span class="brand-name">MindForge</span>
@@ -185,8 +159,8 @@
       <li><a href="#hybrid">技术核心</a></li>
       <li><a href="#capabilities">核心能力</a></li>
       <li><a href="#architecture">系统架构</a></li>
-      <li><a href="#v6" class="nav-new">v6.0 预览<i aria-hidden="true">开发中</i></a></li>
-      <li><a href="#web" class="nav-new">网页端<i aria-hidden="true">敬请期待</i></a></li>
+      <li><a href="#security">安全与隐私</a></li>
+      <li><a href="#v6">v6.0 预览<span class="nav-tag">开发中</span></a></li>
       <li><a href="#changelog">更新日志</a></li>
     </ul>
 
@@ -206,14 +180,13 @@
 
 <div class="nav-drawer" id="nav-drawer" aria-hidden="true">
   <ul>
-    <li><a href="#quickstart">快速开始 <svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
-    <li><a href="#hybrid">技术核心 <svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
-    <li><a href="#capabilities">核心能力 <svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
-    <li><a href="#architecture">系统架构 <svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
-    <li><a href="#security">安全与隐私 <svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
-    <li><a href="#v6">v6.0 预览 <span class="dev-tag">开发中</span> <svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
-    <li><a href="#web">网页端 <span class="dev-tag">敬请期待</span> <svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
-    <li><a href="#changelog">更新日志 <svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>
+    <li><a href="#quickstart">快速开始</a></li>
+    <li><a href="#hybrid">技术核心</a></li>
+    <li><a href="#capabilities">核心能力</a></li>
+    <li><a href="#architecture">系统架构</a></li>
+    <li><a href="#security">安全与隐私</a></li>
+    <li><a href="#v6">v6.0 预览<span class="nav-tag">开发中</span></a></li>
+    <li><a href="#changelog">更新日志</a></li>
   </ul>
   <div class="drawer-cta">
     <a href="demo.html" class="btn btn-secondary">观看交互演示</a>
@@ -228,91 +201,101 @@
 
 <!-- ===================== Hero ===================== -->
 <header class="hero" id="top">
-  <canvas id="memory-canvas" aria-hidden="true" role="presentation"></canvas>
-  <div class="hero-aura" aria-hidden="true"></div>
-  <div class="hero-fade" aria-hidden="true"></div>
-
+  <div class="hero-grid-bg" aria-hidden="true"></div>
   <div class="hero-inner">
-    <p class="hero-badge" data-reveal>
-      <span class="pulse" aria-hidden="true"></span>
-      <b data-ver>v5.6.6</b>
-      <span>四层记忆架构 · 六路混合检索 · 端侧加密</span>
-    </p>
-
-    <p class="hero-badge hero-badge-next" data-reveal style="--d:40ms">
-      <span class="pulse pulse-vi" aria-hidden="true"></span>
-      <b>v6.0.0</b>
-      <span>多 Agent 协作 · 6G AI 记忆预览</span>
-      <a class="badge-dev" href="#v6">
-        <span class="badge-dot" aria-hidden="true"></span>开发中
-      </a>
-    </p>
-
-    <h1 class="hero-title" data-reveal style="--d:80ms">
-      让 AI Agent<span class="line-2">拥有 <span class="gradient-text">终身记忆</span></span>
-    </h1>
-
-    <p class="hero-sub" data-reveal style="--d:160ms">
-      <span class="hl">四层记忆架构</span><span class="sep" aria-hidden="true"></span>知识图谱关联推理<span class="sep" aria-hidden="true"></span>六路混合检索<br>
-      <span class="hl">端侧 AES-256-GCM 加密</span><span class="sep" aria-hidden="true"></span>零云端依赖
-    </p>
-
-    <div class="hero-cta" data-reveal style="--d:240ms">
-      <a href="#quickstart" class="btn btn-primary">
-        <span>立即开始</span>
-        <svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow"/></svg>
-      </a>
-      <a href="demo.html" class="btn btn-secondary">
-        <svg class="icon icon-sm" aria-hidden="true"><use href="#i-play"/></svg>
-        <span>观看演示</span>
-      </a>
+    <div class="hero-badges">
+      <span class="hero-badge">
+        <b data-ver>v5.6.6</b>
+        <span class="sep" aria-hidden="true"></span>
+        <span>四层记忆架构 · 六路混合检索 · 端侧加密</span>
+      </span>
+      <span class="hero-badge">
+        <b>v6.0.0</b>
+        <span class="sep" aria-hidden="true"></span>
+        <span>多 Agent 协作 · 6G AI 记忆预览</span>
+        <span class="chip-badge"><i class="badge-dot" aria-hidden="true"></i>开发中</span>
+      </span>
     </div>
 
-    <div class="hero-stats" data-reveal style="--d:320ms">
+    <h1 class="hero-title">
+      让 AI Agent<span class="line-2">拥有<span class="accent">终身记忆</span></span>
+    </h1>
+
+    <p class="hero-sub">
+      四层记忆架构，知识图谱关联推理，六路混合检索。<br>
+      <b>端侧 AES-256-GCM 加密，零云端依赖</b>——源码安装，本地运行，数据不上云。
+    </p>
+
+    <div class="hero-cta">
+      <a href="#quickstart" class="btn btn-primary btn-lg">立即开始</a>
+      <a href="demo.html" class="btn btn-secondary btn-lg">观看交互演示</a>
+    </div>
+
+    <div class="hero-panel">
+      <div class="panel-bar">
+        <span class="panel-dot r" aria-hidden="true"></span>
+        <span class="panel-dot" aria-hidden="true"></span>
+        <span class="panel-dot" aria-hidden="true"></span>
+        <span class="panel-title">mindforge · 写入到召回</span>
+      </div>
+      <div class="panel-body">
+        <div class="pipe-line">
+          <span class="pipe-label accent">写入</span>
+          <code class="pipe-code"><span class="k">m</span>.<span class="k">add</span>(<span class="s">"用户说喜欢猫"</span>)</code>
+          <span class="pipe-arrow" aria-hidden="true">→</span>
+          <span class="pipe-out">uuid a1f7c2e0… · 已加密落库</span>
+        </div>
+        <div class="pipe-line">
+          <span class="pipe-label">检索</span>
+          <code class="pipe-code"><span class="k">m</span>.<span class="k">search</span>(<span class="s">"用户喜欢什么"</span>)</code>
+          <span class="pipe-arrow" aria-hidden="true">→</span>
+          <span class="pipe-out">六路融合召回</span>
+        </div>
+        <div class="pipe-line">
+          <span class="pipe-label">结果</span>
+          <code class="pipe-code"><span class="k">print</span>(result.<span class="k">chunks</span>[<span class="k">0</span>].<span class="k">content</span>)</code>
+          <span class="pipe-arrow" aria-hidden="true">→</span>
+          <span class="pipe-out">"用户说喜欢猫" · 相似度 0.93</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="hero-stats" style="margin-top:18px">
       <div class="stat">
         <div class="stat-num" data-count="4">4</div>
         <div class="stat-lbl">记忆层级</div>
       </div>
-      <span class="stat-sep" aria-hidden="true"></span>
       <div class="stat">
         <div class="stat-num" data-count="15" data-num="moduleCount">15</div>
         <div class="stat-lbl">功能模块</div>
       </div>
-      <span class="stat-sep" aria-hidden="true"></span>
       <div class="stat">
         <div class="stat-num" data-count="33" data-num="toolCount">33</div>
         <div class="stat-lbl">MCP 工具</div>
       </div>
-      <span class="stat-sep" aria-hidden="true"></span>
       <div class="stat">
-        <div class="stat-num" data-count="455" data-num="testCount">455</div>
+        <div class="stat-num" data-count="608" data-num="testCount">608</div>
         <div class="stat-lbl">测试用例</div>
       </div>
-      <span class="stat-sep" aria-hidden="true"></span>
       <div class="stat">
         <div class="stat-num" data-count="100" data-suffix="%">100%</div>
         <div class="stat-lbl">本地加密</div>
       </div>
     </div>
   </div>
-
-  <div class="scroll-cue" aria-hidden="true">
-    <span class="rail"><i></i></span>
-    <span>向下探索</span>
-  </div>
 </header>
 
-<!-- ===================== 30 秒上手 ===================== -->
+<!-- ===================== 快速开始 ===================== -->
 <section class="section" id="quickstart" aria-labelledby="qs-title">
   <div class="container">
-    <div class="section-head" data-reveal>
-      <span class="tag"><span class="tag-dot" aria-hidden="true"></span>Quick Start</span>
-      <h2 id="qs-title">30 秒，<span class="gradient-text">接上终身记忆</span></h2>
-      <p>一行 pip 安装，三行代码存取。<span class="hl">本地运行，数据不上云，0.3 秒完成存储和检索。</span></p>
+    <div class="section-head">
+      <span class="tag"><span class="tag-dot" aria-hidden="true"></span>快速开始</span>
+      <h2 id="qs-title">30 秒，接上终身记忆</h2>
+      <p>一行 pip 安装，三行代码存取。本地运行，数据不上云，0.3 秒完成存储和检索。</p>
     </div>
 
     <div class="qs-grid">
-      <div data-reveal>
+      <div>
         <div class="qs-steps">
           <div class="qs-step">
             <span class="n">1</span>
@@ -331,8 +314,8 @@
         <div class="code">
           <div class="code-bar">
             <span class="code-dot r" aria-hidden="true"></span>
-            <span class="code-dot y" aria-hidden="true"></span>
-            <span class="code-dot g" aria-hidden="true"></span>
+            <span class="code-dot" aria-hidden="true"></span>
+            <span class="code-dot" aria-hidden="true"></span>
             <span class="code-name">quickstart.py</span>
             <button type="button" class="copy-btn" data-copy="#code-quickstart" aria-label="复制快速开始代码">
               <svg class="icon icon-sm" aria-hidden="true"><use href="#i-copy"/></svg>
@@ -354,21 +337,21 @@
 
         <p class="qs-note">
           <svg class="icon icon-md" aria-hidden="true"><use href="#i-clock"/></svg>
-          <span>以上为 README 原文给出的 30 秒上手示例。README 原文承诺：<b>本地运行，数据不上云，0.3 秒完成存储和检索</b>。</span>
+          <span>以上为 README 原文给出的 30 秒上手示例。README 原文承诺：<b class="hl">本地运行，数据不上云，0.3 秒完成存储和检索</b>。</span>
         </p>
       </div>
 
-      <div data-reveal style="--d:120ms">
+      <div>
         <div class="term">
           <div class="term-bar">
             <span class="code-dot r" aria-hidden="true"></span>
-            <span class="code-dot y" aria-hidden="true"></span>
-            <span class="code-dot g" aria-hidden="true"></span>
+            <span class="code-dot" aria-hidden="true"></span>
+            <span class="code-dot" aria-hidden="true"></span>
             <span class="code-name">bash — mindforge</span>
           </div>
           <pre class="term-body"><code><span class="l"><span class="tk-prompt">$</span> git clone https://github.com/opok-ops/MindForge.git</span>
 <span class="l"><span class="tk-prompt">$</span> cd MindForge && pip install -e .</span>
-<span class="l dim" data-ver data-ver-tpl="Successfully installed mindforge-{v}">Successfully installed mindforge-5.5.8</span>
+<span class="l dim" data-ver data-ver-tpl="Successfully installed mindforge-{v}">Successfully installed mindforge-5.6.6</span>
 <span class="l"><span class="tk-prompt">$</span> python</span>
 <span class="l dim">&gt;&gt;&gt; from MindForge import MindForge</span>
 <span class="l dim">&gt;&gt;&gt; m = MindForge(db_path="./data/memory.db")</span>
@@ -379,11 +362,11 @@
 <span class="l o">用户说喜欢猫</span></code></pre>
         </div>
 
-        <div class="code" style="margin-top:16px;">
+        <div class="code" style="margin-top:16px">
           <div class="code-bar">
             <span class="code-dot r" aria-hidden="true"></span>
-            <span class="code-dot y" aria-hidden="true"></span>
-            <span class="code-dot g" aria-hidden="true"></span>
+            <span class="code-dot" aria-hidden="true"></span>
+            <span class="code-dot" aria-hidden="true"></span>
             <span class="code-name">CLI</span>
             <button type="button" class="copy-btn" data-copy="#code-cli" aria-label="复制 CLI 示例">
               <svg class="icon icon-sm" aria-hidden="true"><use href="#i-copy"/></svg>
@@ -402,56 +385,40 @@
   </div>
 </section>
 
-<!-- ===================== 开发者介绍（靠前） ===================== -->
-<section class="section" id="developer" aria-labelledby="dev-title">
+<!-- ===================== 开发者 ===================== -->
+<section class="section section-alt" id="developer" aria-labelledby="dev-title">
   <div class="container">
-    <div class="section-head" data-reveal>
-      <span class="tag"><span class="tag-dot" aria-hidden="true"></span>About Developer</span>
-      <h2 id="dev-title">写这套系统的，<span class="gradient-text">只有一个人</span></h2>
-      <p>没有团队，没有融资——<b>小顾</b> 一个人从第一行代码敲到 <span data-ver>v5.6.6</span>。项目进展与技术干货，抖音、小红书同步更新。</p>
+    <div class="section-head">
+      <span class="tag"><span class="tag-dot" aria-hidden="true"></span>关于开发者</span>
+      <h2 id="dev-title">写这套系统的，只有一个人</h2>
+      <p>没有团队，没有融资——<b class="hl">小顾</b> 一个人从第一行代码敲到 <span data-ver>v5.6.6</span>。</p>
     </div>
 
-    <div class="dvt-grid">
-      <article class="dvt-card" data-reveal>
-        <div class="dvt-avatar" aria-hidden="true">顾</div>
-        <div class="dvt-id">
-          <h3 class="dvt-name">小顾</h3>
-          <p class="dvt-meta">独立开发者 · GitHub @opok-ops</p>
+    <div class="dev-card">
+      <div class="dev-head">
+        <div class="dev-avatar" aria-hidden="true">顾</div>
+        <div class="dev-id">
+          <h3>小顾</h3>
+          <p class="dev-meta">独立开发者 · GitHub @opok-ops · 2010-08-01</p>
         </div>
-        <p class="dvt-bio">
-          MindForge 是我一个人打磨的 AI Agent 终身记忆系统：四层记忆架构、知识图谱、六路混合检索、端侧 AES-256-GCM 加密、联邦网络，全部本地运行、数据不上云。
-          没有名校背景，也没有大厂履历，<span class="hl">每一行代码都是自己敲出来的</span>。
-        </p>
-        <a class="dvt-gh" href="https://github.com/opok-ops" target="_blank" rel="noopener noreferrer">
+      </div>
+      <div class="dev-story">
+        <p>MindForge 是我一个人打磨的 AI Agent 终身记忆系统：四层记忆架构、知识图谱、六路混合检索、端侧 AES-256-GCM 加密、联邦网络，全部本地运行、数据不上云。没有名校背景，也没有大厂履历，<b>每一行代码都是自己敲出来的</b>。</p>
+        <p>从第一行代码到现在 <span data-ver>v5.6.6</span>，没有团队，没有融资，就一个人、一台电脑，一个版本一个版本往上堆。<b>608 个测试用例全部通过，33 个 MCP 工具，15 个核心模块</b>，GitHub Actions CI 全绿。学历不能定义一个人的上限，但代码可以证明一个人的态度。</p>
+        <p>项目进展与技术干货，抖音、小红书同步更新。有什么问题直接留言，我看到就会回。</p>
+      </div>
+      <div class="dev-social">
+        <a href="https://v.douyin.com/ZIsw2VpuT9o/" target="_blank" rel="noopener noreferrer">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M16.5 2v3.2c0 2 1.2 3.7 2.8 4.3v2.6c-1 .2-2 .1-2.8-.2v6.2c0 2.3-2 4.1-4.3 4.1s-4.3-1.8-4.3-4.1 2-4.1 4.3-4.1c.3 0 .6 0 .9.1v2.7c-.3-.1-.6-.2-.9-.2-.8 0-1.5.7-1.5 1.5s.7 1.5 1.5 1.5 1.5-.7 1.5-1.5V2h2.8Z"/></svg>
+          抖音号 <strong>shidianduo3116</strong>
+        </a>
+        <a href="https://xhslink.cn/o/3m71WBRPD17" target="_blank" rel="noopener noreferrer">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M13.2 2c.3 2 .8 3.6 2.8 4.5.6.3 1.3.4 2 .4v2.6c-1.2 0-2.3-.3-3.3-.9v6.4c0 2.6-2.1 4.5-4.6 4.5s-4.6-2-4.6-4.5 2-4.5 4.6-4.5c.4 0 .7 0 1 .1v2.8c-.3-.1-.7-.2-1-.2-.9 0-1.6.7-1.6 1.6s.7 1.6 1.6 1.6 1.6-.7 1.6-1.6V2h3.5Z"/></svg>
+          小红书号 <strong>4406811524</strong>
+        </a>
+        <a href="https://github.com/opok-ops/MindForge" target="_blank" rel="noopener noreferrer">
           <svg class="icon icon-sm icon-fill" aria-hidden="true"><use href="#i-github"/></svg>
-          <span>github.com/opok-ops</span>
-          <svg class="icon icon-sm" aria-hidden="true"><use href="#i-arrow"/></svg>
-        </a>
-      </article>
-
-      <div class="dvt-social">
-        <a class="dvt-soc" data-reveal style="--d:90ms" href="https://v.douyin.com/ZIsw2VpuT9o/" target="_blank" rel="noopener noreferrer" aria-label="抖音号 shidianduo3116">
-          <span class="dvt-soc-ico dvt-ico-dy" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M16.5 2v3.2c0 2 1.2 3.7 2.8 4.3v2.6c-1 .2-2 .1-2.8-.2v6.2c0 2.3-2 4.1-4.3 4.1s-4.3-1.8-4.3-4.1 2-4.1 4.3-4.1c.3 0 .6 0 .9.1v2.7c-.3-.1-.6-.2-.9-.2-.8 0-1.5.7-1.5 1.5s.7 1.5 1.5 1.5 1.5-.7 1.5-1.5V2h2.8Z"/></svg>
-          </span>
-          <span class="dvt-soc-txt">
-            <b>抖音号</b>
-            <strong>shidianduo3116</strong>
-            <em>项目进展 · 实操技术分享</em>
-          </span>
-          <svg class="icon icon-sm dvt-soc-go" aria-hidden="true"><use href="#i-arrow"/></svg>
-        </a>
-
-        <a class="dvt-soc" data-reveal style="--d:160ms" href="https://xhslink.cn/o/3m71WBRPD17" target="_blank" rel="noopener noreferrer" aria-label="小红书号 4406811524">
-          <span class="dvt-soc-ico dvt-ico-xhs" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M13.2 2c.3 2 .8 3.6 2.8 4.5.6.3 1.3.4 2 .4v2.6c-1.2 0-2.3-.3-3.3-.9v6.4c0 2.6-2.1 4.5-4.6 4.5s-4.6-2-4.6-4.5 2-4.5 4.6-4.5c.4 0 .7 0 1 .1v2.8c-.3-.1-.7-.2-1-.2-.9 0-1.6.7-1.6 1.6s.7 1.6 1.6 1.6 1.6-.7 1.6-1.6V2h3.5Z"/></svg>
-          </span>
-          <span class="dvt-soc-txt">
-            <b>小红书号</b>
-            <strong>4406811524</strong>
-            <em>开发日常 · 踩坑与复盘</em>
-          </span>
-          <svg class="icon icon-sm dvt-soc-go" aria-hidden="true"><use href="#i-arrow"/></svg>
+          GitHub
         </a>
       </div>
     </div>
@@ -459,17 +426,16 @@
 </section>
 
 <!-- ===================== 六路混合检索 ===================== -->
-<section class="section section-alt" id="hybrid" aria-labelledby="hy-title">
+<section class="section" id="hybrid" aria-labelledby="hy-title">
   <div class="container">
-    <div class="section-head" data-reveal>
-      <span class="tag"><span class="tag-dot" aria-hidden="true"></span>Hybrid Search</span>
-      <h2 id="hy-title">六路混合检索，<span class="gradient-text">不留死角</span></h2>
+    <div class="section-head">
+      <span class="tag"><span class="tag-dot" aria-hidden="true"></span>技术核心</span>
+      <h2 id="hy-title">六路混合检索，不留死角</h2>
       <p>单一向量检索会漏掉关键词精确匹配，纯全文检索又抓不住语义。MindForge 把六条通路的结果融合后再精排，让「用户喜欢什么」也能召回「用户说喜欢猫」。</p>
     </div>
 
     <div class="hybrid-flow">
-      <!-- 输入 -->
-      <div class="flow-node" data-reveal>
+      <div class="flow-node">
         <svg class="icon icon-lg" aria-hidden="true"><use href="#i-search"/></svg>
         <div>
           <div class="fn-t">查询输入</div>
@@ -477,11 +443,10 @@
         </div>
       </div>
 
-      <!-- 六路 -->
-      <div class="lanes" style="margin-top:8px;">
-        <article class="lane" data-reveal style="--d:0ms">
+      <div class="lanes">
+        <article class="lane">
           <div class="lane-head">
-            <span class="lane-ico" aria-hidden="true"><svg class="icon" ><use href="#i-vector"/></svg></span>
+            <span class="lane-ico" aria-hidden="true"><svg class="icon"><use href="#i-vector"/></svg></span>
             <span class="lane-idx">LANE 01</span>
           </div>
           <h3>向量召回</h3>
@@ -489,7 +454,7 @@
           <span class="lane-stage s-recall">RECALL</span>
         </article>
 
-        <article class="lane" data-reveal style="--d:70ms">
+        <article class="lane">
           <div class="lane-head">
             <span class="lane-ico" aria-hidden="true"><svg class="icon"><use href="#i-fts"/></svg></span>
             <span class="lane-idx">LANE 02</span>
@@ -499,7 +464,7 @@
           <span class="lane-stage s-recall">RECALL</span>
         </article>
 
-        <article class="lane" data-reveal style="--d:140ms">
+        <article class="lane">
           <div class="lane-head">
             <span class="lane-ico" aria-hidden="true"><svg class="icon"><use href="#i-tfidf"/></svg></span>
             <span class="lane-idx">LANE 03</span>
@@ -509,7 +474,7 @@
           <span class="lane-stage s-recall">RECALL</span>
         </article>
 
-        <article class="lane" data-reveal style="--d:210ms">
+        <article class="lane">
           <div class="lane-head">
             <span class="lane-ico" aria-hidden="true"><svg class="icon"><use href="#i-fuzzy"/></svg></span>
             <span class="lane-idx">LANE 04</span>
@@ -519,7 +484,7 @@
           <span class="lane-stage s-recall">RECALL</span>
         </article>
 
-        <article class="lane" data-reveal style="--d:280ms">
+        <article class="lane">
           <div class="lane-head">
             <span class="lane-ico" aria-hidden="true"><svg class="icon"><use href="#i-expand"/></svg></span>
             <span class="lane-idx">LANE 05</span>
@@ -529,7 +494,7 @@
           <span class="lane-stage s-expand">EXPAND</span>
         </article>
 
-        <article class="lane" data-reveal style="--d:350ms">
+        <article class="lane">
           <div class="lane-head">
             <span class="lane-ico" aria-hidden="true"><svg class="icon"><use href="#i-rerank"/></svg></span>
             <span class="lane-idx">LANE 06</span>
@@ -540,15 +505,12 @@
         </article>
       </div>
 
-      <!-- 汇聚总线 -->
       <div class="bus" aria-hidden="true">
-        <i></i><i></i><i></i><i></i><i></i>
         <span class="bus-label">六路融合 · FUSION</span>
       </div>
 
-      <!-- 融合 → 结果 -->
       <div class="fusion">
-        <div class="fusion-card" data-reveal>
+        <div class="fusion-card">
           <h3><svg class="icon" aria-hidden="true"><use href="#i-flow"/></svg>多路融合归并</h3>
           <p>六条通路各自产出候选集与分数，融合层统一归并去重，保留各路的优势结果，避免单一检索策略的盲区。</p>
         </div>
@@ -557,7 +519,7 @@
           <svg class="icon"><use href="#i-arrow"/></svg>
         </div>
 
-        <div class="fusion-out" data-reveal style="--d:120ms">
+        <div class="fusion-out">
           <h3><svg class="icon" aria-hidden="true"><use href="#i-check-circle"/></svg>精排后的结果序列</h3>
           <p>Cross-Encoder 结合召回引擎的多因子评分，输出最终排序。</p>
           <div class="result-rows">
@@ -572,80 +534,70 @@
 </section>
 
 <!-- ===================== 召回评分公式 ===================== -->
-<section class="section" id="recall" aria-labelledby="rc-title">
+<section class="section section-alt" id="recall" aria-labelledby="rc-title">
   <div class="container">
-    <div class="section-head" data-reveal>
-      <span class="tag"><span class="tag-dot" aria-hidden="true"></span>Recall Engine</span>
-      <h2 id="rc-title">召回不是相似度排序，<span class="gradient-text">是加权决策</span></h2>
+    <div class="section-head">
+      <span class="tag"><span class="tag-dot" aria-hidden="true"></span>召回引擎</span>
+      <h2 id="rc-title">召回不是相似度排序，是加权决策</h2>
       <p>Recall Engine 用多因子加权决定「哪条记忆此刻最该被想起」——覆盖得多不多、重不重要、常不常被访问、最近有没有用到。</p>
     </div>
 
     <div class="recall-grid">
-      <!-- 环形图 -->
-      <div class="donut-wrap" data-reveal>
-        <svg class="donut" id="recall-donut" viewBox="0 0 280 280" data-cx="140" data-cy="140" data-r="104"
-             role="img" aria-label="召回评分权重构成：覆盖率 40%，重要度 20%，访问频次 15%，时间衰减 20%，另有置顶加成项">
+      <div class="donut-wrap">
+        <svg class="donut" viewBox="0 0 280 280" role="img" aria-label="召回评分权重构成：覆盖率 40%，重要度 20%，访问频次 15%，时间衰减 20%，另有置顶加成项">
           <circle class="track" cx="140" cy="140" r="104"></circle>
-          <circle class="seg" data-pct="40" cx="140" cy="140" r="104" stroke="#22d3ee"></circle>
-          <circle class="seg" data-pct="20" cx="140" cy="140" r="104" stroke="#818cf8"></circle>
-          <circle class="seg" data-pct="15" cx="140" cy="140" r="104" stroke="#a855f7"></circle>
-          <circle class="seg" data-pct="20" cx="140" cy="140" r="104" stroke="#6366f1"></circle>
+          <circle class="seg" cx="140" cy="140" r="104" stroke="#6d8dff" stroke-dasharray="256.38 397.07" transform="rotate(-90 140 140)"></circle>
+          <circle class="seg" cx="140" cy="140" r="104" stroke="#8fa7f5" stroke-dasharray="125.69 527.76" transform="rotate(54 140 140)"></circle>
+          <circle class="seg" cx="140" cy="140" r="104" stroke="#a8baf5" stroke-dasharray="93.02 560.43" transform="rotate(126 140 140)"></circle>
+          <circle class="seg" cx="140" cy="140" r="104" stroke="#c2cef7" stroke-dasharray="125.69 527.76" transform="rotate(180 140 140)"></circle>
         </svg>
-        <div class="donut-center">
-          <div class="dc-t gradient-text">多因子</div>
+        <div class="dc-center">
+          <div class="dc-t">多因子</div>
           <div class="dc-s">Weighted Recall</div>
         </div>
       </div>
 
-      <!-- 因子列表 -->
-      <div class="recall-factors" data-reveal style="--d:120ms">
-        <div class="bar-stack" role="img" aria-label="权重堆叠条：覆盖率 40%、重要度 20%、访问频次 15%、时间衰减 20%">
-          <span class="b1" style="--bd:0ms">40%</span>
-          <span class="b2" style="--bd:90ms">20%</span>
-          <span class="b3" style="--bd:180ms">15%</span>
-          <span class="b4" style="--bd:270ms">20%</span>
-        </div>
-
+      <div>
         <div class="factor-list">
           <div class="factor">
-            <span class="swatch" style="background:#22d3ee" aria-hidden="true"></span>
+            <span class="swatch" style="background:#6d8dff" aria-hidden="true"></span>
             <div>
               <div class="f-t">覆盖率</div>
               <div class="f-d">查询词与记忆内容的匹配覆盖程度，是召回的主权重。</div>
             </div>
-            <div><span class="f-w">40</span><span class="f-u">%</span></div>
+            <div style="margin-left:auto"><span class="f-w">40</span><span class="f-u">%</span></div>
           </div>
           <div class="factor">
-            <span class="swatch" style="background:#818cf8" aria-hidden="true"></span>
+            <span class="swatch" style="background:#8fa7f5" aria-hidden="true"></span>
             <div>
               <div class="f-t">重要度</div>
               <div class="f-d">ImportanceScorer 给出的记忆重要度，高价值记忆优先浮现。</div>
             </div>
-            <div><span class="f-w">20</span><span class="f-u">%</span></div>
+            <div style="margin-left:auto"><span class="f-w">20</span><span class="f-u">%</span></div>
           </div>
           <div class="factor">
-            <span class="swatch" style="background:#a855f7" aria-hidden="true"></span>
+            <span class="swatch" style="background:#a8baf5" aria-hidden="true"></span>
             <div>
               <div class="f-t">访问频次</div>
-              <div class="f-d">被回忆的次数越多，说明这条记忆越"常驻"。</div>
+              <div class="f-d">被回忆的次数越多，说明这条记忆越常驻。</div>
             </div>
-            <div><span class="f-w">15</span><span class="f-u">%</span></div>
+            <div style="margin-left:auto"><span class="f-w">15</span><span class="f-u">%</span></div>
           </div>
           <div class="factor">
-            <span class="swatch" style="background:#6366f1" aria-hidden="true"></span>
+            <span class="swatch" style="background:#c2cef7" aria-hidden="true"></span>
             <div>
               <div class="f-t">时间衰减</div>
               <div class="f-d">按艾宾浩斯曲线随时间衰减，越久未唤起得分越低。</div>
             </div>
-            <div><span class="f-w">20</span><span class="f-u">%</span></div>
+            <div style="margin-left:auto"><span class="f-w">20</span><span class="f-u">%</span></div>
           </div>
           <div class="factor">
-            <span class="swatch" style="background:#34d399" aria-hidden="true"></span>
+            <span class="swatch" style="background:#3fae8a" aria-hidden="true"></span>
             <div>
               <div class="f-t">置顶加成</div>
               <div class="f-d">被 pin() 的记忆获得额外加成，不占用上述权重配额。</div>
             </div>
-            <div><span class="f-w">+</span><span class="f-u">附加</span></div>
+            <div style="margin-left:auto"><span class="f-w">+</span><span class="f-u">附加</span></div>
           </div>
         </div>
 
@@ -662,60 +614,60 @@
 </section>
 
 <!-- ===================== 四层记忆架构 ===================== -->
-<section class="section section-alt" id="layers" aria-labelledby="ly-title">
+<section class="section" id="layers" aria-labelledby="ly-title">
   <div class="container">
-    <div class="section-head" data-reveal>
-      <span class="tag"><span class="tag-dot" aria-hidden="true"></span>Memory Lifecycle</span>
-      <h2 id="ly-title">四层记忆，<span class="gradient-text">会生长也会遗忘</span></h2>
+    <div class="section-head">
+      <span class="tag"><span class="tag-dot" aria-hidden="true"></span>记忆生命周期</span>
+      <h2 id="ly-title">四层记忆，会生长也会遗忘</h2>
       <p>模仿人类认知：信息先落在感官缓冲，被反复唤起的向上晋级，长期不用的自然衰减。遗忘不是缺陷，是让真正重要的记忆保持清晰的机制。</p>
     </div>
 
     <div class="layers-grid">
-      <div class="layer-stack" data-reveal>
-        <article class="layer-row l1">
+      <div class="layer-stack">
+        <article class="layer-row">
           <span class="lr-n" aria-hidden="true"><svg class="icon"><use href="#i-spark"/></svg></span>
           <div>
             <h3>感官缓冲</h3>
             <span class="lr-en">Sensory Buffer</span>
             <p>刚进入系统的原始输入，停留时间最短，未被强化即自然流失。</p>
           </div>
-          <span class="lr-meta"><span class="chip chip-cy">入口</span></span>
+          <span class="lr-meta"><span class="chip chip-warn">入口</span></span>
         </article>
 
         <div class="layer-flow" aria-hidden="true"><svg class="icon"><use href="#i-arrow-down"/></svg></div>
 
-        <article class="layer-row l2">
+        <article class="layer-row">
           <span class="lr-n" aria-hidden="true"><svg class="icon"><use href="#i-clock"/></svg></span>
           <div>
             <h3>短期记忆</h3>
             <span class="lr-en">Short-term</span>
             <p>近期会话上下文，按 Ebbinghaus 曲线衰减，被反复访问则巩固升级。</p>
           </div>
-          <span class="lr-meta"><span class="chip chip-cy">衰减中</span></span>
+          <span class="lr-meta"><span class="chip chip-warn">衰减中</span></span>
         </article>
 
         <div class="layer-flow" aria-hidden="true"><svg class="icon"><use href="#i-arrow-down"/></svg></div>
 
-        <article class="layer-row l3">
+        <article class="layer-row">
           <span class="lr-n" aria-hidden="true"><svg class="icon"><use href="#i-db"/></svg></span>
           <div>
             <h3>长期记忆</h3>
             <span class="lr-en">Long-term</span>
             <p>通过巩固的持久记忆，进入知识图谱参与关联推理与多跳召回。</p>
           </div>
-          <span class="lr-meta"><span class="chip chip-in">已巩固</span></span>
+          <span class="lr-meta"><span class="chip chip-accent">已巩固</span></span>
         </article>
 
         <div class="layer-flow" aria-hidden="true"><svg class="icon"><use href="#i-arrow-down"/></svg></div>
 
-        <article class="layer-row l4">
+        <article class="layer-row">
           <span class="lr-n" aria-hidden="true"><svg class="icon"><use href="#i-brain"/></svg></span>
           <div>
             <h3>核心记忆</h3>
             <span class="lr-en">Core</span>
             <p>身份、偏好与不可动摇的事实，几乎不衰减，始终优先注入上下文。</p>
           </div>
-          <span class="lr-meta"><span class="chip chip-vi">常驻</span></span>
+          <span class="lr-meta"><span class="chip chip-ok">常驻</span></span>
         </article>
 
         <div class="memory-mech">
@@ -734,49 +686,35 @@
         </div>
       </div>
 
-      <!-- 艾宾浩斯遗忘曲线 -->
-      <div class="curve-card" data-reveal style="--d:120ms">
+      <div class="curve-card">
         <h3>遗忘曲线示意</h3>
         <p class="cc-sub">未强化的记忆随时间快速衰减；经过巩固与重评估的记忆，保留率被反复拉回高位。</p>
 
         <svg class="ebbing" viewBox="0 0 460 240" role="img"
              aria-label="艾宾浩斯遗忘曲线示意图：未巩固的记忆保留率随时间快速下降，经巩固的记忆保留率维持在较高水平">
-          <defs>
-            <linearGradient id="curveGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" style="stop-color:#22d3ee"/>
-              <stop offset="100%" style="stop-color:#a855f7"/>
-            </linearGradient>
-          </defs>
-
-          <!-- 网格 -->
           <line class="grid-line" x1="46" y1="60"  x2="440" y2="60"/>
           <line class="grid-line" x1="46" y1="100" x2="440" y2="100"/>
           <line class="grid-line" x1="46" y1="140" x2="440" y2="140"/>
           <line class="grid-line" x1="46" y1="180" x2="440" y2="180"/>
-          <!-- 轴 -->
           <line class="axis" x1="46" y1="200" x2="440" y2="200"/>
           <line class="axis" x1="46" y1="20"  x2="46"  y2="200"/>
 
-          <!-- 巩固节点标记 -->
           <line class="marker" x1="140" y1="20" x2="140" y2="200"/>
           <line class="marker" x1="286" y1="20" x2="286" y2="200"/>
           <line class="marker" x1="366" y1="20" x2="366" y2="200"/>
 
-          <!-- 曲线：未巩固 -->
           <path class="curve c-natural"
                 d="M46 32 C 92 33, 112 96, 152 122 C 192 148, 232 160, 282 172 C 332 184, 382 190, 440 194"/>
-          <!-- 曲线：MindForge 巩固后 -->
           <path class="curve c-forge"
                 d="M46 32 C 92 34, 106 80, 140 96 C 168 110, 176 72, 210 84 C 244 96, 252 118, 286 104 C 322 90, 330 70, 366 82 C 402 92, 414 96, 440 98"/>
 
-          <!-- 刻度与标签 -->
           <text class="lbl" x="40" y="36"  text-anchor="end">100%</text>
           <text class="lbl" x="40" y="104" text-anchor="end">50%</text>
           <text class="lbl" x="40" y="204" text-anchor="end">0</text>
           <text class="lbl" x="46"  y="220" text-anchor="middle">T0</text>
           <text class="lbl" x="140" y="220" text-anchor="middle">T1</text>
           <text class="lbl" x="286" y="220" text-anchor="middle">T2</text>
-          <text class="lbl" x="440" y="220" text-anchor="end">时间 →</text>
+          <text class="lbl" x="440" y="220" text-anchor="end">时间</text>
           <text class="lbl" x="243" y="238" text-anchor="middle">巩固 / 重评估节点</text>
         </svg>
 
@@ -791,115 +729,115 @@
   </div>
 </section>
 
-<!-- ===================== 核心能力网格 ===================== -->
-<section class="section" id="capabilities" aria-labelledby="cap-title">
+<!-- ===================== 核心能力 ===================== -->
+<section class="section section-alt" id="capabilities" aria-labelledby="cap-title">
   <div class="container">
-    <div class="section-head" data-reveal>
-      <span class="tag"><span class="tag-dot" aria-hidden="true"></span>Capabilities</span>
-      <h2 id="cap-title"><span data-num="moduleCount">15</span> 个功能模块，<span class="gradient-text">一套记忆基础设施</span></h2>
+    <div class="section-head">
+      <span class="tag"><span class="tag-dot" aria-hidden="true"></span>核心能力</span>
+      <h2 id="cap-title"><span data-num="moduleCount">15</span> 个功能模块，一套记忆基础设施</h2>
       <p>从最底层的存取衰减，到人格画像、联邦共享与领域分析，MindForge 覆盖 Agent 记忆的完整生命周期。</p>
     </div>
 
     <div class="cap-grid">
-      <article class="cap" data-reveal style="--d:0ms">
+      <article class="cap">
         <span class="cap-ico" aria-hidden="true"><svg class="icon"><use href="#i-brain"/></svg></span>
         <h3>Memory Engine <span class="cap-n">01</span></h3>
         <p>四层级生命周期，Ebbinghaus 衰减、定期巩固、动态重评估，记忆会自己长大。</p>
         <div class="cap-tags"><span class="chip">生命周期</span><span class="chip">衰减</span></div>
       </article>
 
-      <article class="cap" data-reveal style="--d:40ms">
+      <article class="cap">
         <span class="cap-ico" aria-hidden="true"><svg class="icon"><use href="#i-graph"/></svg></span>
         <h3>Knowledge Graph <span class="cap-n">02</span></h3>
-        <p>自动实体与关系提取，支持路径查找和关联推理召回，让 Agent 真正会"联想"。</p>
+        <p>自动实体与关系提取，支持路径查找和关联推理召回，让 Agent 真正会联想。</p>
         <div class="cap-tags"><span class="chip">实体抽取</span><span class="chip">路径推理</span></div>
       </article>
 
-      <article class="cap" data-reveal style="--d:80ms">
+      <article class="cap">
         <span class="cap-ico" aria-hidden="true"><svg class="icon"><use href="#i-recall"/></svg></span>
         <h3>Recall Engine <span class="cap-n">03</span></h3>
         <p>多因子加权评分：覆盖率 40% / 重要度 20% / 访问频次 15% / 时间衰减 20% + 置顶加成。</p>
         <div class="cap-tags"><span class="chip">多因子</span><span class="chip">Top-K</span></div>
       </article>
 
-      <article class="cap" data-reveal style="--d:120ms">
+      <article class="cap">
         <span class="cap-ico" aria-hidden="true"><svg class="icon"><use href="#i-scale"/></svg></span>
         <h3>Importance Scoring <span class="cap-n">04</span></h3>
         <p>重要度漂移分析，识别被低估与高估的记忆，并给出动态重评估建议。</p>
         <div class="cap-tags"><span class="chip">漂移分析</span><span class="chip">重评估</span></div>
       </article>
 
-      <article class="cap" data-reveal style="--d:160ms">
+      <article class="cap">
         <span class="cap-ico" aria-hidden="true"><svg class="icon"><use href="#i-inject"/></svg></span>
         <h3>Context Injection <span class="cap-n">05</span></h3>
         <p>Token 预算感知的上下文格式化，把该记的塞进 Prompt，不该记的别浪费额度。</p>
         <div class="cap-tags"><span class="chip">Token 预算</span><span class="chip">格式化</span></div>
       </article>
 
-      <article class="cap" data-reveal style="--d:200ms">
+      <article class="cap">
         <span class="cap-ico" aria-hidden="true"><svg class="icon"><use href="#i-heart"/></svg></span>
         <h3>Emotion Tracking <span class="cap-n">06</span></h3>
         <p>按天情感分类、转换序列追踪与波动性评分，记住对话的情绪走向。</p>
         <div class="cap-tags"><span class="chip">情感时间线</span><span class="chip">波动性</span></div>
       </article>
 
-      <article class="cap" data-reveal style="--d:240ms">
+      <article class="cap">
         <span class="cap-ico" aria-hidden="true"><svg class="icon"><use href="#i-persona"/></svg></span>
         <h3>Personality Engine <span class="cap-n">07</span></h3>
         <p>学习正式度、emoji 使用、详情层级与技术深度偏好，让回复对上用户的胃口。</p>
         <div class="cap-tags"><span class="chip">偏好学习</span><span class="chip">风格画像</span></div>
       </article>
 
-      <article class="cap" data-reveal style="--d:280ms">
+      <article class="cap">
         <span class="cap-ico" aria-hidden="true"><svg class="icon"><use href="#i-federated"/></svg></span>
         <h3>Federated Memory <span class="cap-n">08</span></h3>
         <p>多 Agent 之间的 P2P 记忆共享，配合信任等级与访问策略控制谁能看到什么。</p>
         <div class="cap-tags"><span class="chip">P2P</span><span class="chip">信任等级</span></div>
       </article>
 
-      <article class="cap" data-reveal style="--d:320ms">
+      <article class="cap">
         <span class="cap-ico" aria-hidden="true"><svg class="icon"><use href="#i-shield"/></svg></span>
         <h3>Privacy Engine <span class="cap-n">09</span></h3>
         <p>四级隔离 PUBLIC / INTERNAL / PRIVATE / STRICT，AES-256-GCM + PBKDF2-SHA256 十万次迭代派生密钥。</p>
         <div class="cap-tags"><span class="chip">四级隔离</span><span class="chip">AES-256</span></div>
       </article>
 
-      <article class="cap" data-reveal style="--d:360ms">
+      <article class="cap">
         <span class="cap-ico" aria-hidden="true"><svg class="icon"><use href="#i-film"/></svg></span>
         <h3>Short Drama Analytics <span class="cap-n">10</span></h3>
         <p>类型趋势、追剧粘性评分、节奏分析、角色关系与互动矩阵，一套垂直领域分析工具。</p>
         <div class="cap-tags"><span class="chip">节奏分析</span><span class="chip">互动矩阵</span></div>
       </article>
 
-      <article class="cap" data-reveal style="--d:400ms">
+      <article class="cap">
         <span class="cap-ico" aria-hidden="true"><svg class="icon"><use href="#i-route"/></svg></span>
         <h3>Intent Router <span class="cap-n">11</span></h3>
         <p>三层路由：规则正则 → 关键词加权 → LLM 兜底，覆盖 10+ 类业务意图。</p>
         <div class="cap-tags"><span class="chip">三层路由</span><span class="chip">意图分类</span></div>
       </article>
 
-      <article class="cap" data-reveal style="--d:440ms">
+      <article class="cap">
         <span class="cap-ico" aria-hidden="true"><svg class="icon"><use href="#i-conflict"/></svg></span>
         <h3>Conflict Detector <span class="cap-n">12</span></h3>
         <p>反义词对、属性值不一致、时间线冲突三类检测，并施加自动衰减策略。</p>
         <div class="cap-tags"><span class="chip">冲突检测</span><span class="chip">自动衰减</span></div>
       </article>
 
-      <article class="cap" data-reveal style="--d:480ms">
+      <article class="cap">
         <span class="cap-ico" aria-hidden="true"><svg class="icon"><use href="#i-skill"/></svg></span>
         <h3>Skill Extractor <span class="cap-n">13</span></h3>
         <p>从记忆聚类中抽取槽位、步骤与触发词，沉淀成可复用的技能模板。</p>
         <div class="cap-tags"><span class="chip">槽位抽取</span><span class="chip">技能模板</span></div>
       </article>
 
-      <article class="cap" data-reveal style="--d:520ms">
+      <article class="cap">
         <span class="cap-ico" aria-hidden="true"><svg class="icon"><use href="#i-search"/></svg></span>
         <h3>Hybrid Search Enhanced <span class="cap-n">14</span></h3>
         <p>查询扩展 + Cross-Encoder 多特征融合重排，六路检索的最终形态。</p>
         <div class="cap-tags"><span class="chip">查询扩展</span><span class="chip">精排</span></div>
       </article>
 
-      <article class="cap" data-reveal style="--d:560ms">
+      <article class="cap">
         <span class="cap-ico" aria-hidden="true"><svg class="icon"><use href="#i-focus"/></svg></span>
         <h3>Session Focus <span class="cap-n">15</span></h3>
         <p>滑动窗口主题聚类、焦点漂移检测与增强查询生成，让长对话不跑偏。</p>
@@ -909,29 +847,27 @@
   </div>
 </section>
 
-<!-- ===================== v6.0.0 预览（开发中） ===================== -->
-<section class="section v6-sect" id="v6" aria-labelledby="v6-title">
+<!-- ===================== v6.0.0 路线图 ===================== -->
+<section class="section" id="v6" aria-labelledby="v6-title">
   <div class="container">
-    <div class="section-head" data-reveal>
-      <span class="tag"><span class="tag-dot" aria-hidden="true"></span>Roadmap · v6.0.0</span>
-      <h2 id="v6-title">下一代记忆引擎，<span class="gradient-text">正在锻造</span></h2>
-      <p>v6.0.0 的两个旗舰方向已经开工：多 Agent 协作 与 6G AI 记忆预览。以下能力<b class="hl">尚未发布</b>，接口与行为在开发期可能调整。</p>
+    <div class="section-head">
+      <span class="tag"><span class="tag-dot" aria-hidden="true"></span>路线图 · v6.0.0</span>
+      <h2 id="v6-title">下一代记忆引擎，正在锻造</h2>
+      <p>v6.0.0 的两个旗舰方向已经开工：多 Agent 协作与 6G AI 记忆预览。以下能力<b class="hl">尚未发布</b>，接口与行为在开发期可能调整。</p>
     </div>
 
     <div class="v6-grid">
-      <!-- 卡片 1：多 Agent 协作 -->
-      <article class="v6-card" data-reveal style="--d:0ms">
-        <div class="v6-sheen" aria-hidden="true"></div>
+      <article class="v6-card">
         <header class="v6-head">
           <span class="v6-ico" aria-hidden="true"><svg class="icon"><use href="#i-federated"/></svg></span>
-          <span class="badge-dev"><span class="badge-dot" aria-hidden="true"></span>开发中</span>
+          <span class="chip-badge"><i class="badge-dot" aria-hidden="true"></i>开发中</span>
         </header>
 
         <h3 class="v6-name">多 Agent 协作</h3>
         <p class="v6-en">Multi-Agent Orchestration</p>
         <p class="v6-desc">
           让多个 Agent 共用同一份记忆底座：角色化的读写权限、共享记忆黑板、写入冲突自动仲裁，
-          以及可回溯的协同链路。从"一个人记"走向"一群人会记"。
+          以及可回溯的协同链路。从一个人记，到一群人会记。
         </p>
 
         <ul class="v6-list">
@@ -942,9 +878,9 @@
         </ul>
 
         <div class="v6-tags">
-          <span class="chip chip-cy">任务编排</span>
-          <span class="chip chip-in">权限矩阵</span>
-          <span class="chip chip-vi">共享黑板</span>
+          <span class="chip">任务编排</span>
+          <span class="chip">权限矩阵</span>
+          <span class="chip">共享黑板</span>
         </div>
 
         <footer class="v6-foot">
@@ -953,12 +889,10 @@
         </footer>
       </article>
 
-      <!-- 卡片 2：6G AI 记忆预览 -->
-      <article class="v6-card v6-card-vi" data-reveal style="--d:120ms">
-        <div class="v6-sheen" aria-hidden="true"></div>
+      <article class="v6-card">
         <header class="v6-head">
           <span class="v6-ico" aria-hidden="true"><svg class="icon"><use href="#i-spark"/></svg></span>
-          <span class="badge-dev"><span class="badge-dot" aria-hidden="true"></span>开发中</span>
+          <span class="chip-badge"><i class="badge-dot" aria-hidden="true"></i>开发中</span>
         </header>
 
         <h3 class="v6-name">6G AI 记忆预览</h3>
@@ -976,9 +910,9 @@
         </ul>
 
         <div class="v6-tags">
-          <span class="chip chip-vi">预览通道</span>
-          <span class="chip chip-cy">上下文蒸馏</span>
-          <span class="chip chip-in">增量索引</span>
+          <span class="chip">预览通道</span>
+          <span class="chip">上下文蒸馏</span>
+          <span class="chip">增量索引</span>
         </div>
 
         <footer class="v6-foot">
@@ -988,25 +922,21 @@
       </article>
     </div>
 
-    <p class="v6-note" data-reveal style="--d:200ms">
+    <p class="v6-note">
       <svg class="icon icon-sm" aria-hidden="true"><use href="#i-alert"/></svg>
-      <span>以上为规划中的能力，尚未在任何已发布版本中提供。想跟进进度，请关注仓库的 <a href="https://github.com/opok-ops/MindForge/milestones" target="_blank" rel="noopener noreferrer">Milestones<svg class="icon icon-sm" aria-hidden="true"><use href="#i-external"/></svg></a>。</span>
+      <span>以上为规划中的能力，尚未在任何已发布版本中提供。想跟进进度，请关注仓库的 <a href="https://github.com/opok-ops/MindForge/milestones" target="_blank" rel="noopener noreferrer">Milestones</a>。</span>
     </p>
   </div>
 </section>
 
-<!-- ===================== 网页端 · 敬请期待（2027） ===================== -->
-<section class="section web-sect" id="web" aria-labelledby="web-title">
-  <div class="web-glow" aria-hidden="true"></div>
+<!-- ===================== 网页端 2027 ===================== -->
+<section class="section section-alt" id="web" aria-labelledby="web-title">
   <div class="container">
-    <div class="web-card" data-reveal>
-      <div class="web-badge">
-        <span class="web-badge-dot" aria-hidden="true"></span>
-        MindForge Web · 2027
-      </div>
+    <div class="web-card">
+      <div class="chip-badge"><i class="badge-dot" aria-hidden="true"></i>MindForge Web · 2027</div>
 
       <h2 id="web-title" class="web-title">
-        MindForge <span class="gradient-text">网页端</span>，明年上线
+        MindForge <span class="accent">网页端</span>，明年上线
       </h2>
       <p class="web-sub">
         打造属于全球每个人的 <b class="hl">AI 记忆知识库</b>——打开浏览器就能连接、检索与沉淀你的长期记忆，
@@ -1015,32 +945,24 @@
 
       <ul class="web-feats">
         <li class="web-feat">
-          <span class="web-ico web-ico-cy" aria-hidden="true"><svg class="icon"><use href="#i-brain"/></svg></span>
-          <div class="web-feat-txt">
-            <h3>强大 AI 能力</h3>
-            <p>多模型接入 · 深度思考 · 六路混合检索</p>
-          </div>
+          <span class="web-ico" aria-hidden="true"><svg class="icon"><use href="#i-brain"/></svg></span>
+          <h3>强大 AI 能力</h3>
+          <p>多模型接入 · 深度思考 · 六路混合检索</p>
         </li>
         <li class="web-feat">
-          <span class="web-ico web-ico-in" aria-hidden="true"><svg class="icon"><use href="#i-db"/></svg></span>
-          <div class="web-feat-txt">
-            <h3>全球记忆知识库</h3>
-            <p>四层记忆架构 · 跨设备同步 · 云端可追溯</p>
-          </div>
+          <span class="web-ico" aria-hidden="true"><svg class="icon"><use href="#i-db"/></svg></span>
+          <h3>全球记忆知识库</h3>
+          <p>四层记忆架构 · 跨设备同步 · 云端可追溯</p>
         </li>
         <li class="web-feat">
-          <span class="web-ico web-ico-vi" aria-hidden="true"><svg class="icon"><use href="#i-plug"/></svg></span>
-          <div class="web-feat-txt">
-            <h3>开放工具生态</h3>
-            <p>MCP 工具 · API · 与任意 Agent 即插即用</p>
-          </div>
+          <span class="web-ico" aria-hidden="true"><svg class="icon"><use href="#i-plug"/></svg></span>
+          <h3>开放工具生态</h3>
+          <p>MCP 工具 · API · 与任意 Agent 即插即用</p>
         </li>
         <li class="web-feat">
-          <span class="web-ico web-ico-cy" aria-hidden="true"><svg class="icon"><use href="#i-spark"/></svg></span>
-          <div class="web-feat-txt">
-            <h3>自由创作沉淀</h3>
-            <p>让每一次思考都被记住，让灵感持续落地</p>
-          </div>
+          <span class="web-ico" aria-hidden="true"><svg class="icon"><use href="#i-spark"/></svg></span>
+          <h3>自由创作沉淀</h3>
+          <p>让每一次思考都被记住，让灵感持续落地</p>
         </li>
       </ul>
 
@@ -1049,28 +971,28 @@
           <svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg>
           网页端：敬请期待
         </span>
-        <a class="btn btn-secondary web-cta" href="#v6">查看 v6.0 路线图</a>
+        <a class="btn btn-secondary" href="#v6">查看 v6.0 路线图</a>
       </div>
 
       <p class="web-note">
         <svg class="icon icon-sm" aria-hidden="true"><use href="#i-alert"/></svg>
-        <span class="web-note-txt">网页端为规划中的产品形态，计划于 <b>2027&nbsp;年</b>推出；当前版本坚持 100% 本地加密、数据不上云。具体功能、上线时间与云服务形态以正式发布为准。</span>
+        <span>网页端为规划中的产品形态，计划于 <b>2027 年</b>推出；当前版本坚持 100% 本地加密、数据不上云。具体功能、上线时间与云服务形态以正式发布为准。</span>
       </p>
     </div>
   </div>
 </section>
 
 <!-- ===================== 系统架构 ===================== -->
-<section class="section section-alt" id="architecture" aria-labelledby="ar-title">
+<section class="section" id="architecture" aria-labelledby="ar-title">
   <div class="container">
-    <div class="section-head" data-reveal>
-      <span class="tag"><span class="tag-dot" aria-hidden="true"></span>Architecture</span>
-      <h2 id="ar-title">四层架构，<span class="gradient-text">层层解耦</span></h2>
+    <div class="section-head">
+      <span class="tag"><span class="tag-dot" aria-hidden="true"></span>系统架构</span>
+      <h2 id="ar-title">四层架构，层层解耦</h2>
       <p>从底层存储加密到上层认知演化，每一层都能被单独替换或扩展。</p>
     </div>
 
     <div class="arch">
-      <article class="arch-layer a1" data-reveal>
+      <article class="arch-layer">
         <div class="arch-meta">
           <span class="arch-ico" aria-hidden="true"><svg class="icon"><use href="#i-brain"/></svg></span>
           <div>
@@ -1088,7 +1010,7 @@
         </div>
       </article>
 
-      <article class="arch-layer a2" data-reveal style="--d:80ms">
+      <article class="arch-layer">
         <div class="arch-meta">
           <span class="arch-ico" aria-hidden="true"><svg class="icon"><use href="#i-cpu"/></svg></span>
           <div>
@@ -1110,7 +1032,7 @@
         </div>
       </article>
 
-      <article class="arch-layer a3" data-reveal style="--d:160ms">
+      <article class="arch-layer">
         <div class="arch-meta">
           <span class="arch-ico" aria-hidden="true"><svg class="icon"><use href="#i-db"/></svg></span>
           <div>
@@ -1126,7 +1048,7 @@
         </div>
       </article>
 
-      <article class="arch-layer a4" data-reveal style="--d:240ms">
+      <article class="arch-layer">
         <div class="arch-meta">
           <span class="arch-ico" aria-hidden="true"><svg class="icon"><use href="#i-plug"/></svg></span>
           <div>
@@ -1139,12 +1061,12 @@
           <span class="arch-mod"><i class="dotm" aria-hidden="true"></i>Claude Code</span>
           <span class="arch-mod"><i class="dotm" aria-hidden="true"></i>Generic API</span>
           <span class="arch-mod"><i class="dotm" aria-hidden="true"></i>CLI / SDK</span>
-          <span class="arch-mod"><i class="dotm" aria-hidden="true"></i>MCP Server (<span data-num="toolCount">30+</span> tools)</span>
+          <span class="arch-mod"><i class="dotm" aria-hidden="true"></i>MCP Server (<span data-num="toolCount">33</span> tools)</span>
         </div>
       </article>
     </div>
 
-    <p class="arch-note" data-reveal>
+    <p class="arch-note">
       <svg class="icon icon-md" aria-hidden="true"><use href="#i-book"/></svg>
       <span>存储层采用 SQLite + FTS5 并开启 WAL 模式，单文件即可携带全部记忆；加密、索引与查询引擎均可独立替换为自定义实现。</span>
     </p>
@@ -1152,17 +1074,17 @@
 </section>
 
 <!-- ===================== 安全与隐私 ===================== -->
-<section class="section" id="security" aria-labelledby="se-title">
+<section class="section section-alt" id="security" aria-labelledby="se-title">
   <div class="container">
-    <div class="section-head" data-reveal>
-      <span class="tag"><span class="tag-dot" aria-hidden="true"></span>Security &amp; Privacy</span>
-      <h2 id="se-title">数据不出本机，<span class="gradient-text">也分三六九等</span></h2>
+    <div class="section-head">
+      <span class="tag"><span class="tag-dot" aria-hidden="true"></span>安全与隐私</span>
+      <h2 id="se-title">数据不出本机，也分三六九等</h2>
       <p>不是所有记忆都该被同等对待。四级隔离让 Agent 在共享与保密之间有明确边界，端侧加密保证磁盘上的数据本身就是密文。</p>
     </div>
 
     <div class="sec-grid">
-      <div class="priv-levels" data-reveal>
-        <div class="priv p1">
+      <div class="priv-levels">
+        <div class="priv">
           <span class="pv-ico" aria-hidden="true"><svg class="icon"><use href="#i-eye"/></svg></span>
           <div>
             <div class="pv-t">PUBLIC</div>
@@ -1170,33 +1092,33 @@
           </div>
           <span class="pv-extra chip chip-ok">公开</span>
         </div>
-        <div class="priv p2">
+        <div class="priv">
           <span class="pv-ico" aria-hidden="true"><svg class="icon"><use href="#i-federated"/></svg></span>
           <div>
             <div class="pv-t">INTERNAL</div>
             <div class="pv-d">组内共享，受信任等级与访问策略约束</div>
           </div>
-          <span class="pv-extra chip chip-cy">内部</span>
+          <span class="pv-extra chip chip-accent">内部</span>
         </div>
-        <div class="priv p3">
+        <div class="priv">
           <span class="pv-ico" aria-hidden="true"><svg class="icon"><use href="#i-lock"/></svg></span>
           <div>
             <div class="pv-t">PRIVATE</div>
             <div class="pv-d">仅本 Agent 可见，默认不参与联邦共享</div>
           </div>
-          <span class="pv-extra chip chip-in">私有</span>
+          <span class="pv-extra chip">私有</span>
         </div>
-        <div class="priv p4">
+        <div class="priv">
           <span class="pv-ico" aria-hidden="true"><svg class="icon"><use href="#i-shield-alert"/></svg></span>
           <div>
             <div class="pv-t">STRICT</div>
             <div class="pv-d">最高隔离级别，禁止外发与跨会话扩散</div>
           </div>
-          <span class="pv-extra chip" style="color:var(--risk);border-color:rgba(248,113,113,.28);background:rgba(248,113,113,.1)">严格</span>
+          <span class="pv-extra chip" style="color:var(--bad);border-color:rgba(217,106,95,.35);background:var(--bad-dim)">严格</span>
         </div>
       </div>
 
-      <div class="sec-card" data-reveal style="--d:120ms">
+      <div class="sec-card">
         <h3><svg class="icon" aria-hidden="true"><use href="#i-key"/></svg>加密与密钥</h3>
         <div class="spec-list">
           <div class="spec">
@@ -1210,7 +1132,7 @@
             <svg class="icon icon-md" aria-hidden="true"><use href="#i-key"/></svg>
             <div>
               <div class="sp-t">PBKDF2-SHA256 · 100,000 次迭代</div>
-              <div class="sp-d">由用户口令派生密钥，十萬量级迭代显著抬高离线暴力破解成本。</div>
+              <div class="sp-d">由用户口令派生密钥，十万量级迭代显著抬高离线暴力破解成本。</div>
             </div>
           </div>
           <div class="spec">
@@ -1229,7 +1151,7 @@
           </div>
           <div class="harden-item">
             <svg class="icon icon-md" aria-hidden="true"><use href="#i-check-circle"/></svg>
-            <div><b>路径遍历防护</b><code style="font-size:11.5px">_safe_path()</code> 校验</div>
+            <div><b>路径遍历防护</b><code>_safe_path()</code> 校验</div>
           </div>
           <div class="harden-item">
             <svg class="icon icon-md" aria-hidden="true"><use href="#i-check-circle"/></svg>
@@ -1246,182 +1168,188 @@
 </section>
 
 <!-- ===================== 生态集成 ===================== -->
-<section class="section section-alt" id="ecosystem" aria-labelledby="eco-title">
+<section class="section" id="ecosystem" aria-labelledby="eco-title">
   <div class="container">
-    <div class="section-head" data-reveal>
-      <span class="tag"><span class="tag-dot" aria-hidden="true"></span>Integration</span>
-      <h2 id="eco-title">接入你已有的<span class="gradient-text"> Agent 工作流</span></h2>
+    <div class="section-head">
+      <span class="tag"><span class="tag-dot" aria-hidden="true"></span>生态集成</span>
+      <h2 id="eco-title">接入你已有的 Agent 工作流</h2>
       <p>无论你用的是 Agent 框架、编辑器插件还是自己的服务，MindForge 都留了口子。</p>
     </div>
 
     <div class="eco-grid">
-      <article class="eco" data-reveal style="--d:0ms">
+      <article class="eco">
         <span class="eco-ico" aria-hidden="true"><svg class="icon"><use href="#i-bot"/></svg></span>
         <h3>OpenClaw</h3>
         <p>面向 OpenClaw 生态的原生适配</p>
         <span class="eco-badge">ADAPTER</span>
       </article>
-      <article class="eco" data-reveal style="--d:60ms">
+      <article class="eco">
         <span class="eco-ico" aria-hidden="true"><svg class="icon"><use href="#i-terminal"/></svg></span>
         <h3>Claude Code</h3>
         <p>命令行编码助手的记忆后端</p>
         <span class="eco-badge">ADAPTER</span>
       </article>
-      <article class="eco" data-reveal style="--d:120ms">
+      <article class="eco">
         <span class="eco-ico" aria-hidden="true"><svg class="icon"><use href="#i-api"/></svg></span>
         <h3>Generic REST API</h3>
         <p>CRUD / search / stats 标准端点</p>
         <span class="eco-badge">HTTP</span>
       </article>
-      <article class="eco" data-reveal style="--d:180ms">
+      <article class="eco">
         <span class="eco-ico" aria-hidden="true"><svg class="icon"><use href="#i-plug"/></svg></span>
         <h3>CLI / SDK</h3>
         <p>Python SDK 与命令行工具，含 Shell 补全</p>
         <span class="eco-badge">PYTHON</span>
       </article>
-      <article class="eco" data-reveal style="--d:240ms">
+      <article class="eco">
         <span class="eco-ico" aria-hidden="true"><svg class="icon"><use href="#i-server"/></svg></span>
         <h3>MCP Server</h3>
-        <p>Model Context Protocol，暴露 <span data-num="toolCount">30+</span> 个工具</p>
-        <span class="eco-badge"><span data-num="toolCount">30+</span> TOOLS</span>
+        <p>Model Context Protocol，暴露 <span data-num="toolCount">33</span> 个工具</p>
+        <span class="eco-badge"><span data-num="toolCount">33</span> TOOLS</span>
       </article>
     </div>
 
-    <div class="embed-backends" data-reveal>
-      <span class="chip chip-cy"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-vector"/></svg> sentence-transformers（默认 all-MiniLM-L6-v2）</span>
-      <span class="chip chip-in"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-vector"/></svg> OpenAI Embedding API</span>
-      <span class="chip chip-vi"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-vector"/></svg> Ollama</span>
+    <div class="embed-backends">
+      <span class="chip chip-accent"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-vector"/></svg> sentence-transformers（默认 all-MiniLM-L6-v2）</span>
+      <span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-vector"/></svg> OpenAI Embedding API</span>
+      <span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-vector"/></svg> Ollama</span>
       <span class="chip"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-vector"/></svg> 自定义 HTTP 端点</span>
     </div>
 
-    <p class="arch-note" data-reveal style="justify-content:center;text-align:left;max-width:840px;margin-left:auto;margin-right:auto;">
+    <p class="arch-note" style="justify-content:center;max-width:860px;margin-left:auto;margin-right:auto">
       <svg class="icon icon-md" aria-hidden="true"><use href="#i-check-circle"/></svg>
-      <span>项目维护 <span data-num="testCount">450+</span> 个测试用例，覆盖存储、检索、加密、联邦与适配层；嵌入后端可按需切换，也支持 <code style="font-size:11.5px">--no-embedding</code> 完全关闭向量检索。</span>
+      <span>项目维护 <span data-num="testCount">608</span> 个测试用例，覆盖存储、检索、加密、联邦与适配层；嵌入后端可按需切换，也支持 <code>--no-embedding</code> 完全关闭向量检索。</span>
     </p>
   </div>
 </section>
 
-<!-- ===================== 定性能力对比 ===================== -->
-<section class="section" id="compare" aria-labelledby="cmp-title">
+<!-- ===================== 能力对比 ===================== -->
+<section class="section section-alt" id="compare" aria-labelledby="cmp-title">
   <div class="container">
-    <div class="section-head" data-reveal>
-      <span class="tag"><span class="tag-dot" aria-hidden="true"></span>Comparison</span>
+    <div class="section-head">
+      <span class="tag"><span class="tag-dot" aria-hidden="true"></span>能力对比</span>
       <h2 id="cmp-title">能力定性对比</h2>
-      <p>只比较"有没有"这一维度，不涉及任何性能或速度指标。</p>
+      <p>只比较有没有这一维度，不涉及任何性能或速度指标。</p>
     </div>
 
-    <div data-reveal>
-      <div class="table-scroll">
-        <table class="cmp">
-          <caption class="sr-only">MindForge 与其他记忆方案的能力有无定性对比</caption>
-          <thead>
-            <tr>
-              <th scope="col">能力</th>
-              <th scope="col" class="mf">MindForge<span class="th-sub">本项目</span></th>
-              <th scope="col">mem0<span class="th-sub">开源记忆层</span></th>
-              <th scope="col">Zep<span class="th-sub">记忆服务</span></th>
-              <th scope="col">LangChain Memory<span class="th-sub">框架内置</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td class="cap-name">四层记忆生命周期（含衰减与巩固）</td>
-              <td class="mf-col"><span class="mk mk-yes"><svg class="g" aria-hidden="true"><use href="#i-check-circle"/></svg>支持</span></td>
-              <td><span class="mk mk-part"><svg class="g" aria-hidden="true"><use href="#i-half-circle"/></svg>部分</span></td>
-              <td><span class="mk mk-part"><svg class="g" aria-hidden="true"><use href="#i-half-circle"/></svg>部分</span></td>
-              <td><span class="mk mk-no"><svg class="g" aria-hidden="true"><use href="#i-minus-circle"/></svg>无</span></td>
-            </tr>
-            <tr>
-              <td class="cap-name">知识图谱与关联推理</td>
-              <td class="mf-col"><span class="mk mk-yes"><svg class="g" aria-hidden="true"><use href="#i-check-circle"/></svg>支持</span></td>
-              <td><span class="mk mk-yes"><svg class="g" aria-hidden="true"><use href="#i-check-circle"/></svg>支持</span></td>
-              <td><span class="mk mk-yes"><svg class="g" aria-hidden="true"><use href="#i-check-circle"/></svg>支持</span></td>
-              <td><span class="mk mk-no"><svg class="g" aria-hidden="true"><use href="#i-minus-circle"/></svg>无</span></td>
-            </tr>
-            <tr>
-              <td class="cap-name">六路混合检索（向量 + FTS5 + TF-IDF + Fuzzy + 扩展 + 精排）</td>
-              <td class="mf-col"><span class="mk mk-yes"><svg class="g" aria-hidden="true"><use href="#i-check-circle"/></svg>支持</span></td>
-              <td><span class="mk mk-part"><svg class="g" aria-hidden="true"><use href="#i-half-circle"/></svg>部分</span></td>
-              <td><span class="mk mk-part"><svg class="g" aria-hidden="true"><use href="#i-half-circle"/></svg>部分</span></td>
-              <td><span class="mk mk-part"><svg class="g" aria-hidden="true"><use href="#i-half-circle"/></svg>部分</span></td>
-            </tr>
-            <tr>
-              <td class="cap-name">库内置端侧 AES-256-GCM 加密</td>
-              <td class="mf-col"><span class="mk mk-yes"><svg class="g" aria-hidden="true"><use href="#i-check-circle"/></svg>支持</span></td>
-              <td><span class="mk mk-no"><svg class="g" aria-hidden="true"><use href="#i-minus-circle"/></svg>无</span></td>
-              <td><span class="mk mk-no"><svg class="g" aria-hidden="true"><use href="#i-minus-circle"/></svg>无</span></td>
-              <td><span class="mk mk-no"><svg class="g" aria-hidden="true"><use href="#i-minus-circle"/></svg>无</span></td>
-            </tr>
-            <tr>
-              <td class="cap-name">四级隐私隔离（PUBLIC → STRICT）</td>
-              <td class="mf-col"><span class="mk mk-yes"><svg class="g" aria-hidden="true"><use href="#i-check-circle"/></svg>支持</span></td>
-              <td><span class="mk mk-part"><svg class="g" aria-hidden="true"><use href="#i-half-circle"/></svg>部分</span></td>
-              <td><span class="mk mk-part"><svg class="g" aria-hidden="true"><use href="#i-half-circle"/></svg>部分</span></td>
-              <td><span class="mk mk-no"><svg class="g" aria-hidden="true"><use href="#i-minus-circle"/></svg>无</span></td>
-            </tr>
-            <tr>
-              <td class="cap-name">联邦多 Agent 记忆共享</td>
-              <td class="mf-col"><span class="mk mk-yes"><svg class="g" aria-hidden="true"><use href="#i-check-circle"/></svg>支持</span></td>
-              <td><span class="mk mk-no"><svg class="g" aria-hidden="true"><use href="#i-minus-circle"/></svg>无</span></td>
-              <td><span class="mk mk-part"><svg class="g" aria-hidden="true"><use href="#i-half-circle"/></svg>部分</span></td>
-              <td><span class="mk mk-no"><svg class="g" aria-hidden="true"><use href="#i-minus-circle"/></svg>无</span></td>
-            </tr>
-            <tr>
-              <td class="cap-name">人格 / 情感画像</td>
-              <td class="mf-col"><span class="mk mk-yes"><svg class="g" aria-hidden="true"><use href="#i-check-circle"/></svg>支持</span></td>
-              <td><span class="mk mk-no"><svg class="g" aria-hidden="true"><use href="#i-minus-circle"/></svg>无</span></td>
-              <td><span class="mk mk-part"><svg class="g" aria-hidden="true"><use href="#i-half-circle"/></svg>部分</span></td>
-              <td><span class="mk mk-no"><svg class="g" aria-hidden="true"><use href="#i-minus-circle"/></svg>无</span></td>
-            </tr>
-            <tr>
-              <td class="cap-name">MCP Server 工具集</td>
-              <td class="mf-col"><span class="mk mk-yes"><svg class="g" aria-hidden="true"><use href="#i-check-circle"/></svg>33 个</span></td>
-              <td><span class="mk mk-part"><svg class="g" aria-hidden="true"><use href="#i-half-circle"/></svg>部分</span></td>
-              <td><span class="mk mk-part"><svg class="g" aria-hidden="true"><use href="#i-half-circle"/></svg>部分</span></td>
-              <td><span class="mk mk-no"><svg class="g" aria-hidden="true"><use href="#i-minus-circle"/></svg>无</span></td>
-            </tr>
-            <tr>
-              <td class="cap-name">纯本地零云端依赖运行</td>
-              <td class="mf-col"><span class="mk mk-yes"><svg class="g" aria-hidden="true"><use href="#i-check-circle"/></svg>支持</span></td>
-              <td><span class="mk mk-part"><svg class="g" aria-hidden="true"><use href="#i-half-circle"/></svg>部分</span></td>
-              <td><span class="mk mk-no"><svg class="g" aria-hidden="true"><use href="#i-minus-circle"/></svg>无</span></td>
-              <td><span class="mk mk-yes"><svg class="g" aria-hidden="true"><use href="#i-check-circle"/></svg>支持</span></td>
-            </tr>
-            <tr>
-              <td class="cap-name">垂直领域分析（如短剧分析）</td>
-              <td class="mf-col"><span class="mk mk-yes"><svg class="g" aria-hidden="true"><use href="#i-check-circle"/></svg>支持</span></td>
-              <td><span class="mk mk-no"><svg class="g" aria-hidden="true"><use href="#i-minus-circle"/></svg>无</span></td>
-              <td><span class="mk mk-no"><svg class="g" aria-hidden="true"><use href="#i-minus-circle"/></svg>无</span></td>
-              <td><span class="mk mk-no"><svg class="g" aria-hidden="true"><use href="#i-minus-circle"/></svg>无</span></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <p class="cmp-note">
-        <svg class="icon icon-md" aria-hidden="true"><use href="#i-alert"/></svg>
-        <span>上表为<b>定性</b>对比，仅表示能力有无（支持 / 部分支持 / 无），<b>不代表任何性能、速度或质量优劣</b>。信息依据各项目公开文档整理，可能随版本演进变化，请以各自官方仓库为准；对比对象均为优秀的开源项目，此处仅用于能力定位参考。</span>
-      </p>
+    <div class="table-scroll">
+      <table class="cmp">
+        <caption class="sr-only">MindForge 与其他记忆方案的能力有无定性对比</caption>
+        <colgroup>
+          <col style="width:32%">
+          <col style="width:24%">
+          <col style="width:15%">
+          <col style="width:15%">
+          <col style="width:14%">
+        </colgroup>
+        <thead>
+          <tr>
+            <th scope="col">能力</th>
+            <th scope="col" class="mf">MindForge<span class="th-sub">本项目</span></th>
+            <th scope="col">mem0<span class="th-sub">开源记忆层</span></th>
+            <th scope="col">Zep<span class="th-sub">记忆服务</span></th>
+            <th scope="col">LangChain Memory<span class="th-sub">框架内置</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="cap-name">四层记忆生命周期（含衰减与巩固）</td>
+            <td class="mf-col"><span class="mk mk-yes"><svg class="g" aria-hidden="true"><use href="#i-check-circle"/></svg>支持</span></td>
+            <td><span class="mk mk-part"><svg class="g" aria-hidden="true"><use href="#i-half-circle"/></svg>部分</span></td>
+            <td><span class="mk mk-part"><svg class="g" aria-hidden="true"><use href="#i-half-circle"/></svg>部分</span></td>
+            <td><span class="mk mk-no"><svg class="g" aria-hidden="true"><use href="#i-minus-circle"/></svg>无</span></td>
+          </tr>
+          <tr>
+            <td class="cap-name">知识图谱与关联推理</td>
+            <td class="mf-col"><span class="mk mk-yes"><svg class="g" aria-hidden="true"><use href="#i-check-circle"/></svg>支持</span></td>
+            <td><span class="mk mk-yes"><svg class="g" aria-hidden="true"><use href="#i-check-circle"/></svg>支持</span></td>
+            <td><span class="mk mk-yes"><svg class="g" aria-hidden="true"><use href="#i-check-circle"/></svg>支持</span></td>
+            <td><span class="mk mk-no"><svg class="g" aria-hidden="true"><use href="#i-minus-circle"/></svg>无</span></td>
+          </tr>
+          <tr>
+            <td class="cap-name">六路混合检索（向量 + FTS5 + TF-IDF + Fuzzy + 扩展 + 精排）</td>
+            <td class="mf-col"><span class="mk mk-yes"><svg class="g" aria-hidden="true"><use href="#i-check-circle"/></svg>支持</span></td>
+            <td><span class="mk mk-part"><svg class="g" aria-hidden="true"><use href="#i-half-circle"/></svg>部分</span></td>
+            <td><span class="mk mk-part"><svg class="g" aria-hidden="true"><use href="#i-half-circle"/></svg>部分</span></td>
+            <td><span class="mk mk-part"><svg class="g" aria-hidden="true"><use href="#i-half-circle"/></svg>部分</span></td>
+          </tr>
+          <tr>
+            <td class="cap-name">库内置端侧 AES-256-GCM 加密</td>
+            <td class="mf-col"><span class="mk mk-yes"><svg class="g" aria-hidden="true"><use href="#i-check-circle"/></svg>支持</span></td>
+            <td><span class="mk mk-no"><svg class="g" aria-hidden="true"><use href="#i-minus-circle"/></svg>无</span></td>
+            <td><span class="mk mk-no"><svg class="g" aria-hidden="true"><use href="#i-minus-circle"/></svg>无</span></td>
+            <td><span class="mk mk-no"><svg class="g" aria-hidden="true"><use href="#i-minus-circle"/></svg>无</span></td>
+          </tr>
+          <tr>
+            <td class="cap-name">四级隐私隔离（PUBLIC → STRICT）</td>
+            <td class="mf-col"><span class="mk mk-yes"><svg class="g" aria-hidden="true"><use href="#i-check-circle"/></svg>支持</span></td>
+            <td><span class="mk mk-part"><svg class="g" aria-hidden="true"><use href="#i-half-circle"/></svg>部分</span></td>
+            <td><span class="mk mk-part"><svg class="g" aria-hidden="true"><use href="#i-half-circle"/></svg>部分</span></td>
+            <td><span class="mk mk-no"><svg class="g" aria-hidden="true"><use href="#i-minus-circle"/></svg>无</span></td>
+          </tr>
+          <tr>
+            <td class="cap-name">联邦多 Agent 记忆共享</td>
+            <td class="mf-col"><span class="mk mk-yes"><svg class="g" aria-hidden="true"><use href="#i-check-circle"/></svg>支持</span></td>
+            <td><span class="mk mk-no"><svg class="g" aria-hidden="true"><use href="#i-minus-circle"/></svg>无</span></td>
+            <td><span class="mk mk-part"><svg class="g" aria-hidden="true"><use href="#i-half-circle"/></svg>部分</span></td>
+            <td><span class="mk mk-no"><svg class="g" aria-hidden="true"><use href="#i-minus-circle"/></svg>无</span></td>
+          </tr>
+          <tr>
+            <td class="cap-name">人格 / 情感画像</td>
+            <td class="mf-col"><span class="mk mk-yes"><svg class="g" aria-hidden="true"><use href="#i-check-circle"/></svg>支持</span></td>
+            <td><span class="mk mk-no"><svg class="g" aria-hidden="true"><use href="#i-minus-circle"/></svg>无</span></td>
+            <td><span class="mk mk-part"><svg class="g" aria-hidden="true"><use href="#i-half-circle"/></svg>部分</span></td>
+            <td><span class="mk mk-no"><svg class="g" aria-hidden="true"><use href="#i-minus-circle"/></svg>无</span></td>
+          </tr>
+          <tr>
+            <td class="cap-name">MCP Server 工具集</td>
+            <td class="mf-col"><span class="mk mk-yes"><svg class="g" aria-hidden="true"><use href="#i-check-circle"/></svg>33 个</span></td>
+            <td><span class="mk mk-part"><svg class="g" aria-hidden="true"><use href="#i-half-circle"/></svg>部分</span></td>
+            <td><span class="mk mk-part"><svg class="g" aria-hidden="true"><use href="#i-half-circle"/></svg>部分</span></td>
+            <td><span class="mk mk-no"><svg class="g" aria-hidden="true"><use href="#i-minus-circle"/></svg>无</span></td>
+          </tr>
+          <tr>
+            <td class="cap-name">纯本地零云端依赖运行</td>
+            <td class="mf-col"><span class="mk mk-yes"><svg class="g" aria-hidden="true"><use href="#i-check-circle"/></svg>支持</span></td>
+            <td><span class="mk mk-part"><svg class="g" aria-hidden="true"><use href="#i-half-circle"/></svg>部分</span></td>
+            <td><span class="mk mk-no"><svg class="g" aria-hidden="true"><use href="#i-minus-circle"/></svg>无</span></td>
+            <td><span class="mk mk-yes"><svg class="g" aria-hidden="true"><use href="#i-check-circle"/></svg>支持</span></td>
+          </tr>
+          <tr>
+            <td class="cap-name">垂直领域分析（如短剧分析）</td>
+            <td class="mf-col"><span class="mk mk-yes"><svg class="g" aria-hidden="true"><use href="#i-check-circle"/></svg>支持</span></td>
+            <td><span class="mk mk-no"><svg class="g" aria-hidden="true"><use href="#i-minus-circle"/></svg>无</span></td>
+            <td><span class="mk mk-no"><svg class="g" aria-hidden="true"><use href="#i-minus-circle"/></svg>无</span></td>
+            <td><span class="mk mk-no"><svg class="g" aria-hidden="true"><use href="#i-minus-circle"/></svg>无</span></td>
+          </tr>
+        </tbody>
+      </table>
     </div>
+
+    <p class="cmp-note">
+      <svg class="icon icon-md" aria-hidden="true"><use href="#i-alert"/></svg>
+      <span>上表为<b>定性</b>对比，仅表示能力有无（支持 / 部分支持 / 无），<b>不代表任何性能、速度或质量优劣</b>。信息依据各项目公开文档整理，可能随版本演进变化，请以各自官方仓库为准；对比对象均为优秀的开源项目，此处仅用于能力定位参考。</span>
+    </p>
   </div>
 </section>
 
 <!-- ===================== 更新日志 ===================== -->
-<section class="section section-alt" id="changelog" aria-labelledby="cl-title">
+<section class="section" id="changelog" aria-labelledby="cl-title">
   <div class="container">
-    <div class="section-head" data-reveal>
-      <span class="tag"><span class="tag-dot" aria-hidden="true"></span>Changelog</span>
-      <h2 id="cl-title">每次迭代，<span class="gradient-text">都在进化</span></h2>
+    <div class="section-head">
+      <span class="tag"><span class="tag-dot" aria-hidden="true"></span>更新日志</span>
+      <h2 id="cl-title">每次迭代，都在进化</h2>
       <p>从 v5.3.3 到 <span data-ver>v5.6.6</span>，功能扩展、安全加固与 Bug 修复的完整轨迹。</p>
     </div>
 
     <div class="cl-list">
-      <article class="cl-item is-next" data-reveal>
+      <article class="cl-item">
         <div class="cl-meta">
           <span class="cl-ver">v6.0.0</span>
           <span class="cl-date">未发布</span>
-          <span class="cl-kind cl-kind-dev"><span class="badge-dot" aria-hidden="true"></span>开发中</span>
+          <span class="cl-kind cl-kind-dev">开发中</span>
         </div>
+        <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
         <div class="cl-body">
           <h4>多 Agent 协作 · 6G AI 记忆预览</h4>
           <ul>
@@ -1432,29 +1360,31 @@
         </div>
       </article>
 
-      <article class="cl-item is-latest" data-reveal>
+      <article class="cl-item is-latest">
         <div class="cl-meta">
           <span class="cl-ver" data-ver>v5.6.6</span>
           <span class="cl-date">2026-09-13</span>
-          <span class="cl-kind">最新</span>
+          <span class="cl-kind cl-kind-latest">最新</span>
         </div>
+        <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
         <div class="cl-body">
           <h4>加密记忆跨进程搜索修复 · 联邦共享字典并发安全</h4>
           <ul>
             <li><b>加密记忆跨进程搜索 0 命中修复（v5.5.7 遗留）</b>：加密库 content 列为空、FTS5 不落明文，进程重启后 TF-IDF 水合与模糊 / 相似度 / 去重比对对加密记忆全部失效。现水合与各文本检索在内存中逐条解密后再索引、打分，单条坏密文只跳过该条不中断；明文仅驻留进程内存、绝不写盘或写入 FTS5，磁盘静态加密不被削弱</li>
-            <li><b>联邦共享字典并发安全</b>：过期共享清理的遍历 + 删除与 share / get / revoke / 重放校验统一在 <code>_fed_lock</code> 临界区内，消除并发“字典迭代中被修改”竞态；非重入锁、节流清理在加锁前执行，无死锁</li>
+            <li><b>联邦共享字典并发安全</b>：过期共享清理的遍历 + 删除与 share / get / revoke / 重放校验统一在 <code>_fed_lock</code> 临界区内，消除并发字典迭代中被修改竞态；非重入锁、节流清理在加锁前执行，无死锁</li>
             <li><b>版本号同步</b>：存储引擎文件头版本号对齐当前发布版</li>
             <li><b>测试</b>：新增 7 个专项回归（加密跨进程关键词 / 模糊 / 相似度 / 去重、坏密文容错、8 线程联邦共享并发），全量 608 项通过</li>
           </ul>
         </div>
       </article>
 
-      <article class="cl-item" data-reveal>
+      <article class="cl-item">
         <div class="cl-meta">
           <span class="cl-ver">v5.6.5</span>
           <span class="cl-date">2026-09-13</span>
           <span class="cl-kind">安全</span>
         </div>
+        <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
         <div class="cl-body">
           <h4>Ed25519 联邦签名 · 防重放 · 计数持久 · 内存与流式加固</h4>
           <ul>
@@ -1467,12 +1397,13 @@
         </div>
       </article>
 
-      <article class="cl-item" data-reveal>
+      <article class="cl-item">
         <div class="cl-meta">
           <span class="cl-ver">v5.6.4</span>
           <span class="cl-date">2026-09-13</span>
           <span class="cl-kind">性能</span>
         </div>
+        <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
         <div class="cl-body">
           <h4>稀疏向量 + 倒排链 · 模糊剪枝 · 读缓存接入，搜索提速约 59×</h4>
           <ul>
@@ -1484,12 +1415,13 @@
         </div>
       </article>
 
-      <article class="cl-item" data-reveal>
+      <article class="cl-item">
         <div class="cl-meta">
           <span class="cl-ver">v5.6.3</span>
           <span class="cl-date">2026-09-13</span>
           <span class="cl-kind">安全</span>
         </div>
+        <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
         <div class="cl-body">
           <h4>30 项安全审计完整加固 · 入口层测试补齐</h4>
           <ul>
@@ -1502,12 +1434,13 @@
         </div>
       </article>
 
-      <article class="cl-item" data-reveal>
+      <article class="cl-item">
         <div class="cl-meta">
           <span class="cl-ver">v5.6.2</span>
           <span class="cl-date">2026-09-12</span>
           <span class="cl-kind">安全</span>
         </div>
+        <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
         <div class="cl-body">
           <h4>长期无人值守运行 · 并发安全审计加固</h4>
           <ul>
@@ -1518,12 +1451,13 @@
         </div>
       </article>
 
-      <article class="cl-item" data-reveal>
+      <article class="cl-item">
         <div class="cl-meta">
           <span class="cl-ver">v5.6.1</span>
           <span class="cl-date">2026-09-09</span>
           <span class="cl-kind">安全</span>
         </div>
+        <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
         <div class="cl-body">
           <h4>版本化 KDF · 记忆衰减引擎 · 备份/恢复 · 安全偿还</h4>
           <ul>
@@ -1537,17 +1471,18 @@
         </div>
       </article>
 
-      <article class="cl-item" data-reveal>
+      <article class="cl-item">
         <div class="cl-meta">
           <span class="cl-ver">v5.5.8</span>
           <span class="cl-date">2026-09-01</span>
           <span class="cl-kind">功能</span>
         </div>
+        <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
         <div class="cl-body">
           <h4>记忆版本对比 · MCP 参数校验 · Bug 修复</h4>
           <ul>
             <li><b>记忆版本对比</b>：<code>memory_diff(a, b)</code> 输出内容 unified diff 及分类/标签/重要度差异，同时接入 API / CLI / MCP</li>
-            <li><b>MCP 参数校验</b>：<span data-num="toolCount">30+</span> 个工具 handler 统一校验必需参数，返回明确错误而非 KeyError 崩溃</li>
+            <li><b>MCP 参数校验</b>：<span data-num="toolCount">33</span> 个工具 handler 统一校验必需参数，返回明确错误而非 KeyError 崩溃</li>
             <li><b>P0 修复</b>：<code>export_agent_memories()</code> 的 <code>__version__</code> NameError</li>
             <li><b>P1 修复</b>：<code>add()</code> 中 falsy 枚举值（如 <code>PrivacyLevel.NONE</code>）被默认值覆盖</li>
             <li><b>P1 修复</b>：<code>cmd_list</code> 筛选时显示全局总数而非筛选结果数</li>
@@ -1556,12 +1491,13 @@
         </div>
       </article>
 
-      <article class="cl-item" data-reveal>
+      <article class="cl-item">
         <div class="cl-meta">
           <span class="cl-ver">v5.5.7</span>
           <span class="cl-date">2026-08-31</span>
           <span class="cl-kind">安全</span>
         </div>
+        <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
         <div class="cl-body">
           <h4>安全加固与稳定性</h4>
           <ul>
@@ -1574,12 +1510,13 @@
         </div>
       </article>
 
-      <article class="cl-item" data-reveal>
+      <article class="cl-item">
         <div class="cl-meta">
           <span class="cl-ver">v5.5.6</span>
           <span class="cl-date">2026-08-26</span>
           <span class="cl-kind">功能</span>
         </div>
+        <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
         <div class="cl-body">
           <h4>记忆置顶与批量操作</h4>
           <ul>
@@ -1592,12 +1529,13 @@
         </div>
       </article>
 
-      <article class="cl-item" data-reveal>
+      <article class="cl-item">
         <div class="cl-meta">
           <span class="cl-ver">v5.5.5</span>
           <span class="cl-date">2026-08-26</span>
           <span class="cl-kind">功能</span>
         </div>
+        <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
         <div class="cl-body">
           <h4>智能导入去重 + REST API + 多后端嵌入适配器</h4>
           <ul>
@@ -1614,12 +1552,13 @@
         </div>
       </article>
 
-      <article class="cl-item" data-reveal>
+      <article class="cl-item">
         <div class="cl-meta">
           <span class="cl-ver">v5.4.5</span>
           <span class="cl-date">2026-08-10</span>
           <span class="cl-kind">检索</span>
         </div>
+        <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
         <div class="cl-body">
           <h4>向量检索能力（六路融合搜索）</h4>
           <ul>
@@ -1633,12 +1572,13 @@
         </div>
       </article>
 
-      <article class="cl-item" data-reveal>
+      <article class="cl-item">
         <div class="cl-meta">
           <span class="cl-ver">v5.4.4</span>
           <span class="cl-date">2026-08-10</span>
           <span class="cl-kind">安全</span>
         </div>
+        <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
         <div class="cl-body">
           <h4>7 项安全审计修复</h4>
           <ul>
@@ -1650,12 +1590,13 @@
         </div>
       </article>
 
-      <article class="cl-item" data-reveal>
+      <article class="cl-item">
         <div class="cl-meta">
           <span class="cl-ver">v5.4.3</span>
           <span class="cl-date">2026-08-06</span>
           <span class="cl-kind">联邦</span>
         </div>
+        <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
         <div class="cl-body">
           <h4>联邦记忆细粒度 ACL · 共享记忆冲突解决</h4>
           <ul>
@@ -1668,12 +1609,13 @@
         </div>
       </article>
 
-      <article class="cl-item" data-reveal>
+      <article class="cl-item">
         <div class="cl-meta">
           <span class="cl-ver">v5.4.1</span>
           <span class="cl-date">2026-08-06</span>
           <span class="cl-kind">功能</span>
         </div>
+        <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
         <div class="cl-body">
           <h4>记忆反思 / 血缘溯源 / 强化候选 · 伏笔追踪 / 分集张力 / 角色戏份</h4>
           <ul>
@@ -1688,12 +1630,13 @@
         </div>
       </article>
 
-      <article class="cl-item" data-reveal>
+      <article class="cl-item">
         <div class="cl-meta">
           <span class="cl-ver">v5.3.7</span>
           <span class="cl-date">2026-08-03</span>
           <span class="cl-kind">功能</span>
         </div>
+        <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
         <div class="cl-body">
           <h4>记忆重要度 / 上下文注入 / 情感追踪 · 类型趋势 / 追剧粘性 / 角色关系</h4>
           <ul>
@@ -1708,12 +1651,13 @@
         </div>
       </article>
 
-      <article class="cl-item" data-reveal>
+      <article class="cl-item">
         <div class="cl-meta">
           <span class="cl-ver">v5.3.6</span>
           <span class="cl-date">2026-08-02</span>
           <span class="cl-kind">功能</span>
         </div>
+        <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
         <div class="cl-body">
           <h4>记忆关联推理 · 智能召回 · 节奏 / 互动分析</h4>
           <ul>
@@ -1726,12 +1670,13 @@
         </div>
       </article>
 
-      <article class="cl-item" data-reveal>
+      <article class="cl-item">
         <div class="cl-meta">
           <span class="cl-ver">v5.3.5</span>
           <span class="cl-date">2026-08-02</span>
           <span class="cl-kind">功能</span>
         </div>
+        <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
         <div class="cl-body">
           <h4>Agent 记忆增强 · AI 短剧增强 · 深度安全加固</h4>
           <ul>
@@ -1744,12 +1689,13 @@
         </div>
       </article>
 
-      <article class="cl-item" data-reveal>
+      <article class="cl-item">
         <div class="cl-meta">
           <span class="cl-ver">v5.3.4</span>
           <span class="cl-date">2026-08-02</span>
           <span class="cl-kind">功能</span>
         </div>
+        <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
         <div class="cl-body">
           <h4>Agent 情感分析 · 记忆衰减 · 短剧对比 · 角色弧线</h4>
           <ul>
@@ -1760,12 +1706,13 @@
         </div>
       </article>
 
-      <article class="cl-item" data-reveal>
+      <article class="cl-item">
         <div class="cl-meta">
           <span class="cl-ver">v5.3.3</span>
           <span class="cl-date">2026-08-01</span>
           <span class="cl-kind">功能</span>
         </div>
+        <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
         <div class="cl-body">
           <h4>Agent 时间线 · 热力图 · 追剧统计 · 角色关系网络</h4>
         </div>
@@ -1777,15 +1724,15 @@
 <!-- ===================== CTA ===================== -->
 <section class="cta" id="get-started" aria-labelledby="cta-title">
   <div class="container cta-inner">
-    <h2 id="cta-title" data-reveal>现在就给你的 Agent<br>装上 <span class="gradient-text">终身记忆</span></h2>
-    <p data-reveal style="--d:80ms">一行 pip 安装，零配置启动，100% 本地运行。</p>
+    <h2 id="cta-title">现在就给你的 Agent<br>装上<span class="accent">终身记忆</span></h2>
+    <p>一行 pip 安装，零配置启动，100% 本地运行。</p>
 
-    <div class="cta-install" data-reveal style="--d:160ms">
+    <div class="cta-install">
       <div class="code">
         <div class="code-bar">
           <span class="code-dot r" aria-hidden="true"></span>
-          <span class="code-dot y" aria-hidden="true"></span>
-          <span class="code-dot g" aria-hidden="true"></span>
+          <span class="code-dot" aria-hidden="true"></span>
+          <span class="code-dot" aria-hidden="true"></span>
           <span class="code-name">install</span>
           <button type="button" class="copy-btn" data-copy="#code-install" aria-label="复制安装命令">
             <svg class="icon icon-sm" aria-hidden="true"><use href="#i-copy"/></svg>
@@ -1796,7 +1743,7 @@
       </div>
     </div>
 
-    <div class="cta-links" data-reveal style="--d:240ms">
+    <div class="cta-links">
       <a href="https://github.com/opok-ops/MindForge" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
         <svg class="icon icon-sm icon-fill" aria-hidden="true"><use href="#i-github"/></svg>
         <span>克隆源码</span>
@@ -1815,45 +1762,6 @@
 
 </main>
 
-<!-- ===================== 关于开发者 ===================== -->
-<section class="section section-alt" id="about-dev" aria-labelledby="about-dev-title" style="padding:64px 0">
-  <div class="container">
-    <div class="section-head" data-reveal>
-      <span class="tag"><span class="tag-dot" aria-hidden="true"></span>About Developer</span>
-      <h2 id="about-dev-title">关于<span class="gradient-text">开发者</span></h2>
-    </div>
-
-    <div class="dev-card" data-reveal style="max-width:760px;margin:0 auto;text-align:center">
-      <div class="dev-avatar" aria-hidden="true" style="width:88px;height:88px;border-radius:50%;margin:0 auto 20px;background:linear-gradient(135deg,#22d3ee,#818cf8,#a855f7);display:flex;align-items:center;justify-content:center;font-size:36px;font-weight:700;color:#05070d">顾</div>
-      <h3 style="font-size:24px;margin-bottom:6px">小顾</h3>
-      <p style="color:var(--txt-3);font-size:14px;margin-bottom:28px">2010-08-01 · 中专毕业 · 独立开发者</p>
-
-      <div class="dev-story" style="text-align:left;line-height:1.85;font-size:15px;color:var(--txt-2);max-width:680px;margin:0 auto 32px">
-        <p style="margin-bottom:16px">大家好，我是小顾，一个 2010 年出生的年轻人。学历不高，中专毕业，但这从没拦住我对技术的热爱。别人在刷短视频的时候，我在读源码；别人在打游戏的时候，我在调 Bug。没有名校背景，没有大厂履历，只有一台电脑和一堆自己写的代码。</p>
-        <p style="margin-bottom:16px">MindForge 是我打磨的一套 AI Agent 终身记忆系统——四层记忆架构、知识图谱、六路混合检索、端侧 AES-256-GCM 加密、联邦网络，全部本地运行，数据不上云。从第一行代码到现在 v5.6.6，每一版都是我自己一行一行敲出来的。没有团队，没有融资，就一个人，一台电脑，一个个版本往上堆。</p>
-        <p style="margin-bottom:16px">有人说中专生做不了开源项目，我就做给你看。608 个测试用例全部通过，33 个 MCP 工具，15 个核心模块，百度收录、Google 收录、GitHub Actions CI 全绿。这不是什么天赋，是无数个深夜 debug 出来的。学历不能定义一个人的上限，但代码可以证明一个人的态度。</p>
-        <p style="margin-bottom:16px">如果你也对我的项目感兴趣，或者也是一个不服输的人，欢迎来找我聊。抖音和小红书都会更新项目进展和技术分享，不整虚的，都是实操干货。有什么问题直接留言，我看到就会回。</p>
-        <p>最后想说一句：别被学历困住。中专怎么了？代码又不会看你文凭。想做什么就去做，用作品说话，用行动证明。</p>
-      </div>
-
-      <div class="dev-social" style="display:flex;flex-wrap:wrap;gap:12px 20px;justify-content:center;align-items:center;margin-top:8px">
-        <a href="https://v.douyin.com/ZIsw2VpuT9o/" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:var(--txt-2);font-size:14px;text-decoration:none">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M16.5 2v3.2c0 2 1.2 3.7 2.8 4.3v2.6c-1 .2-2 .1-2.8-.2v6.2c0 2.3-2 4.1-4.3 4.1s-4.3-1.8-4.3-4.1 2-4.1 4.3-4.1c.3 0 .6 0 .9.1v2.7c-.3-.1-.6-.2-.9-.2-.8 0-1.5.7-1.5 1.5s.7 1.5 1.5 1.5 1.5-.7 1.5-1.5V2h2.8Z"/></svg>
-          抖音号 <strong style="color:var(--cy);text-decoration:underline">shidianduo3116</strong>
-        </a>
-        <a href="https://xhslink.cn/o/3m71WBRPD17" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:var(--txt-2);font-size:14px;text-decoration:none">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M13.2 2c.3 2 .8 3.6 2.8 4.5.6.3 1.3.4 2 .4v2.6c-1.2 0-2.3-.3-3.3-.9v6.4c0 2.6-2.1 4.5-4.6 4.5s-4.6-2-4.6-4.5 2-4.5 4.6-4.5c.4 0 .7 0 1 .1v2.8c-.3-.1-.7-.2-1-.2-.9 0-1.6.7-1.6 1.6s.7 1.6 1.6 1.6 1.6-.7 1.6-1.6V2h3.5Z"/></svg>
-          小红书号 <strong style="color:var(--cy);text-decoration:underline">4406811524</strong>
-        </a>
-        <a href="https://github.com/opok-ops/MindForge" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:var(--txt-2);font-size:14px;text-decoration:none">
-          <svg class="icon icon-sm icon-fill" aria-hidden="true"><use href="#i-github"/></svg>
-          GitHub
-        </a>
-      </div>
-    </div>
-  </div>
-</section>
-
 <!-- ===================== 页脚 ===================== -->
 <footer class="footer">
   <div class="container">
@@ -1861,16 +1769,9 @@
       <div class="foot-brand">
         <span class="brand-logo" aria-hidden="true">
           <svg viewBox="0 0 32 32" fill="none">
-            <defs>
-              <linearGradient id="logoGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" style="stop-color:#22d3ee"/>
-                <stop offset="52%" style="stop-color:#818cf8"/>
-                <stop offset="100%" style="stop-color:#a855f7"/>
-              </linearGradient>
-            </defs>
-            <circle cx="16" cy="16" r="13" stroke="url(#logoGrad2)" stroke-width="2.2"/>
-            <path d="M9 16a7 7 0 0 1 14 0" stroke="url(#logoGrad2)" stroke-width="2.2" stroke-linecap="round"/>
-            <circle cx="16" cy="16" r="2.6" fill="url(#logoGrad2)"/>
+            <circle cx="16" cy="16" r="13" stroke="#6d8dff" stroke-width="2.2"/>
+            <path d="M9 16a7 7 0 0 1 14 0" stroke="#6d8dff" stroke-width="2.2" stroke-linecap="round"/>
+            <circle cx="16" cy="16" r="2.6" fill="#6d8dff"/>
           </svg>
         </span>
         <div>
@@ -1925,11 +1826,12 @@
       <div class="foot-col">
         <h5>开发者</h5>
         <ul>
-          <li><strong>小顾</strong> · 2010-08-01 · 中专</li>
+          <li><strong>小顾</strong> · 独立开发者</li>
           <li>
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true" style="vertical-align:-2px"><path d="M16.5 2v3.2c0 2 1.2 3.7 2.8 4.3v2.6c-1 .2-2 .1-2.8-.2v6.2c0 2.3-2 4.1-4.3 4.1s-4.3-1.8-4.3-4.1 2-4.1 4.3-4.1c.3 0 .6 0 .9.1v2.7c-.3-.1-.6-.2-.9-.2-.8 0-1.5.7-1.5 1.5s.7 1.5 1.5 1.5 1.5-.7 1.5-1.5V2h2.8Z"/></svg>
-            抖音号 <a href="https://v.douyin.com/ZIsw2VpuT9o/" target="_blank" rel="noopener noreferrer" style="text-decoration:underline">shidianduo3116</a>
-            · 小红书号 <a href="https://xhslink.cn/o/3m71WBRPD17" target="_blank" rel="noopener noreferrer" style="text-decoration:underline">4406811524</a>
+            <a href="https://v.douyin.com/ZIsw2VpuT9o/" target="_blank" rel="noopener noreferrer">抖音号 shidianduo3116</a>
+          </li>
+          <li>
+            <a href="https://xhslink.cn/o/3m71WBRPD17" target="_blank" rel="noopener noreferrer">小红书号 4406811524</a>
           </li>
           <li><a href="https://github.com/opok-ops/MindForge" target="_blank" rel="noopener noreferrer">GitHub</a></li>
         </ul>
@@ -1939,11 +1841,9 @@
     <div class="foot-bottom">
       <span>© <span id="foot-year">2026</span> MindForge · 本地运行 · 数据不上云</span>
       <span class="fb-legal">
-        <span>Python 库 · <code style="font-size:11.5px">git clone + pip install -e .</code></span>
+        <span>Python 库 · <code>git clone + pip install -e .</code></span>
         <a href="https://github.com/opok-ops/MindForge/blob/master/LICENSE" target="_blank" rel="noopener noreferrer">License</a>
-        <a href="https://github.com/opok-ops/MindForge" target="_blank" rel="noopener noreferrer">
-          源码 <svg class="icon icon-sm" style="display:inline;vertical-align:-2px" aria-hidden="true"><use href="#i-external"/></svg>
-        </a>
+        <a href="https://github.com/opok-ops/MindForge" target="_blank" rel="noopener noreferrer">源码</a>
       </span>
     </div>
   </div>

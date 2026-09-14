@@ -633,3 +633,133 @@ a.cl-link { color: var(--brand-2); text-decoration: underline; text-underline-of
 .dev-handle b{color:var(--text);font-weight:700}
 .dev-handle .icon{color:var(--brand)}
 @media (max-width:880px){.web-grid{grid-template-columns:repeat(2,1fr)}.about-stats{grid-template-columns:repeat(2,1fr)}}
+
+
+/* ==========================================================
+   Liquid Glass — 真实折射 (SVG displacement) + 液态流动
+   ========================================================== */
+
+/* --- 1) 形态流动的液滴光晕 (Hero 背景) --- */
+.hero-liquid {
+  position: absolute; inset: -12% -8% -6%;
+  z-index: -1; pointer-events: none; overflow: hidden;
+}
+.hero-liquid i {
+  position: absolute; display: block;
+  width: 44vw; height: 44vw; max-width: 560px; max-height: 560px;
+  filter: blur(54px); mix-blend-mode: screen;
+  opacity: .5; will-change: transform, border-radius;
+}
+.hero-liquid i:nth-child(1) {
+  top: -8%; left: 4%;
+  background: radial-gradient(circle at 35% 35%, rgba(123,155,255,.95), rgba(123,155,255,0) 68%);
+  animation: lgMorph 19s ease-in-out infinite;
+}
+.hero-liquid i:nth-child(2) {
+  top: 2%; right: 0;
+  background: radial-gradient(circle at 60% 40%, rgba(143,123,255,.92), rgba(143,123,255,0) 68%);
+  animation: lgMorph 25s ease-in-out infinite reverse; animation-delay: -7s;
+}
+.hero-liquid i:nth-child(3) {
+  bottom: -20%; left: 30%;
+  background: radial-gradient(circle at 45% 55%, rgba(90,214,230,.88), rgba(90,214,230,0) 68%);
+  animation: lgMorph 31s ease-in-out infinite; animation-delay: -14s;
+}
+@keyframes lgMorph {
+  0%, 100% { border-radius: 62% 38% 46% 54% / 56% 44% 56% 44%; transform: translate3d(0,0,0) rotate(0deg) scale(1); }
+  33%      { border-radius: 38% 62% 58% 42% / 44% 58% 42% 56%; transform: translate3d(5%,-6%,0) rotate(70deg) scale(1.12); }
+  66%      { border-radius: 55% 45% 34% 66% / 62% 38% 60% 40%; transform: translate3d(-5%,5%,0) rotate(-45deg) scale(.92); }
+}
+
+/* --- 2) 液体玻璃表面 --- */
+.liquid-glass {
+  isolation: isolate;
+  box-shadow:
+    0 40px 90px -45px rgba(0,0,0,.8),
+    inset 0 1px 0 rgba(255,255,255,.34),
+    inset 0 -1px 0 rgba(255,255,255,.05),
+    inset 1px 0 0 rgba(255,255,255,.10),
+    inset -1px 0 0 rgba(255,255,255,.05);
+}
+.liquid-glass > .panel-bar,
+.liquid-glass > .panel-body { position: relative; z-index: 3; }
+
+/* 折射层：与环境光同源色谱，模糊后经 SVG 位移扭曲 = 真实折射 */
+.lg-refract {
+  position: absolute; inset: -14%; z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(760px 460px at 18% -14%, rgba(123,155,255,.72), transparent 64%),
+    radial-gradient(620px 420px at 92% 8%, rgba(146,120,255,.62), transparent 64%),
+    radial-gradient(760px 520px at 55% 120%, rgba(90,214,230,.52), transparent 64%),
+    linear-gradient(180deg, rgba(12,15,24,.40), rgba(8,10,17,.58));
+  filter: blur(15px) saturate(205%) brightness(1.08) url(#lgRefract);
+  opacity: .96;
+  transform: scale(1.04);
+  will-change: transform;
+  transition: transform .5s cubic-bezier(.22,.61,.36,1);
+}
+/* 高光扫过 */
+.lg-sheen {
+  position: absolute; inset: 0; z-index: 1;
+  pointer-events: none; overflow: hidden;
+  border-radius: inherit; mix-blend-mode: screen; opacity: .8;
+}
+.lg-sheen::before {
+  content: ""; position: absolute; top: -70%; left: -70%;
+  width: 55%; height: 240%;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,.16) 42%, rgba(255,255,255,.34) 50%, rgba(255,255,255,.14) 58%, transparent);
+  animation: lgSheen 8s cubic-bezier(.45,0,.25,1) infinite;
+}
+@keyframes lgSheen {
+  0%   { transform: translateX(-30%) rotate(14deg); }
+  60%  { transform: translateX(340%) rotate(14deg); }
+  100% { transform: translateX(340%) rotate(14deg); }
+}
+/* 边缘厚度 / 轮廓光 */
+.lg-rim {
+  position: absolute; inset: 0; z-index: 2;
+  pointer-events: none; border-radius: inherit;
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.16),
+    inset 0 1px 0 rgba(255,255,255,.55),
+    inset 1px 0 0 rgba(124,196,255,.30),
+    inset -1px 0 0 rgba(198,150,255,.30),
+    inset 0 -1px 0 rgba(150,255,232,.22),
+    inset 0 30px 50px -34px rgba(255,255,255,.5),
+    inset 0 -30px 56px -38px rgba(255,255,255,.18),
+    inset 0 0 40px rgba(255,255,255,.05);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-liquid i, .lg-sheen::before { animation: none; }
+}
+
+/* 高光：左上强镜面反射 + 右下环境辉光 */
+.lg-rim::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  pointer-events: none; mix-blend-mode: screen;
+  background:
+    radial-gradient(120% 82% at 16% -12%, rgba(255,255,255,.38), transparent 46%),
+    radial-gradient(90% 64% at 90% 120%, rgba(255,255,255,.12), transparent 56%);
+}
+
+/* ---- 主/次按钮：光泽扫过 (liquid sheen) ---- */
+.btn-primary, .btn-secondary { position: relative; overflow: hidden; isolation: isolate; }
+.btn-primary::after, .btn-secondary::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  border-radius: inherit; mix-blend-mode: screen;
+  background: linear-gradient(100deg, transparent 35%, rgba(255,255,255,.42) 50%, transparent 65%);
+  transform: translateX(-130%);
+  animation: btnSheen 7s cubic-bezier(.45,0,.25,1) infinite;
+}
+.btn-secondary::after { animation-delay: 1.6s; }
+@keyframes btnSheen {
+  0%   { transform: translateX(-130%); }
+  42%  { transform: translateX(130%); }
+  100% { transform: translateX(130%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-primary::after, .btn-secondary::after { animation: none; }
+}

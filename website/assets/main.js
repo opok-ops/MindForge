@@ -94,4 +94,46 @@
     }, { rootMargin: '-45% 0px -50% 0px' });
     sections.forEach(function (s) { spy.observe(s); });
   }
+
+  /* ---- Liquid glass: interactive refraction + slow breathing ---- */
+  (function () {
+    var panel = document.querySelector('.liquid-glass');
+    if (!panel) return;
+    var refract = panel.querySelector('.lg-refract');
+    var disp = document.getElementById('lgDisplace');
+
+    if (!reduceMotion && disp) {
+      var base = 38, t0 = Date.now();
+      (function breathe() {
+        var s = base + Math.sin((Date.now() - t0) / 2600) * 11;
+        disp.setAttribute('scale', s.toFixed(1));
+        setTimeout(breathe, 130);
+      })();
+    }
+
+    if (reduceMotion || !refract) return;
+    var tx = 0, ty = 0, cx = 0, cy = 0, raf = null;
+    function loop() {
+      cx += (tx - cx) * 0.09;
+      cy += (ty - cy) * 0.09;
+      refract.style.transform = 'translate3d(' + cx.toFixed(2) + 'px,' + cy.toFixed(2) + 'px,0) scale(1.06)';
+      if (Math.abs(tx - cx) > 0.15 || Math.abs(ty - cy) > 0.15) {
+        raf = requestAnimationFrame(loop);
+      } else {
+        refract.style.transform = 'scale(1.04)';
+        raf = null;
+      }
+    }
+    panel.addEventListener('pointermove', function (e) {
+      var r = panel.getBoundingClientRect();
+      tx = ((e.clientX - r.left) / r.width - 0.5) * 30;
+      ty = ((e.clientY - r.top) / r.height - 0.5) * 20;
+      if (!raf) raf = requestAnimationFrame(loop);
+    });
+    panel.addEventListener('pointerleave', function () {
+      tx = 0; ty = 0;
+      if (!raf) raf = requestAnimationFrame(loop);
+    });
+  })();
+
 })();

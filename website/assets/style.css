@@ -174,8 +174,8 @@ a { color: inherit; text-decoration: none; }
   border-bottom: 1px solid var(--hairline);
 }
 .nav-inner {
-  width: 100%; max-width: var(--maxw); margin: 0 auto; padding: 0 24px;
-  display: flex; align-items: center; gap: 18px;
+  width: 100%; max-width: var(--maxw); margin: 0 auto; padding: 0 20px;
+  display: flex; align-items: center; gap: 12px;
 }
 .brand { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 700; font-size: 17px; letter-spacing: .02em; }
 .brand-logo { width: 28px; height: 28px; display: grid; place-items: center; }
@@ -185,11 +185,11 @@ a { color: inherit; text-decoration: none; }
   border: 1px solid var(--border); border-radius: var(--r-pill);
   padding: 2px 8px; background: var(--surface);
 }
-.nav-links { display: flex; gap: 4px; margin-left: 14px; list-style: none; }
+.nav-links { display: flex; gap: 2px; margin-left: 4px; list-style: none; flex: 0 0 auto; flex-wrap: nowrap; }
 .nav-links a {
   display: inline-flex; align-items: center; gap: 7px;
-  padding: 8px 13px; border-radius: var(--r-pill);
-  color: var(--text-dim); font-size: 14.5px; font-weight: 500;
+  padding: 8px 10px; border-radius: var(--r-pill); white-space: nowrap;
+  color: var(--text-dim); font-size: 14px; font-weight: 500;
   transition: color .2s, background .2s;
 }
 .nav-links a:hover { color: var(--text); background: var(--surface); }
@@ -243,7 +243,7 @@ a { color: inherit; text-decoration: none; }
 }
 .nav-drawer.open { transform: translateY(0); opacity: 1; pointer-events: auto; }
 .nav-drawer ul { list-style: none; display: flex; flex-direction: column; gap: 4px; }
-.nav-drawer a { display: block; padding: 12px 14px; border-radius: 12px; color: var(--text-dim); font-weight: 500; }
+.nav-drawer a { display: block; padding: 12px 14px; border-radius: 12px; color: var(--text-dim); font-weight: 500;  white-space: nowrap; }
 .nav-drawer a:hover { background: var(--surface); color: var(--text); }
 .drawer-cta { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
 
@@ -586,7 +586,7 @@ a.cl-link { color: var(--brand-2); text-decoration: underline; text-underline-of
 }
 
 /* ---------- Responsive ---------- */
-@media (max-width: 980px) {
+@media (max-width: 1200px) {
   .nav-links { display: none; }
   .nav-cta .btn-ghost, .nav-cta .btn-primary { display: none; }
   .nav-toggle { display: inline-flex; }

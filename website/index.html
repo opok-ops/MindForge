@@ -65,6 +65,13 @@
 <feGaussianBlur in="noise" stdDeviation="2" result="soft"/>
 <feDisplacementMap id="lgDisplace" in="SourceGraphic" in2="soft" scale="38" xChannelSelector="R" yChannelSelector="G"/>
 </filter>
+<filter id="srRefract" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+<feTurbulence type="fractalNoise" baseFrequency="0.02 0.028" numOctaves="2" seed="7" result="noise">
+<animate attributeName="baseFrequency" dur="18s" values="0.02 0.028;0.031 0.019;0.016 0.03;0.02 0.028" repeatCount="indefinite"/>
+</feTurbulence>
+<feGaussianBlur in="noise" stdDeviation="1.6" result="soft"/>
+<feDisplacementMap id="srDisplace" in="SourceGraphic" in2="soft" scale="14" xChannelSelector="R" yChannelSelector="G"/>
+</filter>
 </defs>
 
   <defs>
@@ -140,17 +147,42 @@
       <span class="brand-ver">v5.6.9</span>
     </a>
 
-    <ul class="nav-links">
-      <li><a href="#quickstart">快速开始</a></li>
-      <li><a href="#hybrid">技术核心</a></li>
-      <li><a href="#capabilities">核心能力</a></li>
-      <li><a href="#architecture">系统架构</a></li>
-      <li><a href="#security">安全与隐私</a></li>
-      <li><a href="#v6">v6.0 预览</a></li>
-      <li><a href="#web">网页端</a></li>
-      <li><a href="#changelog">更新日志</a></li>
-      <li><a href="#developer">关于</a></li>
-    </ul>
+    <div class="search" id="site-search" role="search">
+      <span class="search-glass" aria-hidden="true">
+        <i class="sg-refract"></i>
+        <i class="sg-glow"></i>
+        <i class="sg-sheen"></i>
+        <i class="sg-rim"></i>
+      </span>
+
+      <button type="button" class="search-trigger" id="search-trigger" aria-label="打开搜索" aria-expanded="false" aria-controls="search-panel">
+        <svg class="icon search-icon" aria-hidden="true"><use href="#i-search"/></svg>
+      </button>
+
+      <div class="search-field">
+        <svg class="icon search-icon" aria-hidden="true"><use href="#i-search"/></svg>
+        <input id="search-input" class="search-input" type="text" inputmode="search" autocomplete="off" spellcheck="false"
+               placeholder="搜索功能、命令、版本号…" aria-label="站内搜索"
+               role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="search-list">
+        <kbd class="search-kbd" id="search-kbd" aria-hidden="true"><span class="k-mod">Ctrl</span><span class="k-key">K</span></kbd>
+        <button type="button" class="search-clear" id="search-clear" aria-label="清空搜索">
+          <svg class="icon" aria-hidden="true"><use href="#i-close"/></svg>
+        </button>
+      </div>
+
+      <div class="search-panel" id="search-panel" aria-label="搜索结果" hidden>
+        <div class="search-panel-head">
+          <span class="search-scope" id="search-scope">快速跳转</span>
+          <span class="search-count" id="search-count"></span>
+        </div>
+        <ul class="search-list" id="search-list" role="listbox" aria-label="搜索结果列表"></ul>
+        <div class="search-foot">
+          <span><kbd>↑</kbd><kbd>↓</kbd> 选择</span>
+          <span><kbd>Enter</kbd> 跳转</span>
+          <span><kbd>Esc</kbd> 关闭</span>
+        </div>
+      </div>
+    </div>
 
     <div class="nav-cta">
       <a href="https://github.com/opok-ops/MindForge" target="_blank" rel="noopener noreferrer" class="btn btn-ghost">
@@ -158,34 +190,11 @@
         <span>GitHub</span>
       </a>
       <a href="#quickstart" class="btn btn-primary">开始使用</a>
-      <button type="button" class="nav-toggle" id="nav-toggle" aria-expanded="false" aria-controls="nav-drawer" aria-label="打开导航菜单">
-        <svg class="icon i-menu" aria-hidden="true"><use href="#i-menu"/></svg>
-        <svg class="icon i-close" aria-hidden="true"><use href="#i-close"/></svg>
-      </button>
     </div>
   </div>
 </nav>
 
-<div class="nav-drawer" id="nav-drawer" aria-hidden="true">
-  <ul>
-    <li><a href="#quickstart">快速开始</a></li>
-    <li><a href="#hybrid">技术核心</a></li>
-    <li><a href="#capabilities">核心能力</a></li>
-    <li><a href="#architecture">系统架构</a></li>
-    <li><a href="#security">安全与隐私</a></li>
-    <li><a href="#v6">v6.0 预览</a></li>
-    <li><a href="#web">网页端</a></li>
-    <li><a href="#changelog">更新日志</a></li>
-    <li><a href="#developer">关于</a></li>
-  </ul>
-  <div class="drawer-cta">
-    <a href="demo.html" class="btn btn-secondary">交互演示</a>
-    <a href="https://github.com/opok-ops/MindForge" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
-      <svg class="icon icon-sm icon-fill" aria-hidden="true"><use href="#i-github"/></svg>
-      <span>GitHub 仓库</span>
-    </a>
-  </div>
-</div>
+<div class="nav-scrim" id="nav-scrim" aria-hidden="true"></div>
 
 <main id="main">
 

@@ -3,6 +3,32 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [5.6.9] - 2026-09-16
+
+一轮**全文检索（FTS）同步**缺陷修复：批量更新与自动过期两条路径此前会改写
+`category` / `tags`（均为 FTS 索引列）却不同步 `memory_fts` 表，导致搜索结果
+滞后；另对若干低风险项做了加固。不涉及新依赖、不改变对外数据契约。
+
+### Fixed
+- **P2 `batch_update()` 缺 FTS 同步（core/storage.py）**：批量更新可改写 `category` 与 `tags`
+  （均为 `memory_fts` 索引列），但原实现只在 UPDATE 后 commit，未同步 FTS 索引。
+  通过 `batch_update` 改分类/标签后，全文搜索结果不会立即反映变化。
+  现于 UPDATE 之后、commit 之前，按与 `update()` 一致的「先 `delete` 旧条目、再以新值
+  重新插入」逻辑同步 `memory_fts`；仅当涉及 FTS 列且未启用加密时触发。
+- **P3 `get()` 自动过期路径缺 FTS 同步（core/storage.py）**：TTL 过期将 `category` 置为
+  `'trash'` 时未同步 FTS。实际影响低（搜索经 `WHERE category != 'trash'` 过滤，过期记忆本
+  就不会出现在结果里），但会在 FTS 索引中留下无用条目。现已在置 trash 后同步 `memory_fts`，
+  与 `update()` 行为对齐。
+- **低优先级加固：URL 导入器未做标准化 XSS 清洗（cli/main.py `cmd_import_url`）**：原实现仅做
+  基础 HTML 标签剥离，未调用存储层统一的 `_sanitize_html`。现于标签剥离后再过一遍
+  `_sanitize_html`，额外清掉 `<script>` 等标签内的残留脚本文本（纵深防御，风险低，内容仍截断至 5000 字符）。
+- **低优先级加固：event_bus urllib 降级路径无重试/退避（modules/event_bus.py）**：`requests`
+  不可用时降级到 urllib 仅单次尝试、无退避，而 `requests` 路径有 3 次指数退避。现已为 urllib
+  路径补齐与 `requests` 一致的重试次数、指数退避，并对 `timeout` 元组做标量兜底。
+
+### Tests
+- `tests/test_v568_fixes.py` 的版本期望值由 `5.6.8` 升至 `5.6.9`，随本轮发版同步。
+
 ## [5.6.8] - 2026-09-14
 
 一轮**命令入口可用性**缺陷修复：3 个 CLI 命令（`init` / `rekey` / `backup-restore`）与 3 个适配器

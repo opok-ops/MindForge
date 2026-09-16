@@ -422,8 +422,8 @@ class EventBus:
                 if 400 <= status < 500:
                     break
             except ImportError:
-                # requests 库不可用时降级到 urllib
-                last_error = self._deliver_webhook_urllib(config, body, headers, attempt)
+                # requests 库不可用时降级到 urllib（自带重试/退避，与 requests 路径一致）
+                last_error = self._deliver_webhook_urllib(config, body, headers)
                 if last_error is True:
                     return True
                 break
@@ -443,37 +443,46 @@ class EventBus:
 
     def _deliver_webhook_urllib(self, config: WebhookConfig,
                                 body: bytes,
-                                headers: Dict[str, str],
-                                attempt: int) -> str:
+                                headers: Dict[str, str]) -> str:
         """使用 urllib 的降级方案（requests 不可用时）
 
-        P1 修复：body 已在调用方序列化好，签名也基于同一字节串，
-        不再重复序列化。
+        v5.6.9：补齐与 requests 路径一致的重试与指数退避（原先仅单次尝试、无退避）。
+        P1 修复：body 已在调用方序列化好，签名也基于同一字节串，不再重复序列化。
         """
-        try:
-            # N3 修复：与 requests 路径一致 —— 投递前复检 + 禁止跟随跳转
-            self._validate_no_ssrf(config.url)
-            req = urllib.request.Request(
-                config.url, data=body, headers=headers, method="POST")
-            opener = urllib.request.build_opener(_NoRedirectHandler)
-            with opener.open(req, timeout=config.timeout) as resp:
-                status = resp.getcode()
-                success = 200 <= status < 300
+        # urllib 的 timeout 仅接受标量，遇 (connect, read) 元组时取连接超时部分
+        timeout = config.timeout
+        if isinstance(timeout, (tuple, list)):
+            timeout = timeout[0] if timeout else 10.0
+        last_error = ""
+        for attempt in range(config.max_retries + 1):
+            try:
+                # N3 修复：与 requests 路径一致 —— 投递前复检 + 禁止跟随跳转
+                self._validate_no_ssrf(config.url)
+                req = urllib.request.Request(
+                    config.url, data=body, headers=headers, method="POST")
+                opener = urllib.request.build_opener(_NoRedirectHandler)
+                with opener.open(req, timeout=timeout) as resp:
+                    status = resp.getcode()
+                    success = 200 <= status < 300
+                    self._record_delivery(config.url, headers.get("X-MindForge-Event", "unknown"),
+                                          status, success, attempt)
+                    if success:
+                        logger.debug("Webhook 投递成功 -> %s (status=%d)",
+                                     config.url, status)
+                        return True
+                    last_error = f"HTTP {status}"
+            except urllib.error.HTTPError as e:
                 self._record_delivery(config.url, headers.get("X-MindForge-Event", "unknown"),
-                                      status, success, attempt)
-                if success:
-                    logger.debug("Webhook 投递成功 -> %s (status=%d)",
-                                 config.url, status)
-                    return True
-                return f"HTTP {status}"
-        except urllib.error.HTTPError as e:
-            self._record_delivery(config.url, headers.get("X-MindForge-Event", "unknown"),
-                                  e.code, False, attempt)
-            return f"HTTP {e.code}"
-        except Exception as e:
-            self._record_delivery(config.url, headers.get("X-MindForge-Event", "unknown"),
-                                  0, False, attempt)
-            return str(e)
+                                      e.code, False, attempt)
+                last_error = f"HTTP {e.code}"
+            except Exception as e:
+                self._record_delivery(config.url, headers.get("X-MindForge-Event", "unknown"),
+                                      0, False, attempt)
+                last_error = str(e)
+            # v5.6.9：与 requests 路径一致的指数退避
+            if attempt < config.max_retries:
+                time.sleep(config.retry_delay * (attempt + 1))
+        return last_error
 
     def _record_delivery(self, url: str, event: str,
                          status: int, success: bool, attempt: int) -> None:

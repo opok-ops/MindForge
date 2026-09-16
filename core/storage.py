@@ -1341,11 +1341,32 @@ class StorageEngine:
             try:
                 now = time.time()
                 conn = self._get_conn()
+                # v5.6.9 P3 修复：自动过期改 category 前先抓取旧 FTS 值，过期后同步 memory_fts
+                old_fts = None
+                if not self.encrypted:
+                    old_fts = conn.execute(
+                        "SELECT rowid, content, category, tags FROM memories WHERE id = ? AND category != 'trash'",
+                        (memory_id,)).fetchone()
                 result = conn.execute(
                     "UPDATE memories SET category = 'trash', updated_at = ? WHERE id = ? AND category != 'trash'",
                     (now, memory_id)
                 )
                 if result.rowcount > 0:
+                    # v5.6.9 P3：与 update() 一致 —— 先删除旧 FTS 条目、再以 trash 重新插入
+                    if old_fts is not None:
+                        try:
+                            conn.execute(
+                                "INSERT INTO memory_fts(memory_fts, rowid, content, category, tags) "
+                                "VALUES('delete', ?, ?, ?, ?)",
+                                (old_fts[0], old_fts[1] or "", old_fts[2] or "", old_fts[3] or "[]"))
+                        except sqlite3.OperationalError:
+                            logger.warning("FTS delete failed on auto-expire %s", memory_id, exc_info=True)
+                        try:
+                            conn.execute(
+                                "INSERT INTO memory_fts (rowid, content, category, tags) VALUES (?, ?, ?, ?)",
+                                (old_fts[0], old_fts[1] or "", "trash", old_fts[3] or "[]"))
+                        except sqlite3.OperationalError:
+                            logger.warning("FTS insert failed on auto-expire %s", memory_id, exc_info=True)
                     conn.commit()
                     self._add_audit("forget", memory_id, actor, session_id,
                                      entry.privacy.value, details={"reason": "ttl_expired", "expires_at": entry.expires_at})
@@ -11217,11 +11238,21 @@ class StorageEngine:
         updated = 0
         errors = []
 
+        # v5.6.9 P2 修复：涉及 FTS 索引列（category/tags）时，UPDATE 后必须同步 memory_fts
+        fts_dirty = (category is not None or tags is not None) and not self.encrypted
+
         for mid in memory_ids:
             row = conn.execute("SELECT id FROM memories WHERE id = ?", (mid,)).fetchone()
             if not row:
                 errors.append(mid)
                 continue
+
+            # 变更前抓取旧 FTS 值，供 'delete' 命令精确匹配（contentless FTS5 要求）
+            old_fts = None
+            if fts_dirty:
+                old_fts = conn.execute(
+                    "SELECT rowid, content, category, tags FROM memories WHERE id = ?",
+                    (mid,)).fetchone()
 
             updates = ["updated_at = ?"]
             params = [now]
@@ -11245,6 +11276,26 @@ class StorageEngine:
             params.append(mid)
             conn.execute(f"UPDATE memories SET {', '.join(updates)} WHERE id = ?", params)
             updated += 1
+
+            # v5.6.9 P2：同步 memory_fts（删除旧条目 + 以新值重新插入，与 update() 一致）
+            if fts_dirty and old_fts is not None:
+                try:
+                    conn.execute(
+                        "INSERT INTO memory_fts(memory_fts, rowid, content, category, tags) "
+                        "VALUES('delete', ?, ?, ?, ?)",
+                        (old_fts[0], old_fts[1] or "", old_fts[2] or "", old_fts[3] or "[]"))
+                except sqlite3.OperationalError:
+                    logger.warning("FTS delete failed in batch_update %s", mid, exc_info=True)
+                try:
+                    new_fts = conn.execute(
+                        "SELECT rowid, content, category, tags FROM memories WHERE id = ?",
+                        (mid,)).fetchone()
+                    if new_fts is not None:
+                        conn.execute(
+                            "INSERT INTO memory_fts (rowid, content, category, tags) VALUES (?, ?, ?, ?)",
+                            (new_fts[0], new_fts[1] or "", new_fts[2] or "", new_fts[3] or "[]"))
+                except sqlite3.OperationalError:
+                    logger.warning("FTS insert failed in batch_update %s", mid, exc_info=True)
 
         conn.commit()
         self._add_audit("batch_update", ",".join(memory_ids[:5]), actor, session_id, "INTERNAL",

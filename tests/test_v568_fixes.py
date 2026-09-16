@@ -38,7 +38,7 @@ import core.version as core_version
 
 
 _REPO = Path(__file__).resolve().parent.parent
-_EXPECTED_VERSION = "5.6.8"
+_EXPECTED_VERSION = "5.6.9"
 
 # 本轮修复涉及的、必须与 core/version.py 保持一致的源码文件
 _VERSION_TRUTH_FILES = (
@@ -117,7 +117,10 @@ def _run_cli(args, env_extra=None, cwd=None):
 class TestVersionTruth(unittest.TestCase):
     def test_version_is_5_6_8(self):
         self.assertEqual(core_version.__version__, _EXPECTED_VERSION)
-        self.assertEqual(tuple(core_version.VERSION_INFO), (5, 6, 8))
+        self.assertEqual(
+            tuple(core_version.VERSION_INFO),
+            tuple(int(p) for p in _EXPECTED_VERSION.split(".")),
+        )
 
     def test_pyproject_matches_truth(self):
         text = (_REPO / "pyproject.toml").read_text(encoding="utf-8")

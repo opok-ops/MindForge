@@ -41,12 +41,28 @@ jobs:
         run: |
           # 只有配置了 Secret 才注入；未配置时占位符保持为注释，不影响页面渲染
           if [ -n "$BAIDU_CODE" ]; then
+            if ! grep -q '<!--BAIDU_VERIFY_SLOT-->' website/index.html; then
+              echo "::error::index.html 中找不到占位符 <!--BAIDU_VERIFY_SLOT-->，无法注入百度验证码。"
+              exit 1
+            fi
             echo "已检测到 BAIDU_SITE_VERIFICATION，注入验证标签"
             sed -i "s|<!--BAIDU_VERIFY_SLOT-->|<meta name=\"baidu-site-verification\" content=\"$BAIDU_CODE\">|" website/index.html
-            grep -o 'baidu-site-verification[^>]*' website/index.html | head -1 || echo "（未能在页面中检索到验证标签，请检查 Secret 值是否含特殊字符）"
+            if grep -q 'baidu-site-verification' website/index.html; then
+              grep -o 'baidu-site-verification[^>]*' website/index.html | head -1
+            else
+              echo "::error::注入后仍未检索到验证标签，请检查 Secret 值是否含特殊字符（如引号/换行）。"
+              exit 1
+            fi
           else
             echo "::notice::未配置 Secrets.BAIDU_SITE_VERIFICATION，跳过验证码注入（不影响部署）。"
-            echo "配置后即可完成百度站长平台的所有权验证，方法见 docs/百度站长平台收录指南.md"
+            printf '%s\n' \
+              '## ℹ️ 百度站点所有权验证：未配置' \
+              '' \
+              '首页保留占位注释 `<!--BAIDU_VERIFY_SLOT-->`，**百度无法验证本站归属**，' \
+              '因此主动推送接口也无法使用（百度要求先验证、再推送）。' \
+              '' \
+              '配置 Secret `BAIDU_SITE_VERIFICATION` 后重新部署即可自动注入。' \
+              '步骤见 `docs/百度站长平台收录指南.md`。' >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Setup Pages

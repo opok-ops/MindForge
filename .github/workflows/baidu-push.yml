@@ -2,8 +2,17 @@ name: 百度站长平台 - 主动推送
 
 # 作用：官网部署完成后，自动把 URL 推给百度，加速收录。
 #
-# 只需配置一次 Secret（BAIDU_PUSH_TOKEN），之后每次 push 官网都会自动推送。
-# 未配置 Secret 时工作流会给出提示并正常结束，不会让 CI 变红。
+# 依赖两个 Secret（都在仓库 Settings → Secrets and variables → Actions 配置）：
+#   BAIDU_SITE_VERIFICATION —— 站点所有权验证码（由 deploy-website.yml 注入到首页 <meta>）
+#   BAIDU_PUSH_TOKEN        —— 主动推送接口 token
+#   BAIDU_PUSH_SITE         —— 可选；不配则用脚本内置默认值 https://opok-ops.github.io/MindForge/
+#
+# 前置条件（顺序不能颠倒）：必须先在百度站长平台完成站点所有权验证，推送接口才会生效。
+#   先配 BAIDU_SITE_VERIFICATION → 部署一次 → 到站长平台点「验证」→ 再配 BAIDU_PUSH_TOKEN。
+#
+# 未配置 Secret 时本工作流会「明确告警 + 写进 Job Summary」后正常结束，
+# 不会让 CI 变红——但也不会假装成功：Summary 里会醒目写出「跳过原因」。详解见
+# docs/百度站长平台收录指南.md
 
 on:
   # 官网部署工作流跑完后自动触发
@@ -31,20 +40,32 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: 自查百度收录状态（写入 Job Summary）
+        continue-on-error: true
+        run: python scripts/baidu_status.py | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: 推送 URL 给百度
         env:
           BAIDU_PUSH_TOKEN: ${{ secrets.BAIDU_PUSH_TOKEN }}
           BAIDU_PUSH_SITE: ${{ secrets.BAIDU_PUSH_SITE }}
         run: |
           if [ -z "$BAIDU_PUSH_TOKEN" ]; then
-            echo "::warning::未配置 Secrets.BAIDU_PUSH_TOKEN，跳过推送（这不是错误）。"
-            echo ""
-            echo "配置方法（只需做一次）："
-            echo "  1. 打开百度站长平台 → 资源提交 → API 提交，复制「推送接口」里的 token"
-            echo "  2. 仓库 Settings → Secrets and variables → Actions → New repository secret"
-            echo "  3. Name 填 BAIDU_PUSH_TOKEN，Value 粘贴 token"
-            echo ""
-            echo "详细图文步骤见 docs/百度站长平台收录指南.md"
+            msg="未配置 Secrets.BAIDU_PUSH_TOKEN —— 本次未向百度推送任何 URL"
+            echo "::warning::$msg"
+            {
+              printf '%s\n' \
+                '## ⚠️ 百度主动推送：已跳过（未真正推送）' \
+                '' \
+                '**原因**：仓库未配置 `BAIDU_PUSH_TOKEN`。' \
+                '本工作流显示绿色 ✔ 只表示「已优雅跳过」，**不代表 URL 已提交给百度**。' \
+                '' \
+                '### 开通步骤（只需做一次，顺序不能颠倒）' \
+                '1. **先完成站点所有权验证**：拿到百度站长平台的验证码，配成 Secret `BAIDU_SITE_VERIFICATION`，触发一次 Deploy（会把 `<meta name="baidu-site-verification">` 注入首页），再到站长平台点「验证」。' \
+                '2. **再配推送 token**：站长平台 → 资源提交 → API 提交 → 复制「推送接口」token，配成 Secret `BAIDU_PUSH_TOKEN`。' \
+                '3. 回到本工作流 → Run workflow 手动触发一次，日志出现「推送成功：本轮提交 N 条」才算真的通了。' \
+                '' \
+                '有疑问见 `docs/百度站长平台收录指南.md`。'
+            } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 

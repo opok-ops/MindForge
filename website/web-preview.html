@@ -1,0 +1,1721 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MindForge Web 预览版 — 全球 AI 记忆知识库</title>
+<meta name="description" content="MindForge Web 网页端产品预览：读取本机 MindForge REST API 的真实记忆库——四层记忆统计、语义检索、标签共现图与记忆时间线。界面为规划形态，数据取自你本地真实记忆库，正式网页端计划 2027 年上线。">
+<meta name="robots" content="noindex, follow">
+<link rel="canonical" href="https://opok-ops.github.io/MindForge/">
+<meta name="theme-color" content="#07090e">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%236d8dff' stroke-width='2.4'/%3E%3Cpath d='M9 16a7 7 0 0 1 14 0' fill='none' stroke='%236d8dff' stroke-width='2.4' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='16' r='2.6' fill='%236d8dff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/fonts/fonts.css">
+<style>
+/* ============================================================
+   MindForge Web · 产品预览（Preview）
+   自包含单文件，样式 token 与 website/assets/style.css 同源。
+   本页为界面形态预览，不内置任何示例数据：所有数字与条目
+   均来自本机运行中的 MindForge REST API，未连接时仅显示连接引导。
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; }
+* { margin: 0; padding: 0; }
+
+:root {
+  --bg: #07090e;
+  --bg-2: #0a0d14;
+  --surface: rgba(255, 255, 255, 0.045);
+  --surface-2: rgba(255, 255, 255, 0.07);
+  --surface-strong: rgba(255, 255, 255, 0.10);
+  --border: rgba(255, 255, 255, 0.10);
+  --border-strong: rgba(255, 255, 255, 0.18);
+  --hairline: rgba(255, 255, 255, 0.06);
+
+  --text: #eef1f8;
+  --text-dim: #a4adc2;
+  --text-faint: #6f7892;
+
+  --brand: #6d8dff;
+  --brand-2: #36e0e6;
+  --violet: #b08bff;
+  --grad: linear-gradient(120deg, #7b9bff 0%, #5ad6e6 55%, #8f7bff 100%);
+  --grad-soft: linear-gradient(120deg, rgba(123,155,255,0.16), rgba(90,214,230,0.12));
+  --danger: #ff7a6b;
+  --ok: #4fd1a5;
+  --warn: #ffcb6b;
+
+  --r-sm: 12px;
+  --r: 18px;
+  --r-lg: 26px;
+  --r-pill: 999px;
+
+  --shadow: 0 24px 60px -28px rgba(0, 0, 0, 0.75);
+  --shadow-sm: 0 10px 30px -18px rgba(0, 0, 0, 0.7);
+
+  --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  --display: "Sora", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+          "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC",
+          system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", "Roboto Mono", Menlo,
+          Consolas, "Liberation Mono", monospace;
+
+  --topbar-h: 48px;
+  --side-w: 224px;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.6;
+  letter-spacing: 0.01em;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: clip;
+}
+a { color: inherit; text-decoration: none; }
+button, input, select { font: inherit; color: inherit; }
+button { background: none; border: none; cursor: pointer; }
+ul { list-style: none; }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden;
+  clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+.skip-link {
+  position: absolute; left: 12px; top: -60px; z-index: 99;
+  background: var(--surface-strong); border: 1px solid var(--border-strong);
+  padding: 9px 16px; border-radius: var(--r-pill); font-size: 13px;
+  transition: top .2s ease;
+}
+.skip-link:focus { top: 12px; }
+
+/* ---------- ambient background ---------- */
+.pv-bg {
+  position: fixed; inset: 0; z-index: -2; pointer-events: none;
+  background:
+    radial-gradient(1100px 640px at 82% -10%, rgba(123,155,255,0.13), transparent 62%),
+    radial-gradient(900px 560px at 8% 4%, rgba(143,123,255,0.11), transparent 60%),
+    radial-gradient(900px 700px at 52% 112%, rgba(90,214,230,0.09), transparent 62%),
+    var(--bg);
+}
+.pv-grid-overlay {
+  position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.022) 1px, transparent 1px);
+  background-size: 54px 54px;
+  -webkit-mask-image: radial-gradient(ellipse 100% 60% at 50% 0%, #000 26%, transparent 78%);
+  mask-image: radial-gradient(ellipse 100% 60% at 50% 0%, #000 26%, transparent 78%);
+}
+
+/* ---------- icons ---------- */
+.icon {
+  width: 1em; height: 1em; flex: none; display: inline-block;
+  fill: none; stroke: currentColor; stroke-width: 1.8;
+  stroke-linecap: round; stroke-linejoin: round; vertical-align: -0.15em;
+}
+.icon-sm { font-size: 15px; }
+.icon-md { font-size: 19px; }
+.icon-fill { fill: currentColor; stroke: none; }
+svg.pv-logo { width: 21px; height: 21px; flex: none; }
+
+/* ---------- top bar ---------- */
+.pv-topbar {
+  position: sticky; top: 0; z-index: 40; height: var(--topbar-h);
+  display: flex; align-items: center; gap: 12px; padding: 0 16px;
+  background: rgba(7, 9, 14, 0.88);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  backdrop-filter: blur(18px) saturate(150%);
+  border-bottom: 1px solid var(--hairline);
+}
+.pv-back {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 13px;
+  color: var(--text-dim); padding: 6px 12px; border-radius: var(--r-pill);
+  border: 1px solid var(--border); background: var(--surface);
+  transition: color .2s, background .2s, border-color .2s; white-space: nowrap;
+}
+.pv-back:hover { color: var(--text); background: var(--surface-2); border-color: var(--border-strong); }
+.pv-back .icon { transform: rotate(180deg); }
+.pv-brand { display: inline-flex; align-items: center; gap: 9px; font-family: var(--display); font-weight: 700; font-size: 14.5px; letter-spacing: -0.01em; }
+.pv-brand .pv-sub { font-family: var(--sans); font-weight: 500; font-size: 12.5px; color: var(--text-faint); letter-spacing: 0; }
+.pv-spacer { flex: 1 1 auto; }
+.pv-pill {
+  display: inline-flex; align-items: center; gap: 7px; font-size: 12px;
+  color: var(--text-dim); border: 1px solid var(--border);
+  background: var(--surface); border-radius: var(--r-pill); padding: 5px 12px;
+  white-space: nowrap;
+}
+.pv-pill b { color: var(--text); font-weight: 600; }
+.pv-pill.is-plan { color: var(--warn); border-color: rgba(255,203,107,0.3); background: rgba(255,203,107,0.1); }
+.pv-pill.is-plan b { color: var(--warn); }
+.pv-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 8px var(--warn); flex: none; }
+.pv-dot.live { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+
+/* ---------- shell ---------- */
+.pv-shell { display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr); align-items: start; }
+
+.pv-side {
+  position: sticky; top: var(--topbar-h); height: calc(100vh - var(--topbar-h));
+  overflow-y: auto; padding: 18px 12px 26px;
+  border-right: 1px solid var(--hairline);
+  background: linear-gradient(180deg, rgba(255,255,255,0.022), transparent 60%);
+}
+.pv-side-label {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-faint); padding: 0 11px; margin: 6px 0 8px;
+}
+.pv-nav { display: flex; flex-direction: column; gap: 2px; }
+.pv-nav button {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  padding: 9px 11px; border-radius: 10px; border: 1px solid transparent;
+  font-size: 14px; color: var(--text-dim); transition: background .18s, color .18s, border-color .18s;
+}
+.pv-nav button:hover { background: var(--surface); color: var(--text); }
+.pv-nav button[aria-current="true"] {
+  background: linear-gradient(120deg, rgba(123,155,255,0.18), rgba(90,214,230,0.10));
+  border-color: var(--border-strong); color: var(--text); font-weight: 600;
+}
+.pv-nav .icon { font-size: 17px; }
+.pv-nav .pv-nav-n { margin-left: auto; font-size: 11px; font-weight: 600; color: var(--text-faint); }
+.pv-nav .pv-nav-flag {
+  margin-left: auto; font-size: 10px; font-weight: 700; letter-spacing: 0.02em;
+  color: var(--warn); background: rgba(255,203,107,0.12);
+  border: 1px solid rgba(255,203,107,0.28); border-radius: var(--r-pill); padding: 1px 7px;
+}
+.pv-side-note {
+  margin: 20px 4px 0; padding: 13px 14px; border-radius: var(--r-sm);
+  background: var(--surface); border: 1px solid var(--border);
+  font-size: 12px; line-height: 1.65; color: var(--text-faint);
+}
+.pv-side-note b { color: var(--text-dim); font-weight: 600; }
+.pv-side-note a { color: var(--brand); }
+.pv-side-note a:hover { text-decoration: underline; }
+
+/* ---------- main ---------- */
+.pv-main { padding: 26px 30px 72px; min-width: 0; }
+.pv-view { display: none; }
+.pv-view.is-active { display: block; animation: pvIn .3s ease both; }
+@keyframes pvIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+.pv-head { margin-bottom: 20px; }
+.pv-head h1 { font-family: var(--display); font-size: 23px; font-weight: 700; letter-spacing: -0.015em; }
+.pv-head p { color: var(--text-dim); font-size: 13.5px; margin-top: 7px; max-width: 760px; line-height: 1.7; }
+.pv-head .pv-head-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+.pv-notice {
+  display: flex; gap: 10px; align-items: flex-start; margin-bottom: 22px;
+  padding: 12px 15px; border-radius: var(--r-sm);
+  background: rgba(255,203,107,0.065); border: 1px solid rgba(255,203,107,0.24);
+  color: #e6d3a6; font-size: 12.5px; line-height: 1.7;
+}
+.pv-notice .icon { color: var(--warn); margin-top: 2px; }
+.pv-notice b { color: var(--warn); font-weight: 600; }
+
+/* ---------- surfaces ---------- */
+.glass {
+  position: relative;
+  background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02));
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); }
+.pv-block { padding: 20px 22px; border-radius: var(--r); background: var(--surface); border: 1px solid var(--border); margin-bottom: 18px; }
+.pv-block-title { display: flex; align-items: center; gap: 9px; font-size: 14.5px; font-weight: 600; margin-bottom: 4px; }
+.pv-block-title .icon { color: var(--brand); font-size: 17px; }
+.pv-block-desc { font-size: 12.5px; color: var(--text-faint); margin-bottom: 16px; line-height: 1.7; }
+
+/* ---------- stat cards ---------- */
+.pv-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 20px; }
+.pv-stat { padding: 16px 18px; border-radius: var(--r); background: var(--surface); border: 1px solid var(--border); transition: border-color .2s, transform .2s; }
+.pv-stat:hover { border-color: var(--border-strong); }
+.pv-stat .k { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-faint); }
+.pv-stat .k .icon { color: var(--brand); font-size: 15px; }
+.pv-stat .v { font-family: var(--display); font-size: 27px; font-weight: 700; letter-spacing: -0.02em; margin-top: 9px; line-height: 1.1; }
+.pv-stat .v small { font-size: 12px; font-weight: 400; color: var(--text-faint); margin-left: 5px; letter-spacing: 0; }
+.pv-stat .sub { font-size: 11.5px; color: var(--text-faint); margin-top: 5px; }
+
+/* ---------- toolbar / chips ---------- */
+.pv-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 16px; }
+.pv-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  font-size: 11.5px; font-weight: 600; padding: 4px 11px; border-radius: var(--r-pill);
+  background: var(--surface); border: 1px solid var(--border); color: var(--text-dim);
+  transition: background .18s, color .18s, border-color .18s;
+}
+button.chip:hover { background: var(--surface-2); color: var(--text); border-color: var(--border-strong); }
+button.chip[aria-pressed="true"] { color: var(--text); background: var(--grad-soft); border-color: rgba(123,155,255,0.42); }
+.chip-accent { color: var(--brand-2); background: rgba(54,224,230,0.12); border-color: rgba(54,224,230,0.3); }
+.chip-ok { color: var(--ok); background: rgba(79,209,165,0.12); border-color: rgba(79,209,165,0.3); }
+.chip-warn { color: var(--warn); background: rgba(255,203,107,0.12); border-color: rgba(255,203,107,0.3); }
+.chip-plan { color: var(--warn); background: rgba(255,203,107,0.1); border-color: rgba(255,203,107,0.28); }
+.chip-violet { color: var(--violet); background: rgba(176,139,255,0.12); border-color: rgba(176,139,255,0.3); }
+
+.pv-field { display: flex; align-items: center; gap: 9px; flex: 1 1 260px; min-width: 0;
+  padding: 9px 14px; border-radius: var(--r-pill); background: var(--surface);
+  border: 1px solid var(--border); transition: border-color .2s, background .2s; }
+.pv-field:focus-within { border-color: rgba(123,155,255,0.5); background: var(--surface-2); }
+.pv-field .icon { color: var(--text-faint); font-size: 16px; }
+.pv-field input { flex: 1; min-width: 0; background: none; border: none; outline: none; font-size: 14px; }
+.pv-field input::placeholder { color: var(--text-faint); }
+
+.pv-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  font-weight: 600; font-size: 13.5px; padding: 9px 17px; border-radius: var(--r-pill);
+  border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--text);
+  transition: background .2s, transform .15s, border-color .2s; white-space: nowrap;
+}
+.pv-btn:hover { background: var(--surface-strong); }
+.pv-btn:active { transform: translateY(1px); }
+.pv-btn-primary { color: #06121f; background: var(--grad); border: none; }
+.pv-btn-primary:hover { box-shadow: 0 12px 34px -12px rgba(90,160,255,0.7); }
+.pv-btn-sm { padding: 6px 13px; font-size: 12.5px; }
+
+/* ---------- memory list ---------- */
+.mem-list { display: flex; flex-direction: column; gap: 10px; }
+.mem {
+  border: 1px solid var(--border); background: var(--surface); border-radius: var(--r-sm);
+  padding: 14px 16px; transition: border-color .18s, background .18s; text-align: left; width: 100%;
+}
+.mem:hover { border-color: var(--border-strong); background: var(--surface-2); }
+.mem.is-open { border-color: rgba(123,155,255,0.42); background: var(--surface-2); }
+.mem-top { display: flex; align-items: flex-start; gap: 12px; }
+.mem-body { flex: 1; min-width: 0; }
+.mem-content { font-size: 14.5px; line-height: 1.6; color: var(--text); }
+.mem-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; font-size: 11.5px; color: var(--text-faint); }
+.mem-meta .dot-sep { width: 3px; height: 3px; border-radius: 50%; background: var(--text-faint); opacity: .6; flex: none; }
+.mem-id { font-family: var(--mono); font-size: 11px; color: var(--text-faint); }
+.mem-caret { color: var(--text-faint); font-size: 16px; transition: transform .24s ease; flex: none; margin-top: 2px; }
+.mem.is-open .mem-caret { transform: rotate(90deg); }
+.mem-detail { display: none; margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border); }
+.mem.is-open .mem-detail { display: block; }
+.kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 10px 18px; }
+.kv .kv-i { font-size: 12px; }
+.kv .kv-k { color: var(--text-faint); font-size: 11px; display: block; }
+.kv .kv-v { color: var(--text-dim); font-family: var(--mono); font-size: 12px; }
+
+.layer { font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: var(--r-pill); border: 1px solid; white-space: nowrap; }
+.layer-sensory { color: #9fb4d8; background: rgba(159,180,216,0.10); border-color: rgba(159,180,216,0.3); }
+.layer-short { color: var(--brand-2); background: rgba(54,224,230,0.10); border-color: rgba(54,224,230,0.3); }
+.layer-long { color: var(--brand); background: rgba(109,141,255,0.12); border-color: rgba(109,141,255,0.34); }
+.layer-perm { color: var(--violet); background: rgba(176,139,255,0.12); border-color: rgba(176,139,255,0.34); }
+
+.imp { display: inline-flex; align-items: center; gap: 6px; }
+.imp-bar { width: 40px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.09); overflow: hidden; }
+.imp-bar i { display: block; height: 100%; background: var(--grad); border-radius: 2px; }
+
+.empty { padding: 40px 20px; text-align: center; color: var(--text-faint); font-size: 13.5px; border: 1px dashed var(--border); border-radius: var(--r-sm); }
+
+/* ---------- score breakdown ---------- */
+.score-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 12px; }
+.score-item { padding: 11px 13px; border-radius: var(--r-sm); background: rgba(255,255,255,0.028); border: 1px solid var(--hairline); }
+.score-item .sk { display: flex; justify-content: space-between; align-items: baseline; font-size: 11.5px; color: var(--text-faint); margin-bottom: 8px; }
+.score-item .sv { font-family: var(--mono); font-size: 12px; color: var(--text-dim); }
+.score-item .bar { height: 4px; border-radius: 2px; background: rgba(255,255,255,0.08); overflow: hidden; }
+.score-item .bar i { display: block; height: 100%; border-radius: 2px; background: var(--grad); transition: width .5s ease; }
+.score-total { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+.score-total .ring {
+  width: 58px; height: 58px; border-radius: 50%; flex: none; display: grid; place-items: center;
+  background: conic-gradient(var(--brand) calc(var(--pct) * 1%), rgba(255,255,255,0.08) 0);
+}
+.score-total .ring span { width: 46px; height: 46px; border-radius: 50%; background: var(--bg-2); display: grid; place-items: center; font-family: var(--display); font-size: 15px; font-weight: 700; }
+.score-total .stx { font-size: 12.5px; color: var(--text-dim); line-height: 1.65; }
+.score-total .stx b { display: block; color: var(--text); font-size: 14.5px; font-weight: 600; margin-bottom: 2px; }
+
+/* ---------- retrieval routes ---------- */
+.routes { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 10px; }
+.route {
+  display: flex; align-items: center; gap: 9px; padding: 10px 12px; border-radius: var(--r-sm);
+  background: var(--surface); border: 1px solid var(--border); font-size: 12.5px; color: var(--text-dim);
+  transition: border-color .3s, background .3s, color .3s;
+}
+.route .icon { font-size: 16px; color: var(--text-faint); transition: color .3s; }
+.route.is-hit { border-color: rgba(54,224,230,0.42); background: rgba(54,224,230,0.09); color: var(--text); }
+.route.is-hit .icon { color: var(--brand-2); }
+.route .rn { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--text-faint); }
+
+/* ---------- graph ---------- */
+.graph-wrap { position: relative; border-radius: var(--r); border: 1px solid var(--border); background: rgba(255,255,255,0.02); overflow: hidden; }
+.graph-svg { display: block; width: 100%; height: auto; }
+.gnode circle { transition: r .2s, opacity .2s, stroke .2s; }
+.gnode text { font-family: var(--sans); font-size: 11.5px; fill: var(--text-dim); pointer-events: none; }
+.gnode:hover circle { stroke: var(--brand-2); }
+.gnode.is-active circle { stroke: var(--brand-2); }
+.gnode.is-dim { opacity: 0.3; }
+.gedge { stroke: rgba(255,255,255,0.24); stroke-width: 1.1; fill: none; transition: stroke .2s, opacity .2s; }
+.gedge.is-hit { stroke: rgba(54,224,230,0.6); stroke-width: 1.6; }
+.gedge.is-dim { opacity: 0.2; }
+.glabel { font-family: var(--sans); font-size: 10px; fill: var(--text-faint); }
+
+/* ---------- timeline ---------- */
+.tl { position: relative; padding-left: 24px; }
+.tl::before { content: ""; position: absolute; left: 6px; top: 6px; bottom: 6px; width: 1px; background: var(--border); }
+.tl-item { position: relative; padding-bottom: 18px; }
+.tl-item:last-child { padding-bottom: 0; }
+.tl-item::before {
+  content: ""; position: absolute; left: -22px; top: 6px; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--brand); box-shadow: 0 0 0 3px rgba(109,141,255,0.16);
+}
+.tl-item.is-plan::before { background: var(--warn); box-shadow: 0 0 0 3px rgba(255,203,107,0.16); }
+.tl-item.is-ok::before { background: var(--ok); box-shadow: 0 0 0 3px rgba(79,209,165,0.16); }
+.tl-time { font-family: var(--mono); font-size: 11px; color: var(--text-faint); }
+.tl-title { font-size: 13.5px; font-weight: 600; margin: 3px 0 4px; }
+.tl-desc { font-size: 12.5px; color: var(--text-dim); line-height: 1.65; }
+
+/* ---------- devices ---------- */
+.dev-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(232px, 1fr)); gap: 12px; }
+.dev { padding: 15px 17px; border-radius: var(--r-sm); background: var(--surface); border: 1px solid var(--border); }
+.dev-top { display: flex; align-items: center; gap: 10px; }
+.dev-ico { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--grad-soft); border: 1px solid var(--border); color: var(--brand); font-size: 17px; flex: none; }
+.dev-name { font-size: 13.5px; font-weight: 600; }
+.dev-sub { font-size: 11.5px; color: var(--text-faint); }
+.dev-status { margin-left: auto; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+.dev-status.on { color: var(--ok); }
+.dev-status.plan { color: var(--warn); }
+.dev-meta { margin-top: 12px; font-size: 11.5px; color: var(--text-faint); font-family: var(--mono); line-height: 1.7; }
+
+/* ---------- table ---------- */
+.pv-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.pv-table th, .pv-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--hairline); }
+.pv-table th { font-size: 11.5px; font-weight: 600; color: var(--text-faint); letter-spacing: 0.02em; }
+.pv-table td { color: var(--text-dim); }
+.pv-table tbody tr:hover td { background: rgba(255,255,255,0.022); }
+.pv-table td.c, .pv-table th.c { text-align: center; }
+.yes { color: var(--ok); }
+.no { color: var(--text-faint); opacity: .55; }
+.pv-table-scroll { overflow-x: auto; }
+
+/* ---------- two-col ---------- */
+.pv-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; align-items: start; }
+
+/* ---------- footer note ---------- */
+.pv-foot {
+  margin-top: 34px; padding-top: 20px; border-top: 1px solid var(--hairline);
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+  font-size: 12.5px; color: var(--text-faint);
+}
+.pv-foot a { color: var(--brand); }
+.pv-foot a:hover { text-decoration: underline; }
+
+/* ---------- responsive ---------- */
+@media (max-width: 1040px) {
+  .pv-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+  .pv-shell { grid-template-columns: 1fr; }
+  .pv-side {
+    position: static; height: auto; border-right: none;
+    border-bottom: 1px solid var(--hairline); padding: 12px 14px 14px;
+  }
+  .pv-side-label { display: none; }
+  .pv-nav { flex-direction: row; overflow-x: auto; gap: 6px; padding-bottom: 4px; }
+  .pv-nav button { width: auto; white-space: nowrap; flex: none; }
+  .pv-nav .pv-nav-n, .pv-nav .pv-nav-flag { display: none; }
+  .pv-side-note { display: none; }
+  .pv-main { padding: 20px 16px 60px; }
+  .pv-brand .pv-sub { display: none; }
+}
+@media (max-width: 620px) {
+  .pv-stats { grid-template-columns: 1fr; }
+  .pv-pill.is-desktop { display: none; }
+  .pv-head h1 { font-size: 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+  .pv-view.is-active { animation: none; }
+}
+
+/* ===== 连接面板（真实数据版新增） ===== */
+.pv-conn {
+  padding: 13px 30px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--hairline);
+}
+.pv-conn-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pv-conn-t {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 12px; color: var(--text-faint); white-space: nowrap;
+}
+.pv-conn-t .icon { color: var(--brand); font-size: 15px; }
+.pv-conn-hint {
+  margin-top: 9px; font-size: 11.5px; line-height: 1.7; color: var(--text-faint);
+}
+.pv-conn-hint code { font-family: var(--mono); font-size: 11px; }
+.pv-conn-hint:empty { display: none; }
+.pv-field-sm { flex: 0 1 260px; padding: 7px 13px; }
+.pv-field select {
+  flex: 1; min-width: 0; background: none; border: none; outline: none;
+  font-size: 13.5px; color: var(--text); font-family: inherit;
+}
+.pv-field select option { background: var(--bg-2); color: var(--text); }
+.pv-field select:disabled { color: var(--text-faint); }
+
+/* ===== 未连接 / 错误状态块 ===== */
+.pv-state {
+  padding: 26px 22px; border-radius: var(--r);
+  background: var(--surface); border: 1px dashed var(--border-strong);
+  margin-bottom: 18px;
+}
+.pv-state.is-warn { background: rgba(255,203,107,0.05); border-color: rgba(255,203,107,0.3); }
+.pv-state.is-err { background: rgba(255,122,107,0.05); border-color: rgba(255,122,107,0.3); }
+.pv-state-t { font-family: var(--display); font-size: 15px; font-weight: 600; margin-bottom: 8px; }
+.pv-state.is-warn .pv-state-t { color: var(--warn); }
+.pv-state.is-err .pv-state-t { color: var(--danger); }
+.pv-state-d { font-size: 12.5px; line-height: 1.8; color: var(--text-dim); }
+.pv-state-d + .pv-state-d { margin-top: 8px; }
+.pv-code {
+  margin: 12px 0 0; padding: 11px 14px; border-radius: var(--r-sm);
+  background: rgba(0,0,0,0.32); border: 1px solid var(--border);
+  font-family: var(--mono); font-size: 11.5px; line-height: 1.85;
+  color: var(--text-dim); white-space: pre; overflow-x: auto;
+}
+
+/* ===== 分布条 ===== */
+.stat-dist { display: grid; gap: 9px; }
+.sd-row {
+  display: grid; grid-template-columns: minmax(86px, auto) auto minmax(80px, 1fr);
+  align-items: center; gap: 11px; font-size: 12.5px;
+}
+.sd-k { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sd-v { font-family: var(--mono); font-size: 12px; color: var(--text-faint); text-align: right; }
+
+/* ===== 分页 ===== */
+.pager { display: inline-flex; align-items: center; gap: 10px; }
+.pager-i { font-family: var(--mono); font-size: 11.5px; color: var(--text-faint); }
+.pv-btn[disabled] { opacity: .42; cursor: not-allowed; }
+
+@media (max-width: 720px) {
+  .pv-conn { padding: 12px 16px; }
+  .pv-conn-row { gap: 8px; }
+  .pv-field-sm { flex: 1 1 100%; }
+  .sd-row { grid-template-columns: minmax(70px, auto) auto; }
+  .sd-row .bar { grid-column: 1 / -1; }
+}
+</style>
+</head>
+<body>
+<a class="skip-link" href="#pv-main">跳到主内容</a>
+<div class="pv-bg" aria-hidden="true"></div>
+<div class="pv-grid-overlay" aria-hidden="true"></div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+<defs>
+    <symbol id="i-brain" viewBox="0 0 24 24"><path d="M12 5.5A3.5 3.5 0 0 0 8.5 9v.45A3 3 0 0 0 6.5 15a3.5 3.5 0 0 0 2 3.16A3.4 3.4 0 0 0 12 19.5a3.4 3.4 0 0 0 3.5-1.34 3.5 3.5 0 0 0 2-3.16 3 3 0 0 0-2-5.55V9A3.5 3.5 0 0 0 12 5.5Z"/><path d="M12 5.5v14"/><path d="m9.6 9.6-1.4-1.4"/><path d="m14.4 9.6 1.4-1.4"/><path d="m9.4 13.6-1.6.6"/><path d="m14.6 13.6 1.6.6"/></symbol>
+    <symbol id="i-graph" viewBox="0 0 24 24"><circle cx="5.5" cy="6.5" r="2.4"/><circle cx="18.5" cy="7.5" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="m7.6 7.7 2.8 8.2"/><path d="m16.5 8.9-2.9 7"/><path d="M7.9 6.3h8.2"/></symbol>
+    <symbol id="i-recall" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><circle cx="11" cy="11" r="2.6"/><path d="M11 4V1.8"/><path d="M11 20.2V18"/><path d="M4 11H1.8"/><path d="M20.2 11H18"/><path d="m16.5 16.5 3 3"/></symbol>
+    <symbol id="i-scale" viewBox="0 0 24 24"><path d="M12 4v16"/><path d="M5.5 20.5h13"/><path d="M4 8h16"/><path d="M4 8 1.6 13a3.4 3.4 0 0 0 4.8 0L4 8Z"/><path d="M20 8l-2.4 5a3.4 3.4 0 0 0 4.8 0L20 8Z"/><circle cx="12" cy="5.4" r="1.3"/></symbol>
+    <symbol id="i-inject" viewBox="0 0 24 24"><path d="M4 6h11"/><path d="M4 11h7"/><path d="M4 16h9"/><path d="m14.5 10.5 5.5 5.5L17.5 18.5 12 13V8l2.5 2.5Z"/></symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20s-7.5-4.6-7.5-9.4A4.1 4.1 0 0 1 12 7.6a4.1 4.1 0 0 1 7.5 3C19.5 15.4 12 20 12 20Z"/></symbol>
+    <symbol id="i-persona" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20a7.2 7.2 0 0 1 14.4 0"/><path d="m19.2 3 .7 1.7 1.7.7-1.7.7-.7 1.7-.7-1.7-1.7-.7 1.7-.7.7-1.7Z"/></symbol>
+    <symbol id="i-federated" viewBox="0 0 24 24"><circle cx="12" cy="4.8" r="2.3"/><circle cx="5" cy="17.5" r="2.3"/><circle cx="19" cy="17.5" r="2.3"/><path d="m10.4 6.7-3.8 8.7"/><path d="m13.6 6.7 3.8 8.7"/><path d="M7.3 17.5h9.4"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 2.8 4.8 5.6v5.6c0 4.2 3 7.9 7.2 9.2 4.2-1.3 7.2-5 7.2-9.2V5.6L12 2.8Z"/><path d="m9.2 11.8 2 2 3.6-3.8"/></symbol>
+    <symbol id="i-shield-alert" viewBox="0 0 24 24"><path d="M12 2.8 4.8 5.6v5.6c0 4.2 3 7.9 7.2 9.2 4.2-1.3 7.2-5 7.2-9.2V5.6L12 2.8Z"/><path d="M12 8.4v4"/><path d="M12 15.6h.01"/></symbol>
+    <symbol id="i-film" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.4"/><path d="M8 4.5v15"/><path d="M16 4.5v15"/><path d="M3 12h18"/><path d="M3.6 8.2h4.4"/><path d="M3.6 15.8h4.4"/></symbol>
+    <symbol id="i-route" viewBox="0 0 24 24"><circle cx="4.5" cy="5.5" r="1.8"/><circle cx="4.5" cy="18.5" r="1.8"/><path d="M6.3 5.5h4.2a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 0 3.5 3.5h2.7"/><path d="M6.3 18.5h4.2a3.5 3.5 0 0 0 3.5-3.5 3.5 3.5 0 0 1 3.5-3.5h2.7"/><path d="m17.4 9.7 2.8 2.8-2.8 2.8"/></symbol>
+    <symbol id="i-conflict" viewBox="0 0 24 24"><path d="M4 12h5"/><path d="M20 12h-5"/><path d="m7.5 8.5 3.5 3.5L7.5 15.5"/><path d="m16.5 8.5-3.5 3.5 3.5 3.5"/><path d="M12 3.5v3"/><path d="M12 17.5v3"/></symbol>
+    <symbol id="i-skill" viewBox="0 0 24 24"><path d="m4 7.5 8-4 8 4-8 4-8-4Z"/><path d="m4 12.5 8 4 8-4"/><path d="m4 17 8 4 8-4"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4.5 4.5"/><path d="m19 3 .8 1.9 1.9.8-1.9.8-.8 1.9-.8-1.9-1.9-.8 1.9-.8L19 3Z"/></symbol>
+    <symbol id="i-focus" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.2"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-vector" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="m7.6 7.2 3.2 8.6"/><path d="m16.4 7.2-3.2 8.6"/><path d="M8 6h8"/></symbol>
+    <symbol id="i-fts" viewBox="0 0 24 24"><path d="M13.5 3.5H6.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V9.5l-6-6Z"/><path d="M13 3.5v6h6"/><path d="M8.5 13h7"/><path d="M8.5 16.5h4.5"/></symbol>
+    <symbol id="i-tfidf" viewBox="0 0 24 24"><path d="M4 20.5h16"/><rect x="5.5" y="13" width="3" height="7" rx="1"/><rect x="10.5" y="8" width="3" height="12" rx="1"/><rect x="15.5" y="4.5" width="3" height="15.5" rx="1"/></symbol>
+    <symbol id="i-fuzzy" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 3.5v3"/><path d="M12 17.5v3"/><path d="M3.5 12h3"/><path d="M17.5 12h3"/><path d="m6 6 2 2"/><path d="m16 16 2 2"/><path d="m18 6-2 2"/><path d="m8 16-2 2"/></symbol>
+    <symbol id="i-expand" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.6"/><path d="M12 4.5v3"/><path d="M12 16.5v3"/><path d="M4.5 12h3"/><path d="M16.5 12h3"/><path d="m6.7 6.7 2.1 2.1"/><path d="m15.2 15.2 2.1 2.1"/><path d="m17.3 6.7-2.1 2.1"/><path d="m8.8 15.2-2.1 2.1"/></symbol>
+    <symbol id="i-rerank" viewBox="0 0 24 24"><path d="M4 6.5h8"/><path d="M4 12h13"/><path d="M4 17.5h5"/><path d="m17 3.5 3 3-3 3"/><path d="m17 14.5 3 3-3 3"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.5" y="10.5" width="15" height="10" rx="2.4"/><path d="M8 10.5V7.8a4 4 0 0 1 8 0v2.7"/><path d="M12 14.5v2.4"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="8" r="4"/><path d="m11 11 9 9"/><path d="m16.5 16.5-2 2"/><path d="m19 19-2 2"/></symbol>
+    <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v5"/><path d="M15 3v5"/><path d="M6.5 8h11v3.5a5.5 5.5 0 0 1-11 0V8Z"/><path d="M12 17v4"/></symbol>
+    <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.4"/><path d="m7.5 10 2.5 2.5L7.5 15"/><path d="M13 15.5h4"/></symbol>
+    <symbol id="i-server" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M6.5 7.5h.01"/><path d="M6.5 16.5h.01"/><path d="M10 7.5h5"/><path d="M10 16.5h5"/></symbol>
+    <symbol id="i-api" viewBox="0 0 24 24"><path d="M9 4.5C6.5 4.5 5 7 5 12s1.5 7.5 4 7.5"/><path d="M15 4.5c2.5 0 4 2.5 4 7.5s-1.5 7.5-4 7.5"/><path d="m9.5 9-2 3 2 3"/><path d="m14.5 9 2 3-2 3"/></symbol>
+    <symbol id="i-bot" viewBox="0 0 24 24"><rect x="4" y="7.5" width="16" height="11.5" rx="3"/><path d="M12 4v3.5"/><circle cx="9" cy="13" r="1.3"/><circle cx="15" cy="13" r="1.3"/><path d="M1.8 12v3"/><path d="M22.2 12v3"/><path d="M10 16.2h4"/></symbol>
+    <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M10 3.5v3"/><path d="M14 3.5v3"/><path d="M10 17.5v3"/><path d="M14 17.5v3"/><path d="M3.5 10h3"/><path d="M3.5 14h3"/><path d="M17.5 10h3"/><path d="M17.5 14h3"/></symbol>
+    <symbol id="i-db" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7.5" ry="3"/><path d="M4.5 6v12c0 1.66 3.36 3 7.5 3s7.5-1.34 7.5-3V6"/><path d="M4.5 12c0 1.66 3.36 3 7.5 3s7.5-1.34 7.5-3"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3.5 13.8 9l5.7 1.8L13.8 12.6 12 18.2l-1.8-5.6L4.5 10.8 10.2 9 12 3.5Z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5.3l3.4 2"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4.5V10h-5.5"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.8 2.8 20h18.4L12 3.8Z"/><path d="M12 9.5v4.2"/><path d="M12 16.8h.01"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="m9.5 14.5 5-5"/><path d="M11 6.8 12.8 5a4.3 4.3 0 0 1 6.1 6.1L17 13"/><path d="M13 17.2 11.2 19a4.3 4.3 0 0 1-6.1-6.1L7 11"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 4.5h6a3 3 0 0 1 3 3v12a2.5 2.5 0 0 0-2.5-2.5H4v-12.5Z"/><path d="M20 4.5h-6a3 3 0 0 0-3 3v12a2.5 2.5 0 0 1 2.5-2.5H20v-12.5Z"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m4.5 12.5 5 5 10-11"/></symbol>
+    <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12.2 2.7 2.7L16.2 9.4"/></symbol>
+    <symbol id="i-half-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18Z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-minus-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2.4"/><path d="M5.5 15H5a1.5 1.5 0 0 1-1.5-1.5V5A1.5 1.5 0 0 1 5 3.5h8.5A1.5 1.5 0 0 1 15 5v.5"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4.5 12h15"/><path d="m13.5 6 6 6-6 6"/></symbol>
+    <symbol id="i-arrow-down" viewBox="0 0 24 24"><path d="M12 4.5v15"/><path d="m6 13.5 6 6 6-6"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12"/><path d="M18 6 6 18"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5 19 12 7 19.5v-15Z"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4.5h5.5V10"/><path d="M19.5 4.5 11 13"/><path d="M18 14.5V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3.5"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3.5v11"/><path d="m7.5 10 4.5 4.5L16.5 10"/><path d="M4.5 18.5h15"/></symbol>
+    <symbol id="i-flow" viewBox="0 0 24 24"><path d="M4.5 6.5h6a3 3 0 0 1 3 3v5a3 3 0 0 0 3 3h3"/><path d="m17 14.5 2.5 3-2.5 3"/></symbol>
+    <symbol id="i-github" viewBox="0 0 24 24"><path d="M12 .5C5.65.5.7 5.45.7 11.9c0 5.06 3.29 9.35 7.86 10.86.57.1.78-.25.78-.55v-1.94c-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 5.79 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.12 3.05.74.81 1.18 1.84 1.18 3.1 0 4.43-2.69 5.4-5.25 5.69.41.36.78 1.06.78 2.14v3.17c0 .3.2.66.79.55a11.4 11.4 0 0 0 7.85-10.86C23.3 5.45 18.35.5 12 .5Z"/></symbol>
+  </defs>
+</svg>
+
+<header class="pv-topbar">
+  <a class="pv-back" href="index.html">
+    <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg>
+    <span>返回官网</span>
+  </a>
+  <span class="pv-brand" aria-label="MindForge Web 预览版">
+    <svg class="pv-logo" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+      <circle cx="16" cy="16" r="13" stroke="#6d8dff" stroke-width="2.2"/>
+      <path d="M9 16a7 7 0 0 1 14 0" stroke="#6d8dff" stroke-width="2.2" stroke-linecap="round"/>
+      <circle cx="16" cy="16" r="2.6" fill="#6d8dff"/>
+    </svg>
+    <span>MindForge Web</span>
+    <span class="pv-sub">产品预览</span>
+  </span>
+  <span class="pv-spacer"></span>
+  <span class="pv-pill" id="conn-pill" role="status" aria-live="polite">
+    <i class="pv-dot" aria-hidden="true"></i>
+    <span>未连接</span>
+  </span>
+  <span class="pv-pill is-plan" role="note">
+    <span>界面为规划形态 · 正式网页端计划 <b>2027</b> 上线</span>
+  </span>
+</header>
+
+<div class="pv-conn" id="conn-panel">
+  <form class="pv-conn-row" id="conn-form" novalidate>
+    <span class="pv-conn-t"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-plug"/></svg><span>数据源</span></span>
+    <label class="pv-field pv-field-sm">
+      <span class="sr-only">MindForge API 地址</span>
+      <input type="text" id="conn-base" placeholder="http://127.0.0.1:8080" autocomplete="off" spellcheck="false">
+    </label>
+    <label class="pv-field pv-field-sm">
+      <span class="sr-only">API Key（可选）</span>
+      <input type="password" id="conn-key" placeholder="MINDFORGE_API_KEY（可选）" autocomplete="off">
+    </label>
+    <button type="submit" class="pv-btn pv-btn-primary pv-btn-sm" id="conn-go">连接</button>
+  </form>
+  <p class="pv-conn-hint" id="conn-err" hidden></p>
+  <p class="pv-conn-hint">本页不含任何内置示例数据。在 <code>127.0.0.1</code> 上运行 <code>MindForge serve --api --port 8080</code>，
+  页面会直接读取你真实的记忆库；未连接时各视图只显示连接引导。</p>
+</div>
+
+<div class="pv-shell">
+  <aside class="pv-side">
+    <nav class="pv-nav" id="pv-nav" aria-label="预览版功能导航">
+      <p class="pv-side-label">真实数据视图</p>
+      <button type="button" data-view="memory" aria-current="true">
+        <svg class="icon" aria-hidden="true"><use href="#i-db"/></svg><span>记忆总览</span><span class="pv-nav-n" id="nav-total"></span>
+      </button>
+      <button type="button" data-view="search">
+        <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><span>语义检索</span>
+      </button>
+      <button type="button" data-view="graph">
+        <svg class="icon" aria-hidden="true"><use href="#i-graph"/></svg><span>标签共现图</span><span class="pv-nav-n" id="nav-tags"></span>
+      </button>
+      <button type="button" data-view="timeline">
+        <svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg><span>记忆时间线</span>
+      </button>
+      <p class="pv-side-label">能力状态（无数据）</p>
+      <button type="button" data-view="agents">
+        <svg class="icon" aria-hidden="true"><use href="#i-bot"/></svg><span>多 Agent 协作</span><span class="pv-nav-flag">规划</span>
+      </button>
+      <button type="button" data-view="engine">
+        <svg class="icon" aria-hidden="true"><use href="#i-api"/></svg><span>引擎与接口</span><span class="pv-nav-flag">实况</span>
+      </button>
+    </nav>
+
+    <div class="pv-side-note">
+      <b>关于本页</b><br>
+      这是 MindForge Web 的<b>界面形态预览</b>。上一版页面里的示例记忆、图谱与事件流已全部移除，
+      现在页面上出现的每一个数字都来自你本机运行中的 MindForge REST API。<br><br>
+      点开任意数据视图，未连接时只会看到连接引导，不会看到替代数据。<br><br>
+      本地已有能力可用 <a href="demo.html">交互演示</a> 体验。
+    </div>
+  </aside>
+
+  <main class="pv-main" id="pv-main">
+    <!-- ==================== 1. 记忆总览 ==================== -->
+    <section class="pv-view is-active" id="view-memory" aria-labelledby="t-memory">
+      <div class="pv-head">
+        <div class="pv-head-row">
+          <h1 id="t-memory">记忆总览</h1>
+          <span class="chip chip-ok">真实数据</span>
+        </div>
+        <p>直接读取你本机记忆库的统计聚合与记忆列表。字段、分页与筛选都对应 REST API 的真实能力，不做前端模拟。</p>
+      </div>
+
+      <p class="pv-notice" role="note">
+        <svg class="icon icon-sm" aria-hidden="true"><use href="#i-db"/></svg>
+        <span><b>数据来源</b>：全部数值来自 <code>GET /api/stats</code>、<code>GET /api/tags</code> 与
+        <code>GET /api/memories</code>。本视图不含示例数据；未连接时不显示任何统计值。</span>
+      </p>
+
+      <div class="pv-stats" id="mem-stats"></div>
+      <div id="mem-dist"></div>
+
+      <div class="pv-tools">
+        <span class="pv-conn-t"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-fuzzy"/></svg><span>分类筛选</span></span>
+        <label class="pv-field pv-field-sm">
+          <span class="sr-only">按分类筛选</span>
+          <select id="mem-cat" disabled><option value="">全部分类</option></select>
+        </label>
+        <span class="pv-spacer"></span>
+        <span class="pager" id="mem-pager" hidden></span>
+      </div>
+
+      <div class="mem-list" id="mem-list" aria-live="polite"></div>
+      <p class="pv-block-desc" id="mem-count" style="margin-top:14px"></p>
+
+      <div class="pv-foot">
+        <span>层级筛选与全文筛选不在 REST 参数内：<code>/api/memories</code> 只接受 <code>limit / offset / category</code>，因此本页不提供这两个前端过滤器。</span>
+        <a href="https://github.com/opok-ops/MindForge/blob/master/api/server.py" target="_blank" rel="noopener noreferrer">查看接口实现</a>
+      </div>
+    </section>
+
+    <!-- ==================== 2. 语义检索 ==================== -->
+    <section class="pv-view" id="view-search" aria-labelledby="t-search">
+      <div class="pv-head">
+        <div class="pv-head-row">
+          <h1 id="t-search">语义检索</h1>
+          <span class="chip chip-ok">真实数据</span>
+        </div>
+        <p>调用真实的 <code>/api/search</code>，展示接口返回的相关度原值与近似匹配标志。</p>
+      </div>
+
+      <p class="pv-notice" role="note">
+        <svg class="icon icon-sm" aria-hidden="true"><use href="#i-search"/></svg>
+        <span><b>与上一版的差别</b>：上一版展示的「覆盖率 40% / 重要度 20% / 频次 15% / 衰减 20%」评分拆解，
+        是页面自己算的，<b>接口并不返回这些分因子</b>。现在只展示接口真实给出的字段。</span>
+      </p>
+
+      <div class="pv-tools">
+        <label class="pv-field">
+          <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+          <span class="sr-only">检索查询</span>
+          <input type="text" id="q-input" placeholder="输入查询词，例如：加密" autocomplete="off">
+        </label>
+        <label class="pv-field pv-field-sm">
+          <span class="sr-only">min_relevance</span>
+          <select id="q-min" aria-label="min_relevance 阈值">
+            <option value="0.1">min_relevance 0.1</option>
+            <option value="0.3" selected>min_relevance 0.3</option>
+            <option value="0.5">min_relevance 0.5</option>
+            <option value="0.7">min_relevance 0.7</option>
+          </select>
+        </label>
+        <button type="button" class="pv-btn pv-btn-primary" id="q-run">
+          <svg class="icon icon-sm" aria-hidden="true"><use href="#i-recall"/></svg>
+          <span>检索</span>
+        </button>
+      </div>
+
+      <div id="q-results" aria-live="polite"></div>
+
+      <div class="pv-foot">
+        <span>数据来源：<code>GET /api/search?q=&amp;limit=&amp;min_relevance=</code></span>
+        <a href="https://github.com/opok-ops/MindForge#readme" target="_blank" rel="noopener noreferrer">检索能力说明</a>
+      </div>
+    </section>
+
+    <!-- ==================== 3. 标签共现图 ==================== -->
+    <section class="pv-view" id="view-graph" aria-labelledby="t-graph">
+      <div class="pv-head">
+        <div class="pv-head-row">
+          <h1 id="t-graph">标签共现图</h1>
+          <span class="chip chip-warn">推导数据</span>
+        </div>
+        <p>按真实记忆的 <code>tags</code> 字段统计共现关系。点选任一标签，查看它与其他标签的共同出现次数。</p>
+      </div>
+
+      <p class="pv-notice" role="note">
+        <svg class="icon icon-sm" aria-hidden="true"><use href="#i-alert"/></svg>
+        <span><b>这不是引擎内部的知识图谱</b>。引擎的实体/关系抽取只在本机 CLI <code>MindForge graph</code> 暴露，
+        REST 不提供该数据；本图由 <code>GET /api/memories</code> 返回的 tags 真实推导，
+        节点大小 = 标签出现次数，边权 = 同一记忆内的共现次数。</span>
+      </p>
+
+      <div id="graph-stats"></div>
+
+      <div class="pv-cols" style="grid-template-columns:minmax(0,1.6fr) minmax(280px,1fr)">
+        <div class="graph-wrap" id="graph-svg-wrap"></div>
+        <div class="pv-block" style="margin:0">
+          <h2 class="pv-block-title">
+            <svg class="icon" aria-hidden="true"><use href="#i-link"/></svg>
+            <span>标签详情</span>
+          </h2>
+          <div id="g-detail"><p class="pv-block-desc">在左侧图中点选一个标签。</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 4. 记忆时间线 ==================== -->
+    <section class="pv-view" id="view-timeline" aria-labelledby="t-timeline">
+      <div class="pv-head">
+        <div class="pv-head-row">
+          <h1 id="t-timeline">记忆时间线</h1>
+          <span class="chip chip-ok">真实数据</span>
+        </div>
+        <p>用真实字段画真实分布：写入时间、当前 <code>strength</code>、<code>forgetting_score</code>、<code>access_count</code> 与巩固次数。</p>
+      </div>
+
+      <p class="pv-notice" role="note">
+        <svg class="icon icon-sm" aria-hidden="true"><use href="#i-alert"/></svg>
+        <span><b>不做曲线拟合</b>：上一版页面的「Ebbinghaus 双曲线」是画出来的示意图。
+        这里改为直接按接口返回的真实 strength 与写入天数打点，不生成未经测量的衰减曲线。</span>
+      </p>
+
+      <div id="tl-body"></div>
+    </section>
+
+    <!-- ==================== 5. 多 Agent 协作（真实状态） ==================== -->
+    <section class="pv-view" id="view-agents" aria-labelledby="t-agents">
+      <div class="pv-head">
+        <div class="pv-head-row">
+          <h1 id="t-agents">多 Agent 协作</h1>
+          <span class="chip chip-plan">v6.0.0 规划</span>
+        </div>
+        <p>下面每一项都是当前源码里的真实情况，不含示例数据。该能力<b>尚未发布</b>，REST 也没有对应端点。</p>
+      </div>
+
+      <p class="pv-notice" role="note">
+        <svg class="icon icon-sm" aria-hidden="true"><use href="#i-alert"/></svg>
+        <span><b>本视图不含任何数据</b>，只陈述可校验的事实：引擎的 <code>v6_status()</code> 实测输出、源码里的角色枚举与已存在的实验性 CLI 命令。</span>
+      </p>
+
+      <div class="pv-block">
+        <h2 class="pv-block-title">
+          <svg class="icon" aria-hidden="true"><use href="#i-cpu"/></svg>
+          <span>v6 端口真实状态</span>
+        </h2>
+        <p class="pv-block-desc">取自 <code>modules/v6.py</code> 的 <code>v6_status()</code> 实测输出（v5.7.0）。</p>
+        <div class="pv-table-scroll">
+          <table class="pv-table">
+            <caption class="sr-only">v6 能力端口状态</caption>
+            <thead>
+              <tr><th scope="col">能力</th><th scope="col">端口</th><th scope="col" class="c">状态</th><th scope="col" class="c">可用</th><th scope="col" class="c">目标版本</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">multi_agent_collaboration</th>
+                <td>MultiAgentCollaborationPort</td>
+                <td class="c no">planned</td><td class="c no">false</td><td class="c">6.0.0</td>
+              </tr>
+              <tr>
+                <th scope="row">memory_preview</th>
+                <td>MemoryPreviewPort</td>
+                <td class="c no">planned</td><td class="c no">false</td><td class="c">6.0.0</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="pv-block-desc" style="margin-top:12px">调用未实现的端口方法会直接抛 <code>NotImplementedError</code>，不会静默返回结果。</p>
+      </div>
+
+      <div class="pv-block">
+        <h2 class="pv-block-title">
+          <svg class="icon" aria-hidden="true"><use href="#i-persona"/></svg>
+          <span>真实角色模型（3 级，不是 4 级）</span>
+        </h2>
+        <p class="pv-block-desc">取自 <code>modules/multi_agent.py</code> 的 <code>SpaceRole</code> 枚举与 <code>_ROLE_RANK</code>。</p>
+        <div class="pv-table-scroll">
+          <table class="pv-table">
+            <caption class="sr-only">SpaceRole 角色与等级</caption>
+            <thead>
+              <tr><th scope="col">角色</th><th scope="col" class="c">枚举值</th><th scope="col" class="c">等级</th><th scope="col">说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><th scope="row">OWNER</th><td class="c"><code>owner</code></td><td class="c">3</td><td>空间创建者；<code>policy = broadcast</code> 时只有 owner 可写</td></tr>
+              <tr><th scope="row">EDITOR</th><td class="c"><code>editor</code></td><td class="c">2</td><td>一般空间的写入门槛（<code>required = EDITOR</code>）</td></tr>
+              <tr><th scope="row">READER</th><td class="c"><code>reader</code></td><td class="c">1</td><td>默认角色；<code>_get_role</code> 查不到时回落到它</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="pv-block-desc" style="margin-top:12px">上一版页面写的 <b>Writer / Guest 两级角色是不存在的</b>，已删除。权限判定为
+        <code>check_permission(space_id, agent_id, required)</code>，本质是等级比较（<code>_ROLE_RANK[role] &gt;= _ROLE_RANK[required]</code>）。</p>
+      </div>
+
+      <div class="pv-block">
+        <h2 class="pv-block-title">
+          <svg class="icon" aria-hidden="true"><use href="#i-terminal"/></svg>
+          <span>已经存在的实验性能力（CLI，非 REST）</span>
+        </h2>
+        <p class="pv-block-desc">这些命令在 v5.7.0 的 CLI 里真实存在，但归类为实验性，且没有 REST 端点，所以预览页无法展示其实时数据。</p>
+        <div class="pv-chips">
+          <span class="chip">space-create</span><span class="chip">space-list</span><span class="chip">space-join</span>
+          <span class="chip">space-add-member</span><span class="chip">space-share</span><span class="chip">space-memories</span>
+          <span class="chip">space-stats</span><span class="chip">fed-acl-add</span><span class="chip">fed-acl-check</span>
+          <span class="chip">share-conflicts</span><span class="chip">share-conflict-resolve</span><span class="chip">memory-lineage</span>
+        </div>
+      </div>
+
+      <div class="pv-foot">
+        <span>事实来源：v5.7.0 源码实测（<code>modules/v6.py</code>、<code>modules/multi_agent.py</code>、<code>cli/main.py</code>）。版本升级后需同步本页。</span>
+        <a href="https://github.com/opok-ops/MindForge/milestones" target="_blank" rel="noopener noreferrer">查看 v6.0 路线图</a>
+      </div>
+    </section>
+
+    <!-- ==================== 6. 引擎与接口 ==================== -->
+    <section class="pv-view" id="view-engine" aria-labelledby="t-engine">
+      <div class="pv-head">
+        <div class="pv-head-row">
+          <h1 id="t-engine">引擎与接口</h1>
+          <span class="chip chip-accent">实况</span>
+        </div>
+        <p>这个预览页能拿到什么、拿不到什么，取决于 REST API 的真实表面。下面把边界写清楚。</p>
+      </div>
+
+      <div class="pv-stats">
+        <article class="pv-stat"><div class="k">当前连接版本</div><div class="v" id="engine-version">—</div><div class="sub">GET / 的 version 字段</div></article>
+        <article class="pv-stat"><div class="k">REST 端点</div><div class="v">8</div><div class="sub">api/server.py 真实路由数</div></article>
+        <article class="pv-stat"><div class="k">运行依赖</div><div class="v">1</div><div class="sub">仅 cryptography</div></article>
+        <article class="pv-stat"><div class="k">读限流</div><div class="v">100<small>/60s</small></div><div class="sub">超限返回 429</div></article>
+      </div>
+
+      <div class="pv-block">
+        <h2 class="pv-block-title">
+          <svg class="icon" aria-hidden="true"><use href="#i-api"/></svg>
+          <span>REST 真实表面</span>
+        </h2>
+        <p class="pv-block-desc">预览页能用的数据只有这些端点；不在表里的能力，页面一律不展示。</p>
+        <div class="pv-table-scroll">
+          <table class="pv-table">
+            <caption class="sr-only">REST API 端点清单</caption>
+            <thead>
+              <tr><th scope="col">方法与路径</th><th scope="col">可拿到的内容</th><th scope="col" class="c">认证</th></tr>
+            </thead>
+            <tbody>
+              <tr><th scope="row"><code>GET /api/health</code></th><td>仅 <code>{"status"}</code>，刻意不外泄任何指纹</td><td class="c yes">免认证</td></tr>
+              <tr><th scope="row"><code>GET /</code></th><td><code>name / version / health</code></td><td class="c no">需认证</td></tr>
+              <tr><th scope="row"><code>GET /api/stats</code></th><td>总数、回收站、库大小、层级/重要度/隐私分布、热门分类与标签</td><td class="c no">需认证</td></tr>
+              <tr><th scope="row"><code>GET /api/tags</code></th><td>标签与出现次数</td><td class="c no">需认证</td></tr>
+              <tr><th scope="row"><code>GET /api/memories</code></th><td>记忆列表，参数仅 <code>limit / offset / category</code></td><td class="c no">需认证</td></tr>
+              <tr><th scope="row"><code>GET /api/memories/&lt;id&gt;</code></th><td>单条记忆全部字段</td><td class="c no">需认证</td></tr>
+              <tr><th scope="row"><code>GET /api/search</code></th><td>查询、命中列表、单一 <code>relevance_score</code>、<code>approximate</code></td><td class="c no">需认证</td></tr>
+              <tr><th scope="row"><code>GET /api/export</code></th><td>导出 JSON，上限 5000 条</td><td class="c no">需认证</td></tr>
+              <tr><th scope="row"><code>POST /api/memories</code> · <code>POST /api/import</code></th><td>写入与批量导入（本页只读，不调用）</td><td class="c no">需认证</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="pv-cols">
+        <div class="pv-block">
+          <h2 class="pv-block-title">
+            <svg class="icon" aria-hidden="true"><use href="#i-key"/></svg>
+            <span>认证与跨域的真实约束</span>
+          </h2>
+          <p class="pv-block-desc">这两条是预览页能否连通的决定因素，都是 fail-closed 默认值。</p>
+          <div class="kv">
+            <div class="kv-i"><span class="kv-k">无 Key 时</span><span class="kv-v">默认 401，需显式 ALLOW_NOAUTH=1</span></div>
+            <div class="kv-i"><span class="kv-k">非 localhost 绑定</span><span class="kv-v">无 Key 直接拒绝启动</span></div>
+            <div class="kv-i"><span class="kv-k">跨域头</span><span class="kv-v">默认不下发，需 MINDFORGE_CORS_ORIGIN</span></div>
+            <div class="kv-i"><span class="kv-k">health 豁免</span><span class="kv-v">仅此一个端点免认证</span></div>
+          </div>
+        </div>
+
+        <div class="pv-block">
+          <h2 class="pv-block-title">
+            <svg class="icon" aria-hidden="true"><use href="#i-cpu"/></svg>
+            <span>运行时真实限制</span>
+          </h2>
+          <p class="pv-block-desc">实测得到的行为，不是推测。</p>
+          <div class="kv">
+            <div class="kv-i"><span class="kv-k">向量检索</span><span class="kv-v">未装 sentence-transformers 时不可用</span></div>
+            <div class="kv-i"><span class="kv-k">加密模式检索</span><span class="kv-v">解密后匹配，结果标记 approximate</span></div>
+            <div class="kv-i"><span class="kv-k">加密默认值</span><span class="kv-v">库级默认 encrypted=True</span></div>
+            <div class="kv-i"><span class="kv-k">标签接口上限</span><span class="kv-v">扫描前 10000 行</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pv-foot">
+        <span>上述常量取自 v5.7.0 实测；运行时事实随环境变化，以你本机实际响应为准。</span>
+        <a href="https://github.com/opok-ops/MindForge" target="_blank" rel="noopener noreferrer">仓库源码</a>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+/* ============================================================
+   MindForge Web · 预览版交互（真实数据版）
+   ------------------------------------------------------------
+   本页不内置任何示例数据。所有记忆、统计与检索结果均来自
+   你本机运行中的 MindForge REST API：
+
+       GET /api/health      连接探测（免认证，仅返回 state）
+       GET /                版本号（需认证）
+       GET /api/stats       统计聚合
+       GET /api/tags        标签与出现次数
+       GET /api/memories    记忆列表（limit / offset / category）
+       GET /api/search      检索（q / limit / min_relevance / categories）
+
+   未连接时不渲染任何替代数据，只显示连接引导。
+   知识图谱与时间线由 /api/memories 的真实返回字段推导得出，
+   并在页面上标注推导范围，不虚构实体或事件。
+   ============================================================ */
+(function () {
+  'use strict';
+
+  var DAY = 86400000;
+  var DEFAULT_BASE = 'http://127.0.0.1:8080';
+  var LS_BASE = 'mf.preview.base';
+  var LS_KEY = 'mf.preview.key';
+  var DERIVE_LIMIT = 1000;   /* 推导图谱/时间线时拉取的真实条数上限 */
+
+  function $(id) { return document.getElementById(id); }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function num(n) {
+    return (typeof n === 'number' && isFinite(n)) ? n.toLocaleString('zh-CN') : '—';
+  }
+  function bytes(b) {
+    if (typeof b !== 'number' || !isFinite(b)) { return '—'; }
+    var u = ['B', 'KB', 'MB', 'GB'], i = 0;
+    while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
+    return (i === 0 ? b : b.toFixed(1)) + ' ' + u[i];
+  }
+  function dateOf(sec) {
+    if (!sec) { return '—'; }
+    var d = new Date(sec * 1000);
+    return isNaN(d.getTime()) ? '—' : d.toISOString().slice(0, 10);
+  }
+  function daysSince(sec) {
+    if (!sec) { return null; }
+    return Math.max(0, (Date.now() - sec * 1000) / DAY);
+  }
+  function pct(v) { return Math.round(Math.max(0, Math.min(1, v || 0)) * 100); }
+  function bar(v) { return '<div class="bar"><i style="width:' + pct(v) + '%"></i></div>'; }
+
+  var LAYER_TEXT = { sensory: '感官缓冲', short_term: '短期工作区', long_term: '长期语义层', permanent: '永久核心层' };
+  var LAYER_CLASS = { sensory: 'sensory', short_term: 'short', long_term: 'long', permanent: 'perm' };
+
+  /* ---------------- 连接配置 ---------------- */
+  function qsv(name) {
+    var m = new RegExp('[?&]' + name + '=([^&#]*)').exec(window.location.search);
+    return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : '';
+  }
+
+  var CFG = { base: qsv('api') || DEFAULT_BASE, key: qsv('key') || '' };
+  try {
+    if (!qsv('api')) { CFG.base = window.localStorage.getItem(LS_BASE) || DEFAULT_BASE; }
+    if (!qsv('key')) { CFG.key = window.localStorage.getItem(LS_KEY) || ''; }
+  } catch (e) { /* 隐私模式禁用 localStorage 时退回默认值 */ }
+
+  function persistCfg() {
+    try {
+      window.localStorage.setItem(LS_BASE, CFG.base);
+      window.localStorage.setItem(LS_KEY, CFG.key);
+    } catch (e) { /* 忽略 */ }
+  }
+
+  function buildUrl(path, params) {
+    var url = String(CFG.base).replace(/\/+$/, '') + path;
+    if (params) {
+      var parts = [];
+      Object.keys(params).forEach(function (k) {
+        var v = params[k];
+        if (v === undefined || v === null || v === '') { return; }
+        parts.push(encodeURIComponent(k) + '=' + encodeURIComponent(v));
+      });
+      if (parts.length) { url += '?' + parts.join('&'); }
+    }
+    return url;
+  }
+
+  function req(path, params) {
+    var headers = {};
+    if (CFG.key) { headers.Authorization = 'Bearer ' + CFG.key; }
+    return window.fetch(buildUrl(path, params), { method: 'GET', headers: headers })
+      .then(function (r) {
+        return r.text().then(function (txt) {
+          var data = null;
+          try { data = txt ? JSON.parse(txt) : null; } catch (e) { data = null; }
+          if (!r.ok) {
+            var err = new Error((data && data.error) || ('HTTP ' + r.status));
+            err.status = r.status;
+            throw err;
+          }
+          return data;
+        });
+      });
+  }
+
+  /* ---------------- 状态 ---------------- */
+  var ST = {
+    phase: 'idle',      /* idle | connecting | live | unauthorized | unreachable */
+    version: '',
+    error: '',
+    stats: null,
+    tags: [],
+    mems: [],
+    returned: 0,
+    offset: 0,
+    pageSize: 25,
+    category: '',
+    derived: null,      /* 用于图谱与时间线的真实记忆样本 */
+    derivedScope: 0,
+    rendered: { graph: false, timeline: false }   /* 按视图记录是否已渲染过 */
+  };
+
+  /* ---------------- 连接引导 / 状态块 ---------------- */
+  /* 浏览器对网络失败与 CORS 拒绝都抛 "Failed to fetch"，这里给出可操作的解释 */
+  function reasonOf(msg) {
+    if (/Failed to fetch|NetworkError|load failed/i.test(msg || '')) {
+      return '无法建立连接。常见原因有三种：服务未启动；服务端未下发跨域头（需 MINDFORGE_CORS_ORIGIN）；端口不符。';
+    }
+    return msg || '请求失败';
+  }
+
+  function stateBlock(kind) {
+    if (kind === 'connecting') {
+      return '<div class="pv-state"><p class="pv-state-t">正在连接 ' + esc(CFG.base) + '…</p>' +
+        '<p class="pv-state-d">正在探测 /api/health。若无响应，请确认本机已启动 API 服务。</p></div>';
+    }
+    if (kind === 'unauthorized') {
+      return '<div class="pv-state is-warn">' +
+        '<p class="pv-state-t">服务可达，但需要认证</p>' +
+        '<p class="pv-state-d">该实例要求 <code>MINDFORGE_API_KEY</code>。请在上方填入同一个 Key，' +
+        '或在启动服务时设置 <code>MINDFORGE_ALLOW_NOAUTH=1</code> 开启本地免认证。</p>' +
+        '<pre class="pv-code">set MINDFORGE_ALLOW_NOAUTH=1\nMindForge serve --api --port 8080</pre>' +
+        '</div>';
+    }
+    if (kind === 'unreachable') {
+      return '<div class="pv-state is-err">' +
+        '<p class="pv-state-t">未连接到 MindForge 服务</p>' +
+        '<p class="pv-state-d">' + esc(reasonOf(ST.error)) + '。本页没有内置示例数据，接入真实记忆库后才会有内容。</p>' +
+        '<p class="pv-state-d">在本机启动 API 服务（默认 ' + esc(DEFAULT_BASE) + '）：</p>' +
+        '<pre class="pv-code">pip install -r requirements.txt\nset MINDFORGE_ALLOW_NOAUTH=1\nMindForge serve --api --port 8080</pre>' +
+        '<p class="pv-state-d">若本页部署在独立域名下，服务端还需下发跨域头：</p>' +
+        '<pre class="pv-code">set MINDFORGE_CORS_ORIGIN=' + esc(window.location.origin) + '\nMindForge serve --api --port 8080</pre>' +
+        '</div>';
+    }
+    return '';
+  }
+
+  function renderConn() {
+    var pill = $('conn-pill');
+    var panel = $('conn-panel');
+    var label = { idle: '未连接', connecting: '连接中…', live: '已连接', unauthorized: '待认证', unreachable: '连接失败' };
+    if (pill) {
+      pill.className = 'pv-pill ' + (ST.phase === 'live' ? '' : 'is-plan');
+      pill.innerHTML = '<i class="pv-dot' + (ST.phase === 'live' ? ' live' : '') + '" aria-hidden="true"></i>' +
+        '<span>' + esc(label[ST.phase] || ST.phase) +
+        (ST.phase === 'live' && ST.version ? ' · v' + esc(ST.version) : '') + '</span>';
+    }
+    if (panel) {
+      panel.hidden = (ST.phase === 'live');
+      var note = $('conn-err');
+      if (note) {
+        note.textContent = (ST.phase === 'unauthorized' || ST.phase === 'unreachable') ? reasonOf(ST.error) : '';
+        note.hidden = !note.textContent;
+      }
+    }
+    var baseInput = $('conn-base');
+    if (baseInput && document.activeElement !== baseInput) { baseInput.value = CFG.base; }
+    var keyInput = $('conn-key');
+    if (keyInput && document.activeElement !== keyInput) { keyInput.value = CFG.key; }
+    var btn = $('conn-go');
+    if (btn) {
+      btn.disabled = (ST.phase === 'connecting');
+      btn.textContent = (ST.phase === 'live' ? '重新连接' : '连接');
+    }
+  }
+
+  /* ---------------- 视图：记忆总览 ---------------- */
+  function distRows(obj, total) {
+    var keys = Object.keys(obj || {});
+    if (!keys.length) { return '<p class="empty">该实例暂无此维度数据。</p>'; }
+    return '<div class="stat-dist">' + keys.map(function (k) {
+      var v = obj[k], ratio = total ? v / total : 0;
+      var cls = LAYER_CLASS[k];
+      return '<div class="sd-row"><span class="sd-k">' +
+        (cls ? '<span class="layer layer-' + cls + '">' + esc(k) + '</span>' : esc(k)) +
+        '</span><span class="sd-v">' + num(v) + '</span>' + bar(ratio) + '</div>';
+    }).join('') + '</div>';
+  }
+
+  function renderMemory() {
+    var s = ST.stats || {};
+    var total = typeof s.total === 'number' ? s.total : 0;
+
+    var cards = $('mem-stats');
+    if (cards) {
+      if (ST.phase !== 'live') {
+        cards.innerHTML = '';
+      } else {
+        var items = [
+          { k: '记忆总数', v: num(s.total), sub: 'GET /api/stats · total' },
+          { k: '分类数', v: num(Object.keys(s.top_categories || {}).length), sub: 'top_categories 覆盖的分类' },
+          { k: '标签数', v: num(Object.keys(s.top_tags || {}).length), sub: 'top_tags 覆盖的标签' },
+          { k: '收藏 / 置顶', v: num(s.starred_count) + ' / ' + num(s.pinned_count), sub: 'starred_count · pinned_count' },
+          { k: '回收站', v: num(s.trash_count), sub: 'trash_count' },
+          { k: '库文件大小', v: bytes(s.db_size_bytes), sub: 'db_size_bytes' }
+        ];
+        cards.innerHTML = items.map(function (it) {
+          return '<article class="pv-stat"><div class="k">' + esc(it.k) + '</div>' +
+            '<div class="v">' + esc(it.v) + '</div><div class="sub">' + esc(it.sub) + '</div></article>';
+        }).join('');
+      }
+    }
+
+    var dist = $('mem-dist');
+    if (dist) {
+      if (ST.phase !== 'live') {
+        dist.innerHTML = stateBlock(ST.phase);
+      } else {
+        dist.innerHTML =
+          '<div class="pv-cols">' +
+            '<div class="pv-block"><h2 class="pv-block-title"><svg class="icon" aria-hidden="true"><use href="#i-db"/></svg><span>记忆层级分布</span></h2>' +
+              '<p class="pv-block-desc">by_layer · 真实值</p>' + distRows(s.by_layer, total) + '</div>' +
+            '<div class="pv-block"><h2 class="pv-block-title"><svg class="icon" aria-hidden="true"><use href="#i-scale"/></svg><span>重要度分布</span></h2>' +
+              '<p class="pv-block-desc">by_importance · 真实值</p>' + distRows(s.by_importance, total) + '</div>' +
+          '</div>' +
+          '<div class="pv-cols">' +
+            '<div class="pv-block"><h2 class="pv-block-title"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg><span>隐私分级分布</span></h2>' +
+              '<p class="pv-block-desc">by_privacy · 真实值</p>' + distRows(s.by_privacy, total) + '</div>' +
+            '<div class="pv-block"><h2 class="pv-block-title"><svg class="icon" aria-hidden="true"><use href="#i-tfidf"/></svg><span>标签出现次数</span></h2>' +
+              '<p class="pv-block-desc">top_tags · 真实值</p>' +
+              (ST.tags.length ? '<div class="pv-chips">' + ST.tags.slice(0, 24).map(function (t) {
+                return '<span class="chip">' + esc(t[0]) + ' · ' + num(t[1]) + '</span>';
+              }).join('') + '</div><p class="pv-block-desc" style="margin-top:12px">共 ' + num(ST.tags.length) + ' 个标签（GET /api/tags）</p>'
+                : '<p class="empty">该实例暂无标签。</p>') + '</div>' +
+          '</div>';
+      }
+    }
+
+    var catSel = $('mem-cat');
+    if (catSel) {
+      var cats = Object.keys((ST.stats && ST.stats.top_categories) || {});
+      catSel.disabled = (ST.phase !== 'live');
+      catSel.innerHTML = '<option value="">全部分类</option>' + cats.map(function (c) {
+        return '<option value="' + esc(c) + '"' + (c === ST.category ? ' selected' : '') + '>' + esc(c) + '</option>';
+      }).join('');
+    }
+
+    var list = $('mem-list');
+    if (list) {
+      if (ST.phase !== 'live') {
+        list.innerHTML = '';   /* 引导块只在 #mem-dist 显示一次，避免重复 */
+      } else if (!ST.mems.length) {
+        list.innerHTML = '<p class="empty">' +
+          (ST.category ? '分类「' + esc(ST.category) + '」下没有记忆。' : '这个记忆库还是空的，先用 MindForge add 写一条。') + '</p>';
+      } else {
+        list.innerHTML = ST.mems.map(function (m) {
+          var lc = LAYER_CLASS[m.layer] || 'sensory';
+          return '<article class="mem" data-id="' + esc(m.id) + '" tabindex="0" role="button" aria-expanded="false">' +
+            '<div class="mem-top"><div class="mem-body">' +
+              '<p class="mem-content">' + esc(m.content) + '</p>' +
+              '<div class="mem-meta">' +
+                '<span class="layer layer-' + lc + '">' + esc(m.layer) + '</span>' +
+                '<span>' + esc(m.category || '—') + '</span>' +
+                '<span class="dot-sep"></span>' +
+                '<span class="imp" title="importance ' + esc(m.importance) + '">' +
+                  '<span>' + esc(m.importance || '—') + '</span></span>' +
+                '<span class="dot-sep"></span>' +
+                '<span>强度 ' + (typeof m.strength === 'number' ? m.strength.toFixed(2) : '—') + '</span>' +
+                '<span class="dot-sep"></span>' +
+                '<span>召回 ' + num(m.access_count) + ' 次</span>' +
+                (m.consolidation_count ? '<span class="chip chip-ok" style="font-size:10px;padding:1px 7px">已巩固 ' + num(m.consolidation_count) + '</span>' : '') +
+                (m.pinned ? '<span class="chip chip-warn" style="font-size:10px;padding:1px 7px">置顶</span>' : '') +
+                (m.starred ? '<span class="chip chip-accent" style="font-size:10px;padding:1px 7px">收藏</span>' : '') +
+              '</div>' +
+            '</div><svg class="icon mem-caret" aria-hidden="true"><use href="#i-arrow"/></svg></div>' +
+            '<div class="mem-detail"><div class="kv">' +
+              '<div class="kv-i"><span class="kv-k">id</span><span class="kv-v">' + esc(m.id) + '</span></div>' +
+              '<div class="kv-i"><span class="kv-k">layer</span><span class="kv-v">' + esc(m.layer) + '</span></div>' +
+              '<div class="kv-i"><span class="kv-k">memory_type</span><span class="kv-v">' + esc(m.memory_type) + '</span></div>' +
+              '<div class="kv-i"><span class="kv-k">privacy</span><span class="kv-v">' + esc(m.privacy) + '</span></div>' +
+              '<div class="kv-i"><span class="kv-k">importance</span><span class="kv-v">' + esc(m.importance) + '</span></div>' +
+              '<div class="kv-i"><span class="kv-k">strength</span><span class="kv-v">' + (typeof m.strength === 'number' ? m.strength.toFixed(3) : '—') + '</span></div>' +
+              '<div class="kv-i"><span class="kv-k">forgetting_score</span><span class="kv-v">' + (typeof m.forgetting_score === 'number' ? m.forgetting_score.toFixed(3) : '—') + '</span></div>' +
+              '<div class="kv-i"><span class="kv-k">consolidation_count</span><span class="kv-v">' + num(m.consolidation_count) + '</span></div>' +
+              '<div class="kv-i"><span class="kv-k">access_count</span><span class="kv-v">' + num(m.access_count) + '</span></div>' +
+              '<div class="kv-i"><span class="kv-k">created_at</span><span class="kv-v">' + esc(dateOf(m.created_at)) + '</span></div>' +
+              '<div class="kv-i"><span class="kv-k">last_accessed_at</span><span class="kv-v">' + esc(dateOf(m.last_accessed_at)) + '</span></div>' +
+            '</div>' +
+            ((m.tags && m.tags.length) ? '<div class="pv-chips" style="margin-top:14px">' + m.tags.map(function (t) {
+              return '<span class="chip">' + esc(t) + '</span>';
+            }).join('') + '</div>' : '') +
+            '</div></article>';
+        }).join('');
+      }
+    }
+
+    var count = $('mem-count');
+    if (count) {
+      if (ST.phase !== 'live') {
+        count.textContent = '';
+      } else {
+        count.textContent = '本次返回 ' + ST.returned + ' 条（offset=' + ST.offset + ', limit=' + ST.pageSize +
+          (ST.category ? ', category=' + ST.category : '') + '）。GET /api/memories 的 total 字段仅代表本次返回条数，' +
+          '总量请看上方统计卡。';
+      }
+    }
+
+    var pager = $('mem-pager');
+    if (pager) {
+      var canPrev = ST.offset > 0;
+      var canNext = ST.returned >= ST.pageSize;
+      pager.hidden = (ST.phase !== 'live');
+      pager.innerHTML =
+        '<button type="button" class="pv-btn pv-btn-sm" data-page="prev"' + (canPrev ? '' : ' disabled') + '>上一页</button>' +
+        '<span class="pager-i">offset ' + ST.offset + '</span>' +
+        '<button type="button" class="pv-btn pv-btn-sm" data-page="next"' + (canNext ? '' : ' disabled') + '>下一页</button>';
+    }
+  }
+
+  /* ---------------- 视图：语义检索 ---------------- */
+  function renderSearchResult(res) {
+    var wrap = $('q-results');
+    if (!wrap) { return; }
+    if (ST.phase !== 'live') { wrap.innerHTML = stateBlock(ST.phase); return; }
+    if (!res) { wrap.innerHTML = '<p class="empty">输入查询词后点「检索」。结果来自 /api/search。</p>'; return; }
+    if (!res.results || !res.results.length) {
+      wrap.innerHTML = '<p class="empty">没有命中的记忆。可降低 min_relevance（当前 ' + esc($('q-min').value) + '）或用更宽的词再试。</p>';
+      return;
+    }
+    wrap.innerHTML =
+      '<h2 class="pv-block-title" style="margin:20px 0 12px"><svg class="icon" aria-hidden="true"><use href="#i-recall"/></svg>' +
+      '<span>召回 ' + num(res.total) + ' 条</span>' +
+      (res.approximate ? '<span class="chip chip-warn">approximate · 加密模式下为解密后近似匹配</span>' : '') + '</h2>' +
+      res.results.map(function (r, i) {
+        return '<article class="pv-block" style="margin-bottom:14px">' +
+          '<div class="score-total">' +
+            '<div class="ring" style="--pct:' + pct(r.relevance_score) + '"><span>' + pct(r.relevance_score) + '</span></div>' +
+            '<div class="stx"><b>#' + (i + 1) + ' · ' + esc(r.category || '—') + '</b>' +
+            'relevance_score = ' + (typeof r.relevance_score === 'number' ? r.relevance_score.toFixed(4) : '—') + '</div>' +
+          '</div>' +
+          '<p class="mem-content" style="margin:12px 0 10px">' + esc(r.content) + '</p>' +
+          '<div class="score-grid"><div class="score-item"><div class="sk">' +
+            '<span>相关度（接口原值）</span><span class="sv">' + (typeof r.relevance_score === 'number' ? r.relevance_score.toFixed(4) : '—') + '</span>' +
+          '</div>' + bar(r.relevance_score) + '</div></div>' +
+          '<div class="mem-meta" style="margin-top:12px"><span class="mem-id">' + esc(r.id) + '</span>' +
+            ((r.tags && r.tags.length) ? '<span class="dot-sep"></span><span>' + r.tags.map(esc).join(' · ') + '</span>' : '') +
+          '</div>' +
+        '</article>';
+      }).join('') +
+      '<p class="pv-block-desc">以上为 /api/search 的真实返回字段。该端点只输出单一 relevance_score，' +
+      '不返回分因子明细，因此本页不展示评分拆解。</p>';
+  }
+
+  var searching = false;
+  function runSearch() {
+    var input = $('q-input');
+    if (!input || searching) { return; }
+    var q = input.value.trim();
+    if (ST.phase !== 'live') { $('q-results').innerHTML = stateBlock(ST.phase); return; }
+    if (!q) { renderSearchResult(null); return; }
+    searching = true;
+    var wrap = $('q-results');
+    wrap.innerHTML = '<p class="empty">检索中…</p>';
+    var min = $('q-min');
+    req('/api/search', { q: q, limit: 20, min_relevance: min ? min.value : 0.3 })
+      .then(function (res) { renderSearchResult(res); })
+      .catch(function (e) { wrap.innerHTML = '<div class="pv-state is-err"><p class="pv-state-t">检索失败</p><p class="pv-state-d">' + esc(e.message) + '</p></div>'; })
+      .then(function () { searching = false; });
+  }
+
+  /* ---------------- 真实记忆样本（图谱 / 时间线共用） ---------------- */
+  function ensureDerived() {
+    if (ST.derived) { return Promise.resolve(ST.derived); }
+    if (ST.phase !== 'live') { return Promise.reject(new Error('未连接')); }
+    return req('/api/memories', { limit: DERIVE_LIMIT, offset: 0 }).then(function (d) {
+      ST.derived = (d && d.memories) || [];
+      ST.derivedScope = ST.derived.length;
+      return ST.derived;
+    });
+  }
+
+  /* ---------------- 视图：知识图谱（由真实标签共现推导） ---------------- */
+  function buildGraph(mems) {
+    var freq = {}, co = {};
+    mems.forEach(function (m) {
+      var tags = (m.tags || []).filter(Boolean);
+      tags.forEach(function (t) { freq[t] = (freq[t] || 0) + 1; });
+      for (var i = 0; i < tags.length; i++) {
+        for (var j = i + 1; j < tags.length; j++) {
+          var k = tags[i] < tags[j] ? tags[i] + '\u0000' + tags[j] : tags[j] + '\u0000' + tags[i];
+          co[k] = (co[k] || 0) + 1;
+        }
+      }
+    });
+    var nodes = Object.keys(freq).sort(function (a, b) { return freq[b] - freq[a]; }).slice(0, 14);
+    var index = {};
+    nodes.forEach(function (n, i) { index[n] = i; });
+    var edges = [];
+    Object.keys(co).forEach(function (k) {
+      var p = k.split('\u0000');
+      if (index[p[0]] === undefined || index[p[1]] === undefined) { return; }
+      edges.push({ a: p[0], b: p[1], w: co[k] });
+    });
+    edges.sort(function (x, y) { return y.w - x.w; });
+    return { nodes: nodes, freq: freq, edges: edges.slice(0, 28), all: edges };
+  }
+
+  function renderGraphView() {
+    var wrap = $('graph-stats');
+    if (!wrap) { return; }
+    if (ST.phase !== 'live') { wrap.innerHTML = ''; $('graph-svg-wrap').innerHTML = stateBlock(ST.phase); $('g-detail').innerHTML = ''; return; }
+    wrap.innerHTML = '<p class="pv-state-d">正在读取真实记忆…</p>';
+    ensureDerived().then(function (mems) {
+      wrap.innerHTML = '';
+      $('graph-svg-wrap').innerHTML = '';
+      var G = buildGraph(mems);
+      if (!G.nodes.length) {
+        $('g-detail').innerHTML = '<p class="empty">样本内没有标签，无法推导共现关系。</p>';
+        $('graph-svg-wrap').innerHTML = '<p class="empty">暂无标签数据。</p>';
+        return;
+      }
+      drawGraph(G);
+      $('g-detail').innerHTML =
+        '<p class="pv-block-desc">从 <b>' + num(ST.derivedScope) + '</b> 条真实记忆的 tags 推导：' +
+        num(G.nodes.length) + ' 个高频标签节点、' + num(G.edges.length) + ' 条共现边。</p>' +
+        '<div class="kv"><div class="kv-i"><span class="kv-k">数据来源</span><span class="kv-v">GET /api/memories</span></div>' +
+        '<div class="kv-i"><span class="kv-k">推导方式</span><span class="kv-v">同一记忆内的标签两两共现计数</span></div>' +
+        '<div class="kv-i"><span class="kv-k">边权</span><span class="kv-v">共现次数</span></div></div>' +
+        '<p class="pv-block-desc" style="margin-top:12px">注意：这是标签共现图，不是引擎内部的知识图谱实体关系。' +
+        '引擎的实体/关系抽取只在本地 CLI <code>MindForge graph</code> 暴露，REST 不提供该数据。</p>';
+      ST.rendered.graph = true;
+    }).catch(function (e) {
+      wrap.innerHTML = '<div class="pv-state is-err"><p class="pv-state-t">无法读取记忆</p><p class="pv-state-d">' + esc(e.message) + '</p></div>';
+    });
+  }
+
+  function drawGraph(G) {
+    var W = 720, H = 400, R = 150;
+    var pos = {};
+    G.nodes.forEach(function (n, i) {
+      var a = (Math.PI * 2 * i / G.nodes.length) - Math.PI / 2;
+      pos[n] = { x: W / 2 + R * Math.cos(a) * 1.35, y: H / 2 + R * Math.sin(a) * 0.92 };
+    });
+    var maxW = Math.max.apply(null, G.edges.map(function (e) { return e.w; }).concat([1]));
+    var edges = G.edges.map(function (e) {
+      var A = pos[e.a], B = pos[e.b];
+      return '<line class="gedge" data-a="' + esc(e.a) + '" data-b="' + esc(e.b) + '" x1="' + A.x.toFixed(1) + '" y1="' + A.y.toFixed(1) +
+        '" x2="' + B.x.toFixed(1) + '" y2="' + B.y.toFixed(1) +
+        '" style="stroke-width:' + (0.8 + (e.w / maxW) * 2.2).toFixed(2) + '" opacity="' + (0.22 + (e.w / maxW) * 0.5).toFixed(2) + '"/>';
+    }).join('');
+    var maxF = Math.max.apply(null, G.nodes.map(function (n) { return G.freq[n]; }));
+    var nodes = G.nodes.map(function (n) {
+      var p = pos[n], r = 12 + (G.freq[n] / maxF) * 16;
+      return '<g class="gnode" data-tag="' + esc(n) + '" tabindex="0" role="button">' +
+        '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="' + r.toFixed(1) + '" ' +
+        'fill="rgba(109,141,255,0.22)" stroke="rgba(150,175,255,0.8)" stroke-width="1.3"/>' +
+        '<text x="' + p.x.toFixed(1) + '" y="' + (p.y + r + 13).toFixed(1) + '" text-anchor="middle">' + esc(n) + '</text></g>';
+    }).join('');
+    $('graph-svg-wrap').innerHTML =
+      '<svg class="graph-svg" viewBox="0 0 720 400" role="img" aria-labelledby="graph-title graph-desc">' +
+      '<title id="graph-title">由真实记忆标签推导的共现图</title>' +
+      '<desc id="graph-desc">共 ' + G.nodes.length + ' 个高频标签节点与 ' + G.edges.length + ' 条共现边，节点大小表示该标签出现次数。</desc>' +
+      '<g id="graph-edges">' + edges + '</g><g id="graph-nodes">' + nodes + '</g></svg>';
+  }
+
+  function focusTag(tag) {
+    var mems = ST.derived || [];
+    var related = mems.filter(function (m) { return (m.tags || []).indexOf(tag) >= 0; });
+    Array.prototype.forEach.call(document.querySelectorAll('.gnode'), function (g) {
+      g.classList.toggle('is-active', g.getAttribute('data-tag') === tag);
+      g.classList.toggle('is-dim', g.getAttribute('data-tag') !== tag && related.every(function (m) { return (m.tags || []).indexOf(g.getAttribute('data-tag')) < 0; }));
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.gedge'), function (l) {
+      var hit = l.getAttribute('data-a') === tag || l.getAttribute('data-b') === tag;
+      l.classList.toggle('is-hit', hit);
+      l.classList.toggle('is-dim', !hit);
+    });
+    var co = {};
+    related.forEach(function (m) {
+      (m.tags || []).forEach(function (t) { if (t !== tag) { co[t] = (co[t] || 0) + 1; } });
+    });
+    var coList = Object.keys(co).sort(function (a, b) { return co[b] - co[a]; });
+    $('g-detail').innerHTML =
+      '<p class="pv-block-desc">标签 <b>' + esc(tag) + '</b> 在真实样本中出现 <b>' + num(related.length) + '</b> 次。</p>' +
+      '<div class="kv"><div class="kv-i"><span class="kv-k">共现标签</span><span class="kv-v">' + (coList.length ? coList.map(function (t) { return esc(t) + '(' + co[t] + ')'; }).join(', ') : '—') + '</span></div></div>' +
+      '<div class="tl" style="margin-top:12px">' + related.slice(0, 3).map(function (m) {
+        return '<div class="tl-item"><span class="tl-time">' + esc(dateOf(m.created_at)) + ' · ' + esc(m.layer) + '</span>' +
+          '<p class="tl-desc">' + esc(String(m.content).slice(0, 110)) + '</p></div>';
+      }).join('') + '</div>';
+  }
+
+  /* ---------------- 视图：记忆时间线（真实字段） ---------------- */
+  function renderTimeline() {
+    var box = $('tl-body');
+    if (!box) { return; }
+    if (ST.phase !== 'live') { box.innerHTML = stateBlock(ST.phase); return; }
+    box.innerHTML = '<p class="pv-state-d">正在读取真实记忆…</p>';
+    ensureDerived().then(function (mems) {
+      if (!mems.length) { box.innerHTML = '<p class="empty">记忆库为空，没有时间线可画。</p>'; return; }
+      var sorted = mems.slice().sort(function (a, b) { return (b.created_at || 0) - (a.created_at || 0); });
+      var consolidated = mems.filter(function (m) { return (m.consolidation_count || 0) > 0; });
+      var buckets = {};
+      sorted.forEach(function (m) {
+        var d = dateOf(m.created_at);
+        if (d !== '—') { buckets[d] = (buckets[d] || 0) + 1; }
+      });
+      var days = Object.keys(buckets).sort();
+      var maxB = Math.max.apply(null, days.map(function (d) { return buckets[d]; }).concat([1]));
+
+      box.innerHTML =
+        '<div class="pv-block"><h2 class="pv-block-title"><svg class="icon" aria-hidden="true"><use href="#i-scale"/></svg><span>记忆强度与遗忘分数</span></h2>' +
+        '<p class="pv-block-desc">横轴为写入后经过的天数，纵轴为接口返回的 strength。高亮点为 consolidation_count &gt; 0（已巩固）。' +
+        '样本 ' + num(mems.length) + ' 条真实记忆。</p>' + scatter(mems) + '</div>' +
+        '<div class="pv-cols">' +
+          '<div class="pv-block"><h2 class="pv-block-title"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg><span>写入分布</span></h2>' +
+          '<p class="pv-block-desc">按 created_at 归日统计 · 真实值</p>' +
+          '<div class="stat-dist">' + days.slice(-14).map(function (d) {
+            return '<div class="sd-row"><span class="sd-k">' + esc(d) + '</span><span class="sd-v">' + num(buckets[d]) + '</span>' + bar(buckets[d] / maxB) + '</div>';
+          }).join('') + '</div></div>' +
+          '<div class="pv-block"><h2 class="pv-block-title"><svg class="icon" aria-hidden="true"><use href="#i-check-circle"/></svg><span>巩固与衰减</span></h2>' +
+          '<p class="pv-block-desc">由真实字段聚合，未做任何估算。</p>' +
+          '<div class="kv">' +
+            '<div class="kv-i"><span class="kv-k">已巩固</span><span class="kv-v">' + num(consolidated.length) + ' / ' + num(mems.length) + '</span></div>' +
+            '<div class="kv-i"><span class="kv-k">平均 strength</span><span class="kv-v">' + avg(mems, 'strength') + '</span></div>' +
+            '<div class="kv-i"><span class="kv-k">平均 forgetting_score</span><span class="kv-v">' + avg(mems, 'forgetting_score') + '</span></div>' +
+            '<div class="kv-i"><span class="kv-k">平均 access_count</span><span class="kv-v">' + avg(mems, 'access_count') + '</span></div>' +
+          '</div>' +
+          '<p class="pv-block-desc" style="margin-top:12px">记忆血缘（memory-lineage）与巩固历史是本地 CLI 能力，' +
+          'REST 未暴露对应端点，因此本页不展示血缘链路。</p></div>' +
+        '</div>' +
+        '<div class="pv-block"><h2 class="pv-block-title"><svg class="icon" aria-hidden="true"><use href="#i-flow"/></svg><span>最近写入</span></h2>' +
+        '<p class="pv-block-desc">按 created_at 倒序取前 10 条 · 真实值</p><div class="tl">' +
+        sorted.slice(0, 10).map(function (m) {
+          return '<div class="tl-item' + ((m.consolidation_count || 0) > 0 ? ' is-ok' : '') + '">' +
+            '<span class="tl-time">' + esc(dateOf(m.created_at)) + ' · ' + esc(m.layer) + ' · ' + esc(m.category || '—') + '</span>' +
+            '<p class="tl-title">' + esc(String(m.content).slice(0, 60)) + '</p>' +
+            '<p class="tl-desc">strength ' + (typeof m.strength === 'number' ? m.strength.toFixed(3) : '—') +
+            ' · forgetting ' + (typeof m.forgetting_score === 'number' ? m.forgetting_score.toFixed(3) : '—') +
+            ' · 召回 ' + num(m.access_count) + ' · 巩固 ' + num(m.consolidation_count) + '</p></div>';
+        }).join('') + '</div></div>';
+      ST.rendered.timeline = true;
+    }).catch(function (e) {
+      box.innerHTML = '<div class="pv-state is-err"><p class="pv-state-t">无法读取记忆</p><p class="pv-state-d">' + esc(e.message) + '</p></div>';
+    });
+  }
+
+  function avg(list, key) {
+    var vals = list.map(function (x) { return x[key]; }).filter(function (v) { return typeof v === 'number' && isFinite(v); });
+    if (!vals.length) { return '—'; }
+    var s = vals.reduce(function (a, b) { return a + b; }, 0) / vals.length;
+    return s.toFixed(3);
+  }
+
+  function scatter(mems) {
+    var W = 720, H = 260, pad = 46;
+    var pts = mems.map(function (m) {
+      var d = daysSince(m.created_at);
+      return d === null ? null : {
+        x: d, y: typeof m.strength === 'number' ? m.strength : 0,
+        c: (m.consolidation_count || 0) > 0,
+        tip: String(m.content).slice(0, 70) + ' · strength ' +
+          (typeof m.strength === 'number' ? m.strength.toFixed(3) : '—') +
+          ' · 写入后 ' + d.toFixed(2) + ' 天 · ' + (m.layer || '')
+      };
+    }).filter(Boolean);
+    if (!pts.length) { return '<p class="empty">样本缺少 created_at 字段。</p>'; }
+    var spanRaw = Math.max.apply(null, pts.map(function (p) { return p.x; }));
+    /* 跨度极小时横轴退化会挤成一条线，设 1 天下限保证可读 */
+    var maxX = (isFinite(spanRaw) && spanRaw >= 1) ? spanRaw : 1;
+    var degenerate = !(isFinite(spanRaw) && spanRaw >= 1);
+    var px = function (v) { return pad + (v / maxX) * (W - pad * 2); };
+    var py = function (v) { return H - pad - v * (H - pad * 2); };
+    return (degenerate ? '<p class="pv-block-desc" style="margin-bottom:10px">这批记忆的写入时间跨度不足 1 天（实测 ' +
+      spanRaw.toFixed(3) + ' 天），横轴以下限 1 天显示，因此各点会集中在左侧；积累更多历史后形态才可读。</p>' : '') +
+      '<svg viewBox="0 0 ' + W + ' ' + H + '" style="display:block;width:100%;height:auto" role="img" aria-label="记忆强度随写入天数的分布散点图">' +
+      '<line x1="' + pad + '" y1="' + py(0) + '" x2="' + (W - pad) + '" y2="' + py(0) + '" stroke="rgba(255,255,255,0.16)"/>' +
+      '<line x1="' + pad + '" y1="' + pad + '" x2="' + pad + '" y2="' + py(0) + '" stroke="rgba(255,255,255,0.16)"/>' +
+      [0, 0.5, 1].map(function (v) {
+        return '<line x1="' + pad + '" y1="' + py(v) + '" x2="' + (W - pad) + '" y2="' + py(v) + '" stroke="rgba(255,255,255,0.06)"/>' +
+          '<text x="' + (pad - 8) + '" y="' + (py(v) + 4) + '" text-anchor="end" fill="#6f7892" font-size="11">' + v.toFixed(1) + '</text>';
+      }).join('') +
+      pts.map(function (p, i) {
+        return '<circle cx="' + px(p.x).toFixed(1) + '" cy="' + py(p.y).toFixed(1) + '" r="' + (p.c ? 5 : 3.4) + '" fill="' +
+          (p.c ? '#4fd1a5' : 'rgba(109,141,255,0.72)') + '" opacity="0.9">' +
+          '<title>' + esc(p.tip) + '</title></circle>';
+      }).join('') +
+      '<text x="' + (W / 2) + '" y="' + (H - 12) + '" text-anchor="middle" fill="#6f7892" font-size="11">写入后天数（最大 ' + maxX.toFixed(1) + ' 天）</text>' +
+      '<text x="14" y="' + (pad - 12) + '" fill="#4fd1a5" font-size="11">● 已巩固</text>' +
+      '<text x="80" y="' + (pad - 12) + '" fill="#6d8dff" font-size="11">● 未巩固</text>' +
+      '</svg>';
+  }
+
+  /* ---------------- 视图切换 ---------------- */
+  function showView(name, focus) {
+    Array.prototype.forEach.call(document.querySelectorAll('.pv-view'), function (v) {
+      v.classList.toggle('is-active', v.id === 'view-' + name);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('#pv-nav button'), function (b) {
+      b.setAttribute('aria-current', b.getAttribute('data-view') === name ? 'true' : 'false');
+    });
+    if (name === 'graph' && ST.phase === 'live' && !ST.rendered.graph) { renderGraphView(); }
+    if (name === 'timeline' && ST.phase === 'live' && !ST.rendered.timeline) { renderTimeline(); }
+    if (focus) {
+      var h = document.querySelector('#view-' + name + ' h1');
+      if (h) { h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: true }); }
+    }
+  }
+
+  /* ---------------- 数据刷新 ---------------- */
+  function loadPage(offset) {
+    return req('/api/memories', { limit: ST.pageSize, offset: offset, category: ST.category })
+      .then(function (d) {
+        ST.mems = (d && d.memories) || [];
+        ST.returned = ST.mems.length;
+        ST.offset = offset;
+      });
+  }
+
+  function connect() {
+    var baseInput = $('conn-base'), keyInput = $('conn-key');
+    if (baseInput && baseInput.value.trim()) { CFG.base = baseInput.value.trim(); }
+    if (keyInput) { CFG.key = keyInput.value.trim(); }
+    persistCfg();
+    ST.phase = 'connecting'; ST.error = ''; ST.derived = null; ST.stats = null; ST.tags = [];
+    ST.mems = []; ST.returned = 0; ST.offset = 0; ST.category = '';
+    ST.rendered = { graph: false, timeline: false };
+    renderAll();
+
+    req('/api/health')
+      .then(function () {
+        return req('/').then(function (r) { return r && r.version ? r.version : ''; })
+          .catch(function () { return ''; });
+      })
+      .then(function (ver) {
+        ST.version = ver;
+        return req('/api/stats');
+      })
+      .then(function (s) {
+        ST.stats = s;
+        return req('/api/tags').catch(function () { return { tags: [] }; });
+      })
+      .then(function (t) {
+        ST.tags = (t && t.tags) || [];
+        return loadPage(0);
+      })
+      .then(function () {
+        ST.phase = 'live';
+        ST.derived = null;
+        renderAll();
+      })
+      .catch(function (e) {
+        ST.phase = (e && e.status === 401) ? 'unauthorized' : 'unreachable';
+        ST.error = (e && e.message) || '未知错误';
+        renderAll();
+      });
+  }
+
+  function renderChrome() {
+    var live = (ST.phase === 'live');
+    var s = ST.stats || {};
+    var nt = $('nav-total');
+    if (nt) { nt.textContent = live && typeof s.total === 'number' ? num(s.total) : ''; }
+    var ng = $('nav-tags');
+    if (ng) { ng.textContent = live && ST.tags.length ? num(ST.tags.length) : ''; }
+    var ev = $('engine-version');
+    if (ev) { ev.textContent = live ? (ST.version ? 'v' + ST.version : '已连接') : '—'; }
+  }
+
+  function renderAll() {
+    renderChrome();
+    renderConn();
+    renderMemory();
+    if (ST.phase === 'live') {
+      renderSearchResult(null);
+      if (document.querySelector('#view-graph').classList.contains('is-active') && !ST.rendered.graph) { renderGraphView(); }
+      if (document.querySelector('#view-timeline').classList.contains('is-active') && !ST.rendered.timeline) { renderTimeline(); }
+    } else {
+      ST.rendered.graph = false;
+      ST.rendered.timeline = false;
+      renderSearchResult(null);
+      var gb = $('graph-svg-wrap'); if (gb) { gb.innerHTML = stateBlock(ST.phase); }
+      var tb = $('tl-body'); if (tb) { tb.innerHTML = stateBlock(ST.phase); }
+    }
+  }
+
+  /* ---------------- 事件绑定 ---------------- */
+  function bind() {
+    if ($('conn-form')) {
+      $('conn-form').addEventListener('submit', function (e) { e.preventDefault(); connect(); });
+    }
+    if ($('conn-go') && !$('conn-form')) { $('conn-go').addEventListener('click', connect); }
+
+    var nav = $('pv-nav');
+    if (nav) {
+      nav.addEventListener('click', function (e) {
+        var b = e.target.closest('button[data-view]');
+        if (b) { showView(b.getAttribute('data-view'), true); }
+      });
+    }
+
+    var list = $('mem-list');
+    if (list) {
+      var toggle = function (e) {
+        var card = e.target.closest('.mem');
+        if (!card) { return; }
+        var open = card.classList.toggle('is-open');
+        card.setAttribute('aria-expanded', open ? 'true' : 'false');
+      };
+      list.addEventListener('click', toggle);
+      list.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') { return; }
+        if (!e.target.closest('.mem')) { return; }
+        e.preventDefault(); toggle(e);
+      });
+    }
+
+    if ($('mem-cat')) {
+      $('mem-cat').addEventListener('change', function () {
+        ST.category = $('mem-cat').value;
+        if (ST.phase !== 'live') { return; }
+        loadPage(0).then(renderMemory);
+      });
+    }
+    if ($('mem-pager')) {
+      $('mem-pager').addEventListener('click', function (e) {
+        var b = e.target.closest('button[data-page]');
+        if (!b || b.disabled) { return; }
+        var next = b.getAttribute('data-page') === 'next' ? ST.offset + ST.pageSize : Math.max(0, ST.offset - ST.pageSize);
+        loadPage(next).then(renderMemory);
+      });
+    }
+
+    if ($('q-run')) { $('q-run').addEventListener('click', runSearch); }
+    if ($('q-input')) {
+      $('q-input').addEventListener('keydown', function (e) { if (e.key === 'Enter') { runSearch(); } });
+    }
+
+    var gwrap = $('graph-svg-wrap');
+    if (gwrap) {
+      gwrap.addEventListener('click', function (e) {
+        var g = e.target.closest('.gnode');
+        if (g) { focusTag(g.getAttribute('data-tag')); }
+      });
+      gwrap.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') { return; }
+        var g = e.target.closest('.gnode');
+        if (!g) { return; }
+        e.preventDefault(); focusTag(g.getAttribute('data-tag'));
+      });
+    }
+  }
+
+  function init() {
+    bind();
+    showView('memory', false);
+    connect();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>

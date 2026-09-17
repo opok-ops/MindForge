@@ -29,6 +29,26 @@ All notable changes to MindForge will be documented in this file.
 ### Tests
 - `tests/test_v568_fixes.py` 的版本期望值由 `5.6.8` 升至 `5.6.9`，随本轮发版同步。
 
+- **`tests/test_v547_fixes.py` 从「打印脚本」重写为可收集的测试用例（10 用例 / 8 子测试）**：
+  该文件此前 0 个 `test_` 函数、0 个 `assert`、无 `__main__` 块，且 CI 从不调用它，
+  导致 v5.4.7 的三处修复（`get_embedding_status()` 计数回退、FTS5 特殊字符转义、
+  `vector_search(query_vector=...)` 回退路径）长期处于**零回归保护**状态。
+  现改为标准 `unittest`，由 `pytest tests/` 正常收集执行，并已用变异测试验证其确实能捕获回归。
+  全量测试数由 653 升至 **663**。
+
+### Changed
+- **CI 工具数断言由松阈值改为精确值（.github/workflows/ci.yml）**：原 `assert len(tools) >= 30`
+  与官网/README 对外宣称的 33 个工具不符，误删 3 个工具 CI 也不会报警。现改为
+  `assert len(tools) == 33`，让 MCP 工具数量回归可被守护。
+- **官网测试数同步为实际值（website/index.html）**：对外展示的 650 更新为 663（5 处），
+  与实际收集数一致。
+
+### Removed
+- **`.dsh_ref/`（15 个文件）从版本库移除并加入 `.gitignore`**：该目录为 DSH/Cordis 插件参考
+  脚手架（`ref-events` / `ref-tool` / `ref-webui` 各含 README / `cordis.patch.yml` /
+  `package.json` / `src/index.ts` / `tsconfig.json`），属临时产物，与已忽略的 `dsh-mindforge/`
+  性质一致，不应随 Python 源码仓库分发。
+
 ## [5.6.8] - 2026-09-14
 
 一轮**命令入口可用性**缺陷修复：3 个 CLI 命令（`init` / `rekey` / `backup-restore`）与 3 个适配器

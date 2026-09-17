@@ -49,7 +49,9 @@ jobs:
           sys.path.insert(0, '.')
           from mcp.server import _handle_tools_list
           tools = _handle_tools_list({})['tools']
-          assert len(tools) >= 30, f'Expected at least 30 tools, got {len(tools)}'
+          # 精确锁定工具数：官网/README 对外宣称 33 个，此前阈值只卡 >=30，
+          # 误删 3 个工具 CI 也不会报警。改为等值断言，让数量回归可被守护。
+          assert len(tools) == 33, f'Expected exactly 33 tools, got {len(tools)}'
           print(f'MCP tools: {len(tools)} OK')
           "
 

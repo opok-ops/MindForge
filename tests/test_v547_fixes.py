@@ -1,213 +1,242 @@
-"""验证 MindForge v5.4.7 三个修复的正确性"""
-import sys
+# -*- coding: utf-8 -*-
+"""v5.4.7 回归测试（v5.6.9 重写为可收集的 pytest 用例）
+
+锁定 v5.4.7 的三处修复，防止后续改动静默破坏：
+
+  修复 1 ``MindForge.get_embedding_status()``：embedding engine 不可用时
+      仍须查询 DB 返回**实际**向量数量（修复前直接返回 0，掩盖了历史向量存在的事实）。
+  修复 2 ``IndexEngine._escape_fts5_query()`` + ``fts_search()``：FTS5 MATCH 语法中
+      ``+ - * ( ) " :`` 等是特殊字符，未转义会抛 ``OperationalError``（C++、hello:world 这类查询直接崩）。
+  修复 3 ``StorageEngine.vector_search(query_vector=...)``：engine 不可用时，
+      传入预计算向量仍能走 fallback 反序列化 + 余弦相似度完成检索。
+
+历史问题（本文件被重写的原因）：原版是一个纯 ``print`` 脚本——0 个 ``test_`` 函数、
+0 个 ``assert``、无 ``__main__`` 块，且 CI 从不调用它。结果是这 3 处修复长期
+处于「零回归保护」状态。现改为标准 unittest，由 ``pytest tests/`` 正常收集执行。
+"""
+
 import os
+import shutil
 import struct
+import sys
 import tempfile
+import unittest
+from pathlib import Path
 
-# 确保导入路径
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core.storage import StorageEngine
 from core.indexer import IndexEngine
+from core.storage import StorageEngine
+from core.types import MemoryLayer
 
-PASS = 0
-FAIL = 0
 
-def check(name, condition):
-    global PASS, FAIL
-    if condition:
-        PASS += 1
-        print(f"  PASS: {name}")
-    else:
-        FAIL += 1
-        print(f"  FAIL: {name}")
+class _V547Case(unittest.TestCase):
+    """共用夹具：隔离的明文 DB（明文库才会建 FTS 索引）。"""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="mf_v547_")
+        self.db_path = os.path.join(self.tmp, "test.db")
+        self.storage = StorageEngine(db_path=self.db_path, encrypted=False)
+        # 禁用 embedding engine，避免单测触发模型下载
+        self.storage._embedding_eng = None
+
+    def tearDown(self):
+        try:
+            self.storage.close()
+        except Exception:
+            pass
+        shutil.rmtree(self.tmp, ignore_errors=True)
 
 
 # ============================================================
 # 修复 1: get_embedding_status() 在 engine 不可用时仍返回 DB 实际数量
 # ============================================================
-print("\n=== 修复 1: get_embedding_status ===")
+class TestEmbeddingStatusWithUnavailableEngine(_V547Case):
+    def _make_mindforge(self):
+        """构造一个共享同一 DB 的 MindForge 实例（engine 保持不可用）。"""
+        from core.mindforge import MindForge
+        from core.types import MemoryConfig
 
-tmpdir1 = tempfile.mkdtemp()
-try:
-    db_path = os.path.join(tmpdir1, "test.db")
-    storage = StorageEngine(db_path=db_path, encrypted=False)
-    conn = storage._get_conn()
+        config = MemoryConfig(db_path=self.db_path, encrypted=False)
+        mf = MindForge(config=config)
+        # 关键：确保 engine 不可用，走 v5.4.7 修复的那条分支
+        mf._storage._embedding_eng = None
+        return mf
 
-    # 手动插入 3 条向量到 memory_embeddings（表已由 StorageEngine 自动创建）
-    for i in range(3):
-        blob = struct.pack('<4f', 1.0, 0.0, 0.0, 0.0)
-        conn.execute(
-            "INSERT OR REPLACE INTO memory_embeddings (memory_id, embedding, model_name, dimension, created_at) VALUES (?,?,?,?,?)",
-            (f"mem_{i}", blob, "test-model", 4, 1000.0)
-        )
-    conn.commit()
+    def _insert_vectors(self, ids):
+        """直接往 memory_embeddings 写 float32 小端序向量 blob。"""
+        conn = self.storage._get_conn()
+        for mem_id in ids:
+            blob = struct.pack("<4f", 1.0, 0.0, 0.0, 0.0)
+            conn.execute(
+                "INSERT OR REPLACE INTO memory_embeddings"
+                " (memory_id, embedding, model_name, dimension, created_at)"
+                " VALUES (?,?,?,?,?)",
+                (mem_id, blob, "test-model", 4, 1000.0),
+            )
+        conn.commit()
 
-    # 确保 embedding_engine 不可用
-    storage._embedding_eng = None
+    def test_returns_real_db_count_when_engine_unavailable(self):
+        """engine 不可用 ≠ 向量不存在：必须返回 DB 里的真实条数。"""
+        entries = [
+            self.storage.add_memory(
+                f"v547 embedding probe {i}", category="v547cat",
+                layer=MemoryLayer.LONG_TERM)
+            for i in range(3)
+        ]
+        self._insert_vectors([e.id for e in entries])
 
-    # 模拟修复后的 get_embedding_status 行为
-    row = conn.execute("SELECT COUNT(*) FROM memory_embeddings").fetchone()
-    count = row[0] if row else 0
-    check("DB 中有 3 条向量，直接查询 count=3", count == 3)
+        mf = self._make_mindforge()
+        status = mf.get_embedding_status()
 
-    engine = storage.embedding_engine
-    if engine is None or not (hasattr(engine, 'is_available') and engine.is_available):
-        status = {
-            "available": False,
-            "model_name": "",
-            "dimension": 0,
-            "embedding_count": count,
-        }
-    check("engine 不可用时 embedding_count=3（非 0）", status["embedding_count"] == 3)
-    check("engine 不可用时 available=False", status["available"] == False)
-finally:
-    storage.close()
-    import shutil
-    shutil.rmtree(tmpdir1, ignore_errors=True)
+        # 修复核心断言：不可用时 embedding_count 仍是 3，而不是 0
+        self.assertEqual(status["embedding_count"], 3)
+        self.assertFalse(status["available"])
+        self.assertEqual(status["model_name"], "")
+        self.assertEqual(status["dimension"], 0)
+
+    def test_empty_db_returns_zero_count(self):
+        """空库时计数应为 0（确认上面不是恒真断言）。"""
+        mf = self._make_mindforge()
+        status = mf.get_embedding_status()
+        self.assertEqual(status["embedding_count"], 0)
+        self.assertFalse(status["available"])
 
 
 # ============================================================
 # 修复 2: FTS5 查询特殊字符转义
 # ============================================================
-print("\n=== 修复 2: FTS5 特殊字符转义 ===")
+class TestFts5QueryEscaping(_V547Case):
+    def test_escape_wraps_as_phrase(self):
+        """特殊字符不再直接进入 MATCH 语法，而是被包成短语查询。"""
+        cases = [
+            ("C++", '"C++"'),
+            ("hello:world", '"hello:world"'),
+            ("(test)", '"(test)"'),
+            ("MySQL 复制", '"MySQL 复制"'),
+        ]
+        for raw, expect in cases:
+            with self.subTest(query=raw):
+                self.assertEqual(IndexEngine._escape_fts5_query(raw), expect)
 
-# 测试 _escape_fts5_query
-check("转义 C++ → '\"C++\"'", IndexEngine._escape_fts5_query("C++") == '"C++"')
-check("转义 hello:world → '\"hello:world\"'", IndexEngine._escape_fts5_query("hello:world") == '"hello:world"')
-check("转义 a\"b → '\"a\"\"b\"'", IndexEngine._escape_fts5_query('a"b') == '"a""b"')
-check("转义 (test) → '\"(test)\"'", IndexEngine._escape_fts5_query("(test)") == '"(test)"')
-check("空字符串返回空", IndexEngine._escape_fts5_query("") == "")
-check("纯空白返回空", IndexEngine._escape_fts5_query("   ") == "")
-check("普通文本 MySQL 复制 → '\"MySQL 复制\"'", IndexEngine._escape_fts5_query("MySQL 复制") == '"MySQL 复制"')
+    def test_escape_doubles_inner_quotes(self):
+        """内部双引号必须成对转义，否则短语提前闭合导致语法错。"""
+        self.assertEqual(IndexEngine._escape_fts5_query('a"b'), '"a""b"')
 
-# 实际 FTS5 测试：含特殊字符的查询不应崩溃
-tmpdir2 = tempfile.mkdtemp()
-try:
-    db_path = os.path.join(tmpdir2, "test.db")
-    storage = StorageEngine(db_path=db_path, encrypted=False)
-    indexer = IndexEngine()
+    def test_blank_input_returns_blank(self):
+        """空串/纯空白返回空，调用方据此短路返回 []，不进 MATCH。"""
+        self.assertEqual(IndexEngine._escape_fts5_query(""), "")
+        self.assertEqual(IndexEngine._escape_fts5_query("   "), "")
 
-    # 禁用 embedding engine，防止 add_memory 尝试下载模型
-    storage._embedding_eng = None
+    def test_fts_search_survives_special_chars(self):
+        """端到端：含特殊字符的查询不得抛 OperationalError，且能找到命中项。"""
+        self.storage.add_memory(
+            "C++ is a programming language", category="v547fts",
+            layer=MemoryLayer.LONG_TERM)
+        self.storage.add_memory(
+            "Python decorator pattern", category="v547fts",
+            layer=MemoryLayer.LONG_TERM)
 
-    conn = storage._get_conn()
+        conn = self.storage._get_conn()
+        conn.execute("""
+            INSERT INTO memory_fts (rowid, content, category, tags)
+            SELECT rowid, content, category, tags FROM memories
+        """)
+        conn.commit()
 
-    # 插入测试数据
-    from core.types import MemoryLayer
-    entry = storage.add_memory(
-        content="C++ is a programming language",
-        category="tech",
-        layer=MemoryLayer.LONG_TERM,
-    )
-    entry2 = storage.add_memory(
-        content="Python decorator pattern",
-        category="tech",
-        layer=MemoryLayer.LONG_TERM,
-    )
-    # 同步 FTS
-    conn.execute("""
-        INSERT INTO memory_fts (rowid, content, category, tags)
-        SELECT rowid, content, category, tags FROM memories
-    """)
-    conn.commit()
+        indexer = IndexEngine()
 
-    # 测试含特殊字符的查询不崩溃
-    results = indexer.fts_search(conn, "C++", top_k=5)
-    check("FTS5 搜索 'C++' 不崩溃", isinstance(results, list))
-    check("FTS5 搜索 'C++' 有结果", len(results) > 0)
+        results = indexer.fts_search(conn, "C++", top_k=5)
+        self.assertIsInstance(results, list)
+        self.assertGreater(len(results), 0, "含 '+' 的查询应能命中 C++ 那条")
 
-    results2 = indexer.fts_search(conn, "decorator(pattern)", top_k=5)
-    check("FTS5 搜索 'decorator(pattern)' 不崩溃", isinstance(results2, list))
-
-    results3 = indexer.fts_search(conn, "test:value", top_k=5)
-    check("FTS5 搜索 'test:value' 不崩溃", isinstance(results3, list))
-finally:
-    storage.close()
-    import shutil
-    shutil.rmtree(tmpdir2, ignore_errors=True)
+        # 这几个在修复前会直接抛 sqlite3.OperationalError
+        for tricky in ("decorator(pattern)", "test:value", "(x)", 'a"b'):
+            with self.subTest(query=tricky):
+                self.assertIsInstance(
+                    indexer.fts_search(conn, tricky, top_k=5), list)
 
 
 # ============================================================
 # 修复 3: vector_search 支持预计算 query_vector
 # ============================================================
-print("\n=== 修复 3: vector_search 支持 query_vector ===")
+class TestVectorSearchWithQueryVector(_V547Case):
+    def _seed(self):
+        """建 3 条记忆并注入可预测的 4 维向量。"""
+        e_phone = self.storage.add_memory(
+            "手机是通讯工具", category="v547vec", layer=MemoryLayer.LONG_TERM)
+        e_apple = self.storage.add_memory(
+            "苹果是水果", category="v547vec", layer=MemoryLayer.LONG_TERM)
+        e_tablet = self.storage.add_memory(
+            "平板电脑是电子设备", category="v547vec", layer=MemoryLayer.LONG_TERM)
 
-tmpdir3 = tempfile.mkdtemp()
-try:
-    db_path = os.path.join(tmpdir3, "test.db")
-    storage = StorageEngine(db_path=db_path, encrypted=False)
+        vectors = {
+            e_phone.id: [1.0, 0.0, 0.0, 0.0],
+            e_apple.id: [0.0, 1.0, 0.0, 0.0],
+            e_tablet.id: [0.9, 0.1, 0.0, 0.0],
+        }
+        conn = self.storage._get_conn()
+        for mem_id, vec in vectors.items():
+            blob = struct.pack(f"<{len(vec)}f", *vec)
+            conn.execute(
+                "INSERT OR REPLACE INTO memory_embeddings"
+                " (memory_id, embedding, model_name, dimension, created_at)"
+                " VALUES (?,?,?,?,?)",
+                (mem_id, blob, "test", 4, 1000.0),
+            )
+        conn.commit()
+        return e_phone, e_apple, e_tablet
 
-    # 禁用 embedding engine，防止 add_memory 尝试下载模型
-    storage._embedding_eng = None
+    def test_no_query_vector_returns_empty_when_engine_down(self):
+        """engine 不可用又没给向量 → 无法 encode query → 返回空（不崩）。"""
+        self._seed()
+        self.assertEqual(
+            self.storage.vector_search(query="通讯", top_k=5), [])
 
-    # 添加几条记忆
-    e1 = storage.add_memory(content="手机是通讯工具", category="tech", layer=MemoryLayer.LONG_TERM)
-    e2 = storage.add_memory(content="苹果是水果", category="life", layer=MemoryLayer.LONG_TERM)
-    e3 = storage.add_memory(content="平板电脑是电子设备", category="tech", layer=MemoryLayer.LONG_TERM)
+    def test_query_vector_enables_search_when_engine_down(self):
+        """修复核心：给了预计算向量就能在 engine 不可用时完成检索与排序。"""
+        e_phone, _e_apple, e_tablet = self._seed()
 
-    # 手动注入向量
-    conn = storage._get_conn()
-    # 手机 → [1, 0, 0, 0]
-    # 苹果 → [0, 1, 0, 0]
-    # 平板 → [0.9, 0.1, 0, 0]
-    vectors = {
-        e1.id: [1.0, 0.0, 0.0, 0.0],
-        e2.id: [0.0, 1.0, 0.0, 0.0],
-        e3.id: [0.9, 0.1, 0.0, 0.0],
-    }
-    for mem_id, vec in vectors.items():
-        blob = struct.pack(f'<{len(vec)}f', *vec)
-        conn.execute(
-            "INSERT OR REPLACE INTO memory_embeddings (memory_id, embedding, model_name, dimension, created_at) VALUES (?,?,?,?,?)",
-            (mem_id, blob, "test", 4, 1000.0)
-        )
-    conn.commit()
+        results = self.storage.vector_search(
+            query="", top_k=5, query_vector=[1.0, 0.0, 0.0, 0.0])
 
-    # 不传 query_vector → 应该返回空（无法 encode query）
-    results_no_vec = storage.vector_search(query="通讯", top_k=5)
-    check("engine 不可用 + 无 query_vector → 返回空", results_no_vec == [])
+        self.assertGreaterEqual(len(results), 2)
+        self.assertTrue(
+            all(r["strategy"] == "vector" for r in results))
+        # 余弦相似度排序：与 [1,0,0,0] 最近的是手机，其次是平板
+        self.assertEqual(results[0]["entry"].id, e_phone.id)
+        self.assertEqual(results[1]["entry"].id, e_tablet.id)
 
-    # 传 query_vector → 应该返回结果
-    query_vec = [1.0, 0.0, 0.0, 0.0]  # 接近"手机"
-    results_with_vec = storage.vector_search(query="", top_k=5, query_vector=query_vec)
-    check("engine 不可用 + 有 query_vector → 返回结果", len(results_with_vec) > 0)
-    check("结果按余弦相似度排序", len(results_with_vec) >= 2)
-    if len(results_with_vec) >= 2:
-        check("手机排第一（最接近 [1,0,0,0]）",
-              results_with_vec[0]["entry"].id == e1.id)
-        check("平板排第二",
-              results_with_vec[1]["entry"].id == e3.id)
-    check("所有结果 strategy='vector'",
-          all(r["strategy"] == "vector" for r in results_with_vec))
+    def test_deserialize_vector_fallback(self):
+        """fallback 反序列化：维度必须严格匹配，空 blob 返回 None。"""
+        blob = struct.pack("<4f", 1.0, 2.0, 3.0, 4.0)
+        self.assertEqual(
+            StorageEngine._deserialize_vector_fallback(blob, 4),
+            [1.0, 2.0, 3.0, 4.0])
+        self.assertIsNone(
+            StorageEngine._deserialize_vector_fallback(blob, 3))
+        self.assertIsNone(
+            StorageEngine._deserialize_vector_fallback(b"", 4))
 
-    # 测试 fallback 反序列化
-    blob = struct.pack('<4f', 1.0, 2.0, 3.0, 4.0)
-    deserialized = StorageEngine._deserialize_vector_fallback(blob, 4)
-    check("fallback 反序列化正确", deserialized == [1.0, 2.0, 3.0, 4.0])
-    check("fallback 维度不匹配返回 None",
-          StorageEngine._deserialize_vector_fallback(blob, 3) is None)
-    check("fallback 空 blob 返回 None",
-          StorageEngine._deserialize_vector_fallback(b"", 4) is None)
-
-    # 测试 fallback 余弦相似度
-    candidates = [("a", [1.0, 0.0]), ("b", [0.0, 1.0]), ("c", [0.707, 0.707])]
-    batch = StorageEngine._cosine_similarity_batch_fallback([1.0, 0.0], candidates, top_k=2)
-    check("fallback batch 返回 top_k=2", len(batch) == 2)
-    check("fallback batch 排序正确（a 第一）", batch[0][0] == "a")
-finally:
-    storage.close()
-    import shutil
-    shutil.rmtree(tmpdir3, ignore_errors=True)
+    def test_cosine_similarity_batch_fallback(self):
+        """fallback 余弦批量计算：top_k 截断 + 相关性排序正确。"""
+        candidates = [
+            ("a", [1.0, 0.0]),
+            ("b", [0.0, 1.0]),
+            ("c", [0.707, 0.707]),
+        ]
+        batch = StorageEngine._cosine_similarity_batch_fallback(
+            [1.0, 0.0], candidates, top_k=2)
+        self.assertEqual(len(batch), 2)
+        self.assertEqual(batch[0][0], "a")
+        # 零向量与维度不匹配的候选都必须被跳过
+        self.assertEqual(
+            StorageEngine._cosine_similarity_batch_fallback([0.0, 0.0], candidates),
+            [])
+        self.assertEqual(
+            StorageEngine._cosine_similarity_batch_fallback([1.0, 0.0, 0.0], candidates),
+            [])
 
 
-# ============================================================
-# 汇总
-# ============================================================
-print(f"\n{'='*50}")
-print(f"总计: {PASS + FAIL} | 通过: {PASS} | 失败: {FAIL}")
-if FAIL == 0:
-    print("全部通过！")
-else:
-    print(f"有 {FAIL} 个失败！")
-    sys.exit(1)
+if __name__ == "__main__":
+    unittest.main()

@@ -95,6 +95,34 @@ jobs:
           # 只审计项目直接依赖，不扫 runner 预装包（避免不可控的 CVE 噪音）
           python -c "import tomllib; print('\n'.join(tomllib.load(open('pyproject.toml','rb'))['project']['dependencies']))" > /tmp/reqs.txt
           pip-audit --strict -r /tmp/reqs.txt
+
+  docs:
+    # 文档与官网数字一致性守卫。
+    # 背景：版本号与测试数此前**完全没有 CI 守护**，只断言了 MCP 工具数 == 33，
+    # 结果反复漂移——代码已发到 v5.6.8 而官网还停在 v5.6.6；测试数 608→650→663→751
+    # 期间官网多次只改了部分位置；官网更新日志还出现过版本标签与内容错位
+    # （v5.6.8 的内容被标成 v5.6.9、v5.6.0 的内容被标成 v5.6.1）与整条版本漏加。
+    # 这些都不是代码缺陷，静态扫描与 pytest 都抓不到，只能靠断言数字的一致性来守护。
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # 与 test job 使用同一套锁定工具链，确保「实际收集数」与测试 job 一致
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Check docs & website consistency
+        run: python scripts/check_docs_consistency.py
+
   typecheck:
     runs-on: ubuntu-latest
     # 实验性 job：mypy 静态类型检查，不阻断合并（v5.7.0）

@@ -928,7 +928,22 @@
       </article>
 
       <article class="cl-item glass reveal">
-        <div class="cl-meta"><span class="cl-ver">v5.6.9</span><span class="cl-date">2026-09-14</span><span class="cl-kind">修复</span></div>
+        <div class="cl-meta"><span class="cl-ver">v5.6.9</span><span class="cl-date">2026-09-16</span><span class="cl-kind">修复</span></div>
+        <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
+        <div class="cl-body">
+          <h4>全文检索索引同步修复 · 导入与上报链路加固</h4>
+          <ul>
+            <li><b>批量更新缺 FTS 同步</b>：<code>batch_update</code> 可改写 <code>category</code> 与 <code>tags</code>（均为全文索引列）却只提交数据库、不同步 <code>memory_fts</code>，改完分类或标签后搜索结果不立即反映变化。现按与 <code>update</code> 一致的方式在提交前同步索引。</li>
+            <li><b>自动过期路径缺 FTS 同步</b>：TTL 过期把记忆置入回收站时未同步索引，会在索引里留下无用条目。现已对齐 <code>update</code> 行为。</li>
+            <li><b>URL 导入 XSS 加固（纵深防御）</b>：原实现仅做基础标签剥离，现于其后再过一遍存储层统一的清洗器，清掉 <code>&lt;script&gt;</code> 等标签内的残留脚本文本。</li>
+            <li><b>事件总线退避补齐</b>：<code>requests</code> 不可用时的 urllib 降级路径此前仅单次尝试、无退避，现补齐与主路径一致的重试次数与指数退避。</li>
+            <li><b>测试</b>：把一份从未被 CI 收集的历史回归脚本重写为可收集用例（10 例），并补齐上述修复的断言；全量 653 → 663 项通过。</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="cl-item glass reveal">
+        <div class="cl-meta"><span class="cl-ver">v5.6.8</span><span class="cl-date">2026-09-14</span><span class="cl-kind">修复</span></div>
         <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
         <div class="cl-body">
           <h4>命令入口可用性修复 · 适配器恢复可用 · 版本号收敛</h4>
@@ -996,7 +1011,7 @@
       </article>
 
       <article class="cl-item glass reveal">
-        <div class="cl-meta"><span class="cl-ver">v5.6.1</span><span class="cl-date">2026-09-09</span><span class="cl-kind">安全</span></div>
+        <div class="cl-meta"><span class="cl-ver">v5.6.0</span><span class="cl-date">2026-09-09</span><span class="cl-kind">安全</span></div>
         <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
         <div class="cl-body">
           <h4>版本化 KDF · 记忆衰减引擎 · 备份/恢复 · 安全偿还</h4>

@@ -1,5 +1,5 @@
 """
-MindForge v5.3.9 会话焦点增强引擎
+MindForge 会话焦点增强引擎
 ================================
 输入：一个会话消息序列（每条 {id, role, content, timestamp}）
 输出：

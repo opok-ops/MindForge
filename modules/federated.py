@@ -506,8 +506,8 @@ class FederatedMemory:
                 # v5.4.7 修复 H-3：使用 fuzzy_search 替代不存在的 search_memories
                 local_results = self.storage.fuzzy_search(
                     query, limit=max_per_peer * len(search_peers) or max_per_peer)
-            except Exception:
-                pass
+            except Exception as _local_err:
+                logger.warning("联邦搜索本地召回失败，仅返回远端结果: %s", _local_err)
 
         for pid in search_peers:
             if pid not in self.peers:

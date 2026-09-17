@@ -1,5 +1,5 @@
 """
-MindForge v5.3.9 意图分类路由引擎
+MindForge 意图分类路由引擎
 ================================
 三层路由：规则正则 → 关键词加权 → （可选）LLM 兜底
 支持 10+ 种业务意图，带置信度与降级路径。
@@ -282,8 +282,8 @@ class IntentRouter:
                         candidates = [(n, round(s, 4)) for n, s in llm_scores[:5]]
                         fallback = True
                         llm_accepted = True
-            except Exception:
-                pass
+            except Exception as _llm_err:
+                logger.warning("LLM 意图识别失败，回退启发式路由: %s", _llm_err)
 
         # 二次兜底：默认意图（仅在 LLM 未接受时）
         if top_score < self.min_confidence and not llm_accepted:

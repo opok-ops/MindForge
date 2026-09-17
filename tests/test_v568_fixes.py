@@ -38,7 +38,7 @@ import core.version as core_version
 
 
 _REPO = Path(__file__).resolve().parent.parent
-_EXPECTED_VERSION = "5.6.9"
+_EXPECTED_VERSION = "5.7.0"
 
 # 本轮修复涉及的、必须与 core/version.py 保持一致的源码文件
 _VERSION_TRUTH_FILES = (
@@ -207,7 +207,9 @@ class TestStaticStructure(unittest.TestCase):
         offenders = []
         for path in sorted(_REPO.rglob("*.py")):
             parts = path.parts
-            if ".git" in parts or "__pycache__" in parts:
+            if any(x in parts for x in (".git", "__pycache__", ".venv",
+                                        ".pytest_cache", "node_modules",
+                                        "MindForge.egg-info")):
                 continue
             try:
                 tree = ast.parse(path.read_text(encoding="utf-8"))

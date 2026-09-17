@@ -1,5 +1,5 @@
 """
-MindForge v5.4.2 联邦记忆细粒度 ACL
+MindForge 联邦记忆细粒度 ACL
 
 为联邦记忆共享提供细粒度访问控制（Access Control List）：
 按「主体（peer）× 资源（记忆/分类/标签/全部）× 操作（read/write/reshare）」

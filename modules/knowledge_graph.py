@@ -154,8 +154,8 @@ class KnowledgeGraph:
                 """, (entity_id, name, entity_type, description,
                       json.dumps(metadata or {}, ensure_ascii=False), now))
                 conn.commit()
-            except sqlite3.OperationalError:
-                pass
+            except sqlite3.OperationalError as _kg_err:
+                logger.warning("写入知识图谱实体失败: %s", _kg_err)
 
         return entity
 
@@ -192,8 +192,8 @@ class KnowledgeGraph:
                       weight, json.dumps([memory_id] if memory_id else []),
                       json.dumps({}), now))
                 conn.commit()
-            except sqlite3.OperationalError:
-                pass
+            except sqlite3.OperationalError as _kg_err:
+                logger.warning("写入知识图谱关系失败: %s", _kg_err)
 
         return relation
 

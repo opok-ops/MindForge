@@ -1,5 +1,5 @@
 """
-MindForge v5.6.6 存储引擎
+MindForge 存储引擎
 支持四层记忆架构：感官记忆 → 短期记忆 → 长期记忆 → 永久记忆
 """
 
@@ -12,6 +12,7 @@ import time
 import logging
 import threading
 import tempfile
+import hashlib
 from pathlib import Path
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -271,8 +272,8 @@ def _with_rollback(method):
             if conn is not None:
                 try:
                     conn.rollback()
-                except Exception:
-                    pass
+                except Exception as _rb_err:
+                    logger.warning("数据库回滚失败: %s", _rb_err)
             raise
     return wrapper
 
@@ -1291,10 +1292,12 @@ class StorageEngine:
         self._add_audit("add", entry.id, source_agent, source_session, privacy.value)
 
         # v5.4.5: 生成嵌入向量（失败不影响记忆写入）
+        # v5.7.0 P2：嵌入失败属检索能力降级，记录警告便于排查
         try:
             self._store_embedding(entry.id, content)
-        except Exception:
-            pass
+        except Exception as _emb_err:
+            logger.warning("add 记忆 %s 后生成嵌入失败（向量检索降级）: %s",
+                           entry.id, _emb_err)
 
         # v5.5.7 fix: 加密分支入库用空串，但返回值应保留明文 content（与 combined 版本对齐）
         entry.content = content
@@ -1731,11 +1734,13 @@ class StorageEngine:
                         privacy_v.value if privacy_v else "")
 
         # v5.4.5: 内容变更时重新生成嵌入向量（失败不影响更新）
+        # v5.7.0 P2：嵌入失败属检索能力降级，记录警告便于排查
         if content is not None:
             try:
                 self._store_embedding(entry_id, content)
-            except Exception:
-                pass
+            except Exception as _emb_err:
+                logger.warning("更新记忆 %s 后重新生成嵌入失败（向量检索降级）: %s",
+                               entry_id, _emb_err)
 
         return True
 
@@ -1763,10 +1768,17 @@ class StorageEngine:
         if not updates or not fields:
             return 0
 
-        # 安全校验：只允许白名单字段
+        # 安全校验：只允许白名单字段（v5.7.0 P2 扩展纯标量字段）
+        # 职责边界：category/tags 参与 FTS5 索引，必须走 batch_update/
+        # update_memory 的 FTS 同步路径（v5.6.9 修复 FTS 同步），因此
+        # 本方法刻意不开放这两个字段，避免裸 UPDATE 造成索引漂移。
+        # 枚举字段按 .value 落库；starred/pinned 自动转 0/1。
         ALLOWED_FIELDS = {
             "strength", "forgetting_score", "metadata",
             "consolidation_count", "last_accessed_at", "updated_at",
+            "importance", "privacy", "layer", "memory_type",
+            "starred", "pinned", "expires_at", "access_count",
+            "source_agent", "source_session",
         }
         for f in fields:
             if f not in ALLOWED_FIELDS:
@@ -1788,6 +1800,17 @@ class StorageEngine:
                 val = item.get(f)
                 if f == "metadata" and val is not None:
                     val = json.dumps(self._sanitize_metadata(val), ensure_ascii=False)
+                elif f in ("importance", "privacy", "layer", "memory_type") \
+                        and val is not None:
+                    # 枚举值兼容：接受 Enum 或原始字符串
+                    val = getattr(val, "value", val)
+                elif f in ("starred", "pinned") and val is not None:
+                    val = int(bool(val))
+                elif f == "expires_at" and val is not None:
+                    try:
+                        val = float(val)
+                    except (TypeError, ValueError):
+                        val = 0.0
                 params.append(val)
             params.append(now)
             params.append(entry_id)
@@ -1988,6 +2011,154 @@ class StorageEngine:
             "duration_ms": round(elapsed, 2),
         }
 
+    def check_fts_consistency(self, repair: bool = False) -> Dict[str, Any]:
+        """FTS 索引一致性自检（v5.7.0 新增）
+
+        扫描 memories 表与 memory_fts 表的差异：
+        - orphans：FTS 中存在但 memories 中已不存在的条目；
+        - missing：非加密记忆中缺少 FTS 索引的条目。
+
+        加密模式下不维护 FTS5（content 为空串），返回 fts_enabled=False
+        并说明由 search_encrypted_fallback 兜底，不视为不一致。
+
+        Args:
+            repair: 为 True 时自动修复（清理孤儿记录 + 补建缺失索引）
+
+        Returns:
+            {
+                "consistent": bool,
+                "fts_enabled": bool,
+                "orphans": int,
+                "missing": int,
+                "details": [{"type": "orphan|missing", "rowid": int}, ...]（最多 50 条）,
+                "repair_applied": bool,
+                "repaired": int,
+                "note": str,
+            }
+        """
+        conn = self._get_conn()
+
+        has_fts = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='memory_fts'"
+        ).fetchone()
+        if not has_fts:
+            return {
+                "consistent": False, "fts_enabled": False,
+                "orphans": 0, "missing": 0, "details": [],
+                "repair_applied": False, "repaired": 0,
+                "note": "memory_fts 表不存在",
+            }
+        if self.encrypted:
+            return {
+                "consistent": True, "fts_enabled": False,
+                "orphans": 0, "missing": 0, "details": [],
+                "repair_applied": False, "repaired": 0,
+                "note": "加密模式不维护 FTS5 索引（由 search_encrypted_fallback 兜底）",
+            }
+
+        orphans = conn.execute(
+            "SELECT rowid FROM memory_fts "
+            "WHERE rowid NOT IN (SELECT rowid FROM memories)"
+        ).fetchall()
+        missing_rows = conn.execute(
+            "SELECT rowid, content, category, tags FROM memories "
+            "WHERE encrypted = 0 AND category != 'trash' "
+            "AND rowid NOT IN (SELECT rowid FROM memory_fts)"
+        ).fetchall()
+
+        details = []
+        details += [{"type": "orphan", "rowid": r[0]} for r in orphans[:50]]
+        details += [{"type": "missing", "rowid": r[0]} for r in missing_rows[:50]]
+
+        repaired = 0
+        if repair and (orphans or missing_rows):
+            for row in orphans:
+                try:
+                    conn.execute(
+                        "INSERT INTO memory_fts(memory_fts, rowid, content, category, tags) "
+                        "VALUES('delete', ?, '', '', '')",
+                        (row[0],),
+                    )
+                    repaired += 1
+                except sqlite3.OperationalError:
+                    logger.warning("FTS 清理孤儿记录失败 rowid=%s", row[0], exc_info=True)
+            for row in missing_rows:
+                try:
+                    conn.execute(
+                        "INSERT INTO memory_fts(rowid, content, category, tags) VALUES(?, ?, ?, ?)",
+                        (row[0], row[1] or "", row[2] or "", row[3] or "[]"),
+                    )
+                    repaired += 1
+                except sqlite3.OperationalError:
+                    logger.warning("FTS 补建索引失败 rowid=%s", row[0], exc_info=True)
+            conn.commit()
+
+        return {
+            "consistent": not orphans and not missing_rows,
+            "fts_enabled": True,
+            "orphans": len(orphans),
+            "missing": len(missing_rows),
+            "details": details,
+            "repair_applied": bool(repair and (orphans or missing_rows)),
+            "repaired": repaired,
+            "note": "",
+        }
+
+    def memory_health_dashboard(self) -> Dict[str, Any]:
+        """记忆健康仪表盘（v5.7.0 新增）
+
+        聚合详细统计、衰减状态、冲突、加密比例与 FTS 一致性，提供一站式健康视图：
+        总记忆数、分类/层级分布、衰减桶、冲突数、加密比例、FTS 一致性、完整性。
+
+        Returns:
+            健康视图字典（见下方实现字段）
+        """
+        ds = self.get_detailed_stats()
+        try:
+            conflicts = self.get_conflict_stats()
+        except Exception:
+            conflicts = {}
+        fts = self.check_fts_consistency()
+        try:
+            hc = self.health_check()
+        except Exception:
+            hc = {"status": "unknown", "recommendations": []}
+
+        conn = self._get_conn()
+        decay_rows = conn.execute(
+            "SELECT CASE WHEN forgetting_score >= 0.8 THEN 'critical' "
+            "WHEN forgetting_score >= 0.5 THEN 'decaying' "
+            "WHEN forgetting_score > 0 THEN 'normal' ELSE 'fresh' END AS bucket, "
+            "COUNT(*) FROM memories WHERE category != 'trash' GROUP BY bucket"
+        ).fetchall()
+
+        total = ds.get("total", 0)
+        encrypted = ds.get("encrypted", 0)
+        return {
+            "generated_at": time.time(),
+            "total_memories": total,
+            "trash": ds.get("trash", 0),
+            "starred": ds.get("starred", 0),
+            "by_category": ds.get("by_category", {}),
+            "by_layer": ds.get("by_layer", {}),
+            "encrypted_count": encrypted,
+            "encrypted_ratio": round(encrypted / total, 4) if total else 0.0,
+            "decay_buckets": {r[0]: r[1] for r in decay_rows},
+            "avg_forgetting_score": ds.get("avg_forgetting_score", 0),
+            "conflicts": {
+                "total": conflicts.get("total_conflicts", 0),
+                "pending_review": conflicts.get("pending_review", 0),
+            },
+            "fts": {
+                "consistent": fts.get("consistent"),
+                "enabled": fts.get("fts_enabled", False),
+                "orphans": fts.get("orphans", 0),
+                "missing": fts.get("missing", 0),
+            },
+            "integrity": hc.get("status", "unknown"),
+            "recommendations": hc.get("recommendations", []),
+        }
+
     @_with_rollback
     def purge_trash(self,
                     actor: str = "system",
@@ -2027,16 +2198,19 @@ class StorageEngine:
         conn.execute(f"DELETE FROM memory_notes WHERE memory_id IN ({placeholders})", ids)
         try:
             conn.execute(f"DELETE FROM memory_embeddings WHERE memory_id IN ({placeholders})", ids)
-        except sqlite3.OperationalError:
-            pass
+        except sqlite3.OperationalError as _child_op_err:
+            logger.warning("级联删除子表记录失败（OperationalError）: %s",
+                           _child_op_err)
         try:
             conn.execute(f"DELETE FROM memory_templates WHERE memory_id IN ({placeholders})", ids)
-        except sqlite3.OperationalError:
-            pass
+        except sqlite3.OperationalError as _child_op_err:
+            logger.warning("级联删除子表记录失败（OperationalError）: %s",
+                           _child_op_err)
         try:
             conn.execute(f"DELETE FROM kg_edges WHERE source IN ({placeholders}) OR target IN ({placeholders})", ids + ids)
-        except sqlite3.OperationalError:
-            pass
+        except sqlite3.OperationalError as _child_op_err:
+            logger.warning("级联删除子表记录失败（OperationalError）: %s",
+                           _child_op_err)
 
         conn.execute(f"DELETE FROM memories WHERE id IN ({placeholders})", ids)
 
@@ -2106,12 +2280,14 @@ class StorageEngine:
             conn.execute("DELETE FROM memory_embeddings WHERE memory_id = ?", (entry_id,))
             try:
                 conn.execute("DELETE FROM memory_templates WHERE memory_id = ?", (entry_id,))
-            except sqlite3.OperationalError:
-                pass
+            except sqlite3.OperationalError as _child_op_err:
+                logger.warning("级联删除子表记录失败（OperationalError）: %s",
+                               _child_op_err)
             try:
                 conn.execute("DELETE FROM kg_edges WHERE source = ? OR target = ?", (entry_id, entry_id))
-            except sqlite3.OperationalError:
-                pass
+            except sqlite3.OperationalError as _child_op_err:
+                logger.warning("级联删除子表记录失败（OperationalError）: %s",
+                               _child_op_err)
             conn.execute("DELETE FROM memories WHERE id = ?", (entry_id,))
             if row:
                 try:
@@ -2226,15 +2402,17 @@ class StorageEngine:
             conn.execute(f"DELETE FROM memory_embeddings WHERE memory_id IN ({placeholders})", ids)
             try:
                 conn.execute(f"DELETE FROM memory_templates WHERE memory_id IN ({placeholders})", ids)
-            except sqlite3.OperationalError:
-                pass
+            except sqlite3.OperationalError as _child_op_err:
+                logger.warning("级联删除子表记录失败（OperationalError）: %s",
+                               _child_op_err)
             try:
                 conn.execute(
                     f"DELETE FROM kg_edges WHERE source IN ({placeholders}) OR target IN ({placeholders})",
                     ids + ids
                 )
-            except sqlite3.OperationalError:
-                pass
+            except sqlite3.OperationalError as _child_op_err:
+                logger.warning("级联删除子表记录失败（OperationalError）: %s",
+                               _child_op_err)
             conn.execute(f"DELETE FROM memories WHERE id IN ({placeholders})", ids)
             # 同步清理 FTS（contentless FTS5 用 'delete' 命令）
             for row in rows:
@@ -3580,9 +3758,9 @@ class StorageEngine:
                     platform=str(drama_data.get("platform", ""))[:128],
                     cover_url=str(drama_data.get("cover_url", ""))[:512],
                     tags=list(drama_data.get("tags", []) or [])[:64],
-                    actors=list(drama_data.get("actors", []) or [])[:128],
-                    director=str(drama_data.get("director", ""))[:128],
                     status=status_enum,
+                    metadata={"actors": list(drama_data.get("actors", []) or [])[:128],
+                              "director": str(drama_data.get("director", ""))[:128]},
                 )
                 stats["dramas"] += 1
                 new_did = new_drama.id
@@ -3593,11 +3771,12 @@ class StorageEngine:
                         s = self.add_scene(
                             drama_id=new_did,
                             title=str(scene_data.get("title", ""))[:512],
-                            description=str(scene_data.get("description", ""))[:5000],
+                            content=str(scene_data.get("description", ""))[:5000],
                             episode=max(0, int(scene_data.get("episode", 0) or 0)),
+                            scene_number=max(0, int(scene_data.get("scene_number", 0) or 0)),
                             location=str(scene_data.get("location", ""))[:256],
                             time_of_day=str(scene_data.get("time_of_day", ""))[:64],
-                            notes=str(scene_data.get("notes", ""))[:5000],
+                            metadata={"notes": str(scene_data.get("notes", ""))[:5000]},
                         )
                         stats["scenes"] += 1
                     except Exception:
@@ -3609,9 +3788,9 @@ class StorageEngine:
                         c = self.add_character(
                             drama_id=new_did,
                             name=str(char_data.get("name", ""))[:128],
-                            actor_name=str(char_data.get("actor_name", ""))[:128],
+                            actor=str(char_data.get("actor_name", ""))[:128],
                             description=str(char_data.get("description", ""))[:5000],
-                            role_type=str(char_data.get("role_type", "supporting"))[:64],
+                            role=str(char_data.get("role_type", "supporting"))[:64],
                             tags=list(char_data.get("tags", []) or [])[:64],
                         )
                         stats["characters"] += 1
@@ -4508,8 +4687,9 @@ class StorageEngine:
                 conn.execute(
                     f"DELETE FROM {table} WHERE {col} IN ({placeholders})", ids
                 )
-            except Exception:
-                pass
+            except Exception as _child_err:
+                logger.warning("清理 Agent 记忆关联表 %s 失败: %s",
+                               table, _child_err)
 
         # 清理 FTS（contentless FTS5 特殊语法）
         for rid in rowids:
@@ -6562,6 +6742,9 @@ class StorageEngine:
                           "agent_purge", "agent_forget", "agent_merge", "agent_clean",
                           # v5.5.5 fix: agent_transfer 加入白名单，避免被降级为 other
                           "agent_transfer",
+                          # v5.7.0 P2 fix: search 历史审计（此前白名单缺失，
+                          # 即便写入也会被降级为 other，导致 search-history 恒为空）
+                          "search",
                           # v5.5.0 新增审计动作
                           "deduplicate_merge", "recalibrate", "reinforce",
                           # v5.5.5 fix: evolve 加入白名单
@@ -7686,8 +7869,9 @@ class StorageEngine:
                                  "memory_ids": memory_ids[:50]}), now)
                 )
                 conn.commit()
-            except Exception:
-                pass
+            except Exception as _audit_err:
+                logger.warning("归档 %d 条记忆后写入审计日志失败: %s",
+                               archived_count, _audit_err)
 
         return archived_count
 
@@ -8182,28 +8366,89 @@ class StorageEngine:
         scored.sort(key=lambda x: x["score"], reverse=True)
         return scored[:limit]
 
+    def search_encrypted_fallback(self,
+                                  query: str,
+                                  category: Optional[str] = None,
+                                  layer: Optional[MemoryLayer] = None,
+                                  limit: int = 20,
+                                  threshold: float = 0.1) -> List[Dict[str, Any]]:
+        """加密模式全量解密扫描兜底（v5.7.0 P1 新增）
+
+        加密库的 content 列与 FTS5 刻意不落明文（磁盘静态加密），TF-IDF/fuzzy
+        的进程内解密兜底依赖索引水合时机。本方法作为搜索路径的最终兜底：
+        对 encrypted=1 的条目批量解密后在内存中做关键词匹配，牺牲性能换
+        正确性，保证任何进程形态下关键词/模糊搜索对加密记忆都不 0 命中。
+
+        明文只允许驻留进程内存，任何路径都不得把解密明文写回磁盘或 FTS5；
+        单条密文损坏时跳过该条而不中断整体检索（密钥不符/损坏返回空串）。
+
+        Args:
+            query: 搜索关键词
+            category: 限定分类（None=全部）
+            layer: 限定层级（None=全部）
+            limit: 返回结果数量
+            threshold: 相似度阈值（默认 0.1，低于 fuzzy 的 0.3，兜底优先召回）
+
+        Returns:
+            带分数的搜索结果列表 [{entry, score, highlights}]；非加密库返回 []
+        """
+        if not self.encrypted:
+            return []
+        if query is None:
+            return []
+        if not isinstance(query, str):
+            query = str(query)
+        if not query.strip():
+            return []
+
+        # 复用 fuzzy_search 的内存解密 + 关键词打分（v5.6.6 起对加密条目
+        # 逐条解密打分），再过滤出加密条目即为兜底召回集。
+        hits = self.fuzzy_search(
+            query, category=category, layer=layer,
+            limit=limit, threshold=threshold)
+        return [h for h in hits if h["entry"].encrypted]
+
+    def record_search(self, query: str) -> None:
+        """v5.7.0 P2：记录一次搜索（audit action='search'）。
+
+        搜索历史此前为休眠功能：无任何写入路径，且 get_search_history 的 SQL
+        引用了 audit_log 不存在的 query 列，恒返回空。本方法在搜索完成后由
+        QueryEngine 调用；写入失败仅降级记录，不阻断搜索主路径。
+        """
+        q = (query or "").strip()[:128]
+        if not q:
+            return
+        try:
+            self._add_audit("search", q, "", "", "INTERNAL",
+                            {"query": q}, commit=True)
+        except Exception as _err:
+            logger.warning("record_search 审计写入失败: %s", _err)
+
     def get_search_history(self, limit: int = 20) -> List[Dict[str, Any]]:
-        """获取搜索历史（v5.2.0 新增）
+        """获取搜索历史（v5.2.0 新增，v5.7.0 P2 修复）
 
         Args:
             limit: 返回条数
 
         Returns:
             搜索历史列表 [{query, count, last_used}]
+
+        v5.7.0 P2：此前 SQL 引用 audit_log 不存在的 query 列，恒被
+        OperationalError 吞掉返回空列表；现改为按 memory_id（即查询词）聚合。
         """
         conn = self._get_conn()
         try:
             rows = conn.execute("""
-                SELECT query, MAX(timestamp) as last_used, COUNT(*) as cnt
+                SELECT memory_id, MAX(timestamp) as last_used, COUNT(*) as cnt
                 FROM audit_log
                 WHERE action = 'search'
-                GROUP BY query
+                GROUP BY memory_id
                 ORDER BY last_used DESC
                 LIMIT ?
             """, (limit,)).fetchall()
             return [
-                {"query": row["query"], "count": row["cnt"], "last_used": row["last_used"]}
-                for row in rows if row["query"]
+                {"query": row["memory_id"], "count": row["cnt"], "last_used": row["last_used"]}
+                for row in rows if row["memory_id"]
             ]
         except sqlite3.OperationalError:
             return []
@@ -8263,8 +8508,9 @@ class StorageEngine:
                         (now, mid)
                     )
                     conn.commit()
-                except Exception:
-                    pass
+                except Exception as _exp_err:
+                    logger.warning("记忆 %s 自动过期移入回收站失败: %s",
+                                   mid, _exp_err)
                 continue
             self._update_access(entry, actor, session_id)
             result.append(entry)
@@ -9792,17 +10038,20 @@ class StorageEngine:
         conn.execute("DELETE FROM review_schedules WHERE memory_id = ?", (memory_id,))
         try:
             conn.execute("DELETE FROM memory_notes WHERE memory_id = ?", (memory_id,))
-        except sqlite3.OperationalError:
-            pass
+        except sqlite3.OperationalError as _child_op_err:
+            logger.warning("级联删除子表记录失败（OperationalError）: %s",
+                           _child_op_err)
         try:
             conn.execute("DELETE FROM kg_edges WHERE source = ? OR target = ?", (memory_id, memory_id))
-        except sqlite3.OperationalError:
-            pass
+        except sqlite3.OperationalError as _child_op_err:
+            logger.warning("级联删除子表记录失败（OperationalError）: %s",
+                           _child_op_err)
         conn.execute("DELETE FROM memory_embeddings WHERE memory_id = ?", (memory_id,))
         try:
             conn.execute("DELETE FROM memory_templates WHERE memory_id = ?", (memory_id,))
-        except sqlite3.OperationalError:
-            pass
+        except sqlite3.OperationalError as _child_op_err:
+            logger.warning("级联删除子表记录失败（OperationalError）: %s",
+                           _child_op_err)
         if row:
             try:
                 # contentless FTS5 必须用 'delete' 特殊命令
@@ -10185,8 +10434,9 @@ class StorageEngine:
                         self._close_conns()
                         shutil.copy2(pre_backup_path, str(self.db_path))
                         self._init_db()
-                    except (OSError, IOError):
-                        pass
+                    except (OSError, IOError) as _restore_err:
+                        logger.error("恢复失败后回滚到备份 %s 失败: %s",
+                                     pre_backup_path, _restore_err)
                 return result
 
             if integrity_row is None or str(integrity_row[0]).lower() != "ok":
@@ -10198,8 +10448,9 @@ class StorageEngine:
                         self._close_conns()
                         shutil.copy2(pre_backup_path, str(self.db_path))
                         self._init_db()
-                    except (OSError, IOError):
-                        pass
+                    except (OSError, IOError) as _restore_err:
+                        logger.error("恢复失败后回滚到备份 %s 失败: %s",
+                                     pre_backup_path, _restore_err)
                 return result
 
             result["success"] = True
@@ -10284,8 +10535,13 @@ class StorageEngine:
                   description: str = "",
                   tags: Optional[List[str]] = None,
                   cover_url: str = "",
-                  metadata: Optional[Dict[str, Any]] = None) -> DramaSeries:
-        """添加短剧（v5.2.1 新增，v5.3.3 安全加固：XSS 消毒）"""
+                  metadata: Optional[Dict[str, Any]] = None,
+                  current_episode: Optional[int] = None) -> DramaSeries:
+        """添加短剧（v5.2.1 新增，v5.3.3 安全加固：XSS 消毒）
+
+        current_episode: 当前集数（v5.7.0 新增参数，供 import_dramas_from_json
+            保留进度；缺省为 0）。
+        """
         now = time.time()
         drama_id = str(uuid.uuid4())
 
@@ -10296,6 +10552,9 @@ class StorageEngine:
         description = _sanitize_html(self._validate_str(description, "description", max_len=5000))
         cover_url = self._validate_str(cover_url, "cover_url", max_len=500)
         total_episodes = self._validate_int(total_episodes, "total_episodes", min_val=0, max_val=10000)
+        current_episode = self._validate_int(
+            current_episode if current_episode is not None else 0,
+            "current_episode", min_val=0, max_val=10000)
 
         if not isinstance(genre, DramaGenre):
             genre = DramaGenre.OTHER
@@ -10307,7 +10566,7 @@ class StorageEngine:
             title=title,
             genre=genre,
             total_episodes=total_episodes,
-            current_episode=0,
+            current_episode=current_episode,
             status=status,
             platform=platform,
             rating=rating,
@@ -11298,8 +11557,17 @@ class StorageEngine:
                     logger.warning("FTS insert failed in batch_update %s", mid, exc_info=True)
 
         conn.commit()
-        self._add_audit("batch_update", ",".join(memory_ids[:5]), actor, session_id, "INTERNAL",
-                        {"updated": updated, "category": category, "importance": importance})
+        # v5.7.0 P2 安全加固：审计完整性——完整 ID 列表（截断到 100），
+        # 超过上限时附 count + sha256，确保批量操作可追溯、不会被前 5 条掩盖。
+        audit_ids = memory_ids[:100]
+        audit_details = {"updated": updated, "category": category,
+                        "importance": importance, "total_ids": len(memory_ids),
+                        "ids_audited": len(audit_ids)}
+        if len(memory_ids) > 100:
+            audit_details["ids_hash"] = hashlib.sha256(
+                "\n".join(memory_ids).encode("utf-8")).hexdigest()
+        self._add_audit("batch_update", ",".join(audit_ids), actor, session_id, "INTERNAL",
+                        audit_details)
         return {"success": True, "updated": updated, "errors": errors, "total": len(memory_ids)}
 
     def create_review_schedule(self, memory_id: str, interval_days: float = 1.0,
@@ -11332,9 +11600,10 @@ class StorageEngine:
             FROM review_schedules rs
             JOIN memories m ON rs.memory_id = m.id
             WHERE rs.status = 'pending' AND rs.scheduled_at <= ?
+              AND (m.expires_at IS NULL OR m.expires_at = 0 OR m.expires_at > ?)
             ORDER BY rs.scheduled_at ASC
             LIMIT ?
-        """, (now, limit)).fetchall()
+        """, (now, now, limit)).fetchall()
         results = []
         for row in rows:
             results.append({
@@ -11381,6 +11650,10 @@ class StorageEngine:
             WHERE id = ?
         """, (now, row["memory_id"]))
 
+        # v5.7.0 P2：更新后失效读缓存，避免 get_memory 返回陈旧 consolidation_count
+        self._memory_cache.invalidate(row["memory_id"])
+        # v5.7.0 P2：更新后失效读缓存，避免 get_memory 返回陈旧 consolidation_count
+        self._memory_cache.invalidate(row["memory_id"])
         conn.commit()
         self._add_audit("complete_review", row["memory_id"], "", "", "INTERNAL")
         return {"success": True, "schedule_id": schedule_id, "review_count": new_count,

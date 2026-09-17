@@ -1,23 +1,32 @@
 """
-MindForge v5.5.8 REST API Server
+MindForge REST API Server
 ================================
 
 标准 REST API，让非 Python 应用（JS、Go、移动端）也能直接调用 MindForge。
 
 基于 Python 内置 http.server，无需额外依赖（FastAPI/Flask 可选）。
 
-端点概览：
-  GET    /api/memories          列出记忆（?limit=&offset=&category=）
-  POST   /api/memories          添加记忆
-  GET    /api/memories/{id}     获取单条记忆
-  PUT    /api/memories/{id}     更新记忆
-  DELETE /api/memories/{id}     删除记忆
-  GET    /api/search            搜索记忆（?q=&limit=&min_relevance=）
-  GET    /api/stats             统计信息
-  GET    /api/health            健康检查
-  GET    /api/tags              标签列表
-  POST   /api/import            导入记忆（JSON body）
-  GET    /api/export            导出记忆（JSON）
+路由表（v5.7.0 P2 补充，便于调试）
+----------------------------------
+手动分发：BaseHTTPRequestHandler.do_GET / do_POST / do_PUT / do_DELETE
+中以 if/elif 按 path 匹配（无装饰器路由）。限流（v5.7.0 P2 分级）：
+读 100 req/60s/IP、写 30、批量导入 10（_check_rate_limit(write/heavy)）；
+认证：除 /api/health 与 / 外均需 _check_auth。
+
+  Method  Path                   说明                      分发位置
+  ------  ----------------------  ------------------------  --------------
+  GET     /                       最小化元信息（未授权可读）  do_GET
+  GET     /api/health             健康状态（未授权可读）      do_GET
+  GET     /api/stats              统计信息（需认证）          do_GET
+  GET     /api/tags               标签列表（需认证）          do_GET
+  GET     /api/search             搜索（?q=&limit=…）         do_GET
+  GET     /api/memories           列出（?limit=&offset=&…）   do_GET
+  GET     /api/memories/{id}      获取单条（需认证）          do_GET
+  GET     /api/export             导出 JSON（上限 5000 条）    do_GET
+  POST    /api/memories           添加记忆（JSON body）       do_POST
+  POST    /api/import             批量导入（≤10000 条）       do_POST
+  PUT     /api/memories/{id}      更新记忆（JSON body）       do_PUT
+  DELETE  /api/memories/{id}      删除记忆                    do_DELETE
 
 启动方式：
   MindForge serve --api
@@ -99,6 +108,9 @@ class _RateLimiter:
 
 
 _rate_limiter = _RateLimiter(max_requests=100, window_seconds=60)
+# v5.7.0 P2：写路径配额更严（30 req/60s/IP）；批量/导入端点再降一档（10 req/60s/IP）
+_write_limiter = _RateLimiter(max_requests=30, window_seconds=60)
+_import_limiter = _RateLimiter(max_requests=10, window_seconds=60)
 
 
 def _normalize_ip(ip: str) -> str:
@@ -225,6 +237,71 @@ def _sanitize_tag(tag) -> str:
         tag = str(tag)
     tag = _TAG_CONTROL_RE.sub("", tag).strip()
     return tag[:64]
+
+
+def _sanitize_category(value, default=None) -> Optional[str]:
+    """v5.7.0 P2：分类参数校验——必须是字符串，剔除控制字符后截断，空值回落默认。"""
+    if value is None:
+        return default
+    if not isinstance(value, str):
+        return default
+    cat = _TAG_CONTROL_RE.sub("", value).strip()
+    if not cat:
+        return default
+    return cat[:64]
+
+
+def _validate_tags(value) -> List[str]:
+    """v5.7.0 P2：标签参数校验——必须是字符串列表，逐项消毒并限制数量（≤50）。"""
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError("Field 'tags' must be a list of strings")
+    cleaned: List[str] = []
+    for t in value:
+        if not isinstance(t, str):
+            raise ValueError("Field 'tags' must be a list of strings")
+        ct = _sanitize_tag(t)
+        if ct:
+            cleaned.append(ct)
+        if len(cleaned) >= 50:
+            break
+    return cleaned
+
+
+_IMPORTANCE_VALUES = {"LOW", "MEDIUM", "HIGH", "CRITICAL"}
+
+
+def _validate_importance(value):
+    """v5.7.0 P2：importance 必须是合法枚举值（大小写不敏感），返回规范大写。"""
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError("Field 'importance' must be one of LOW/MEDIUM/HIGH/CRITICAL")
+    up = value.strip().upper()
+    if up not in _IMPORTANCE_VALUES:
+        raise ValueError("Field 'importance' must be one of LOW/MEDIUM/HIGH/CRITICAL")
+    return up
+
+
+def _validate_starred(value):
+    """v5.7.0 P2：starred 必须是布尔（或 0/1）。"""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int) and value in (0, 1):
+        return value
+    raise ValueError("Field 'starred' must be a boolean")
+
+
+def _validate_source_agent(value) -> str:
+    """v5.7.0 P2：source_agent 必须是字符串，截断到 128。"""
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        raise ValueError("Field 'source_agent' must be a string")
+    return value[:128]
 
 
 def _log_unhandled_api_error(exc: Exception) -> None:
@@ -375,14 +452,25 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
             return
         self._send_json({"status": "ok"})
 
-    def _check_rate_limit(self) -> bool:
+    def _check_rate_limit(self, write: bool = False, heavy: bool = False) -> bool:
         """v5.6.1 安全修复：统一限流检查（所有 HTTP 方法共用）。
         返回 True 表示允许，False 表示已返回 429。
+
+        v5.7.0 P2 分级限流：
+        - 读路径：全局 100 req/60s/IP；
+        - 写路径（POST/PUT/DELETE）：额外 30 req/60s/IP；
+        - 批量/导入端点：额外 10 req/60s/IP。
         """
         client_ip = self.client_address[0]
         rate_key = _normalize_ip(client_ip)
         if not _rate_limiter.check(rate_key):
             self._send_json({"error": "Rate limit exceeded. Try again later."}, 429)
+            return False
+        if write and not _write_limiter.check(rate_key):
+            self._send_json({"error": "Rate limit exceeded for write operations."}, 429)
+            return False
+        if heavy and not _import_limiter.check(rate_key):
+            self._send_json({"error": "Rate limit exceeded for bulk operations."}, 429)
             return False
         return True
 
@@ -464,13 +552,15 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                             "relevance_score": chunk.relevance_score,
                             "tags": chunk.tags if hasattr(chunk, "tags") else [],
                         })
-                self._send_json({"query": q, "results": chunks, "total": len(chunks)})
+                self._send_json({"query": q, "results": chunks, "total": len(chunks),
+                             "approximate": getattr(result, "approximate", False)})
 
             elif path == "/api/memories":
                 # v5.4.7 修复 H-1：安全解析参数
                 limit = _safe_int(qs.get("limit", ["50"])[0], default=50, min_val=1, max_val=10000)
                 offset = _safe_int(qs.get("offset", ["0"])[0], default=0, min_val=0, max_val=1000000)
-                category = qs.get("category", [None])[0]
+                # v5.7.0 P2：分类参数消毒
+                category = _sanitize_category(qs.get("category", [None])[0], default=None)
                 # F1 修复：列表接口接入隐私过滤（X-Agent-Id 头 / agent 查询参数）
                 entries = self.mindforge.list(
                     category=category,
@@ -534,8 +624,8 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
 
-        # v5.6.1: 写操作也加限流
-        if not self._check_rate_limit():
+        # v5.6.1: 写操作也加限流；v5.7.0 P2：写路径走更严配额
+        if not self._check_rate_limit(write=True):
             return
 
         if not self._check_auth():
@@ -561,34 +651,65 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                 if not content:
                     self._send_json({"error": "Missing 'content' field"}, 400)
                     return
+                # v5.7.0 P2：统一参数校验层
+                try:
+                    category = _sanitize_category(body.get("category", "general"), default="general")
+                    tags = _validate_tags(body.get("tags", []))
+                    importance = _validate_importance(body.get("importance"))
+                    starred = _validate_starred(body.get("starred"))
+                    source_agent = _validate_source_agent(body.get("source_agent", ""))
+                except ValueError as ve:
+                    self._send_json({"error": str(ve)}, 400)
+                    return
                 entry = self.mindforge.add(
                     content=content,
-                    category=body.get("category", "general"),
-                    tags=body.get("tags", []),
-                    importance=body.get("importance"),
-                    starred=body.get("starred"),
-                    source_agent=body.get("source_agent", ""),
+                    category=category,
+                    tags=tags,
+                    importance=importance,
+                    starred=starred,
+                    source_agent=source_agent,
                 )
                 self._send_json(entry.to_dict() if hasattr(entry, "to_dict") else vars(entry), 201)
 
             elif path == "/api/import":
                 memories = body.get("memories", [])
+                # v5.7.0 P2：批量导入端点额外限流（10 req/60s/IP）
+                if not self._check_rate_limit(heavy=True):
+                    return
                 # v5.4.8 安全修复：导入批次大小限制
                 MAX_IMPORT_BATCH = 10000
+                # v5.7.0 P2：memories 必须是列表，否则 400 而非 500
+                if not isinstance(memories, list):
+                    self._send_json({"error": "Field 'memories' must be a list"}, 400)
+                    return
                 if len(memories) > MAX_IMPORT_BATCH:
                     self._send_json({"error": f"Too many memories (max {MAX_IMPORT_BATCH})"}, 400)
                     return
                 imported = 0
                 failed = 0
                 for mem in memories:
+                    # v5.7.0 P2：逐条参数校验，非法条目计入 failed
+                    try:
+                        content = mem.get("content", "")
+                        if not isinstance(content, str) or not content.strip():
+                            failed += 1
+                            continue
+                        category = _sanitize_category(mem.get("category", "general"), default="general")
+                        tags = _validate_tags(mem.get("tags", []))
+                        importance = _validate_importance(mem.get("importance"))
+                        starred = _validate_starred(mem.get("starred"))
+                        source_agent = _validate_source_agent(mem.get("source_agent", ""))
+                    except ValueError:
+                        failed += 1
+                        continue
                     try:
                         self.mindforge.add(
-                            content=mem.get("content", ""),
-                            category=mem.get("category", "general"),
-                            tags=mem.get("tags", []),
-                            importance=mem.get("importance"),
-                            starred=mem.get("starred"),
-                            source_agent=mem.get("source_agent", ""),
+                            content=content,
+                            category=category,
+                            tags=tags,
+                            importance=importance,
+                            starred=starred,
+                            source_agent=source_agent,
                         )
                         imported += 1
                     except Exception:
@@ -606,8 +727,8 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
 
-        # v5.6.1: 写操作也加限流
-        if not self._check_rate_limit():
+        # v5.6.1: 写操作也加限流；v5.7.0 P2：写路径走更严配额
+        if not self._check_rate_limit(write=True):
             return
 
         if not self._check_auth():
@@ -628,13 +749,26 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                 if not mem_id:
                     self._send_json({"error": "Invalid memory ID"}, 400)
                     return
+                content = body.get("content")
+                if content is not None and not isinstance(content, str):
+                    self._send_json({"error": "Field 'content' must be a string"}, 400)
+                    return
+                # v5.7.0 P2：统一参数校验层
+                try:
+                    category = _sanitize_category(body.get("category"), default=None)
+                    tags = _validate_tags(body.get("tags")) if body.get("tags") is not None else None
+                    importance = _validate_importance(body.get("importance"))
+                    starred = _validate_starred(body.get("starred"))
+                except ValueError as ve:
+                    self._send_json({"error": str(ve)}, 400)
+                    return
                 success = self.mindforge.update(
                     memory_id=mem_id,
-                    content=body.get("content"),
-                    category=body.get("category"),
-                    tags=body.get("tags"),
-                    importance=body.get("importance"),
-                    starred=body.get("starred"),
+                    content=content,
+                    category=category,
+                    tags=tags,
+                    importance=importance,
+                    starred=starred,
                 )
                 if success:
                     self._send_json({"status": "updated", "id": mem_id})
@@ -652,8 +786,8 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
 
-        # v5.6.1: 写操作也加限流
-        if not self._check_rate_limit():
+        # v5.6.1: 写操作也加限流；v5.7.0 P2：写路径走更严配额
+        if not self._check_rate_limit(write=True):
             return
 
         if not self._check_auth():

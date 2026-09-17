@@ -380,39 +380,25 @@ def header_table(headers, data_rows, widths, aligns=None, highlight_fail_col=Non
     return t
 
 
-def build():
-    perf = load_perf()
-    pre = load_pre_perf()
-    tests = load_tests()
-    cov = load_coverage()
-    env = perf["env"]
-    scale = perf["scale"]
-    ver = env.get("mindforge_version", "?")
+def _curve_map(d):
+    return {c["records"]: c for c in d.get("search_curve", [])}
 
-    charts = {
-        "latency": chart_latency(perf),
-        "throughput": chart_throughput(perf),
-        "search": chart_search_curve(perf),
-        "search_compare": chart_search_compare(pre, perf),
-        "crypto": chart_crypto(perf),
-    }
 
-    out_pdf = RESULTS / f"MindForge_v{ver}_test_perf_report.pdf"
-    doc = SimpleDocTemplate(str(out_pdf), pagesize=A4,
-                            leftMargin=16*mm, rightMargin=16*mm,
-                            topMargin=15*mm, bottomMargin=15*mm,
-                            title=f"MindForge v{ver} 全面测试与性能报告")
+def block_row(name, b):
+    if not b:
+        return None
+    return [P(name, CELL), P(b["n"], CELL_C),
+            P(b["mean_ms"], CELL_C), P(b["p50_ms"], CELL_C),
+            P(b["p95_ms"], CELL_C), P(b["p99_ms"], CELL_C),
+            P(b["max_ms"], CELL_C)]
 
-    story = []
+def _cover_section(story, ver, tests, cov, scale, env, perf, pre, status_ok, bench_ok):
 
-    # ---- 封面信息 ----
     story.append(Spacer(1, 6*mm))
     story.append(P(f"MindForge v{ver}", TITLE))
     story.append(P("全面测试与性能基准报告", ParagraphStyle(
         "SUB", parent=TITLE, fontSize=16, textColor=BLUE)))
     story.append(Spacer(1, 5*mm))
-    status_ok = tests["available"] and tests["failures"] == 0 and tests["errors"] == 0
-    bench_ok = perf.get("passed", False)
     overall = "全部通过" if status_ok and bench_ok else "存在失败项"
     story.append(kv_table([
         ("报告生成时间", perf["generated_at"]),
@@ -437,7 +423,9 @@ def build():
          ("；优化前/后各 3 次独立运行同口径对比" if pre else "")),
     ]))
 
-    # ---- 1. 测试总览 ----
+
+def _section_tests_overview(story, tests, cov):
+
     story.append(Spacer(1, 6*mm))
     story.append(P("1. 全面测试总览", H1))
     story.append(P(
@@ -485,7 +473,9 @@ def build():
                        "索引等改动路径均被用例守护。"
                        % cov["overall"], SMALL))
 
-    # ---- 2. 安全审计 ----
+
+def _section_security_audit(story):
+
     story.append(PageBreak())
     story.append(P("2. 安全审计 24 项处置确认（v5.6.5）", H1))
     audit = [
@@ -531,7 +521,9 @@ def build():
     story.append(header_table(["级别", "问题", "状态"],
                               rows, [16*mm, 120*mm, 24*mm]))
 
-    # ---- 3. 搜索性能复测（v5.6.5 相对 v5.6.4 基线无回归） ----
+
+def _section_search_compare(story, pre, perf, scale, charts):
+
     story.append(PageBreak())
     story.append(P("3. 搜索性能复测：v5.6.5 相对 v5.6.4 优化基线", H1))
     _pre_n = {c["records"]: c for c in (pre or {}).get("search_curve", {})}.get(scale["N"])
@@ -561,8 +553,6 @@ def build():
         story.append(Spacer(1, 2*mm))
         story.append(Image(charts["search_compare"], width=140*mm, height=72*mm))
 
-        def _curve_map(d):
-            return {c["records"]: c for c in d.get("search_curve", [])}
 
         pre_map, post_map = _curve_map(pre), _curve_map(perf)
         cmp_rows = []
@@ -620,20 +610,15 @@ def build():
             '<font color="#d68910">未找到优化前基线文件 '
             'perf_results_pre_v564.json，跳过前后对比。</font>', SMALL))
 
-    # ---- 4. CRUD 延迟 ----
+
+def _section_crud_latency(story, perf, scale, charts):
+
     story.append(PageBreak())
     story.append(P("4. CRUD 操作延迟", H1))
     story.append(P(f"基于 {scale['N']} 条中文记忆（含标签、分类、FTS/TF-IDF 索引）"
                    "测量，单位毫秒，统计 p50/p95/p99。", BODY))
     story.append(Image(charts["latency"], width=170*mm, height=80*mm))
 
-    def block_row(name, b):
-        if not b:
-            return None
-        return [P(name, CELL), P(b["n"], CELL_C),
-                P(b["mean_ms"], CELL_C), P(b["p50_ms"], CELL_C),
-                P(b["p95_ms"], CELL_C), P(b["p99_ms"], CELL_C),
-                P(b["max_ms"], CELL_C)]
 
     perf_rows = []
     for name, key in [
@@ -652,7 +637,9 @@ def build():
         ["操作", "样本数", "均值", "p50", "p95", "p99", "最大"],
         perf_rows, [34*mm, 20*mm, 22*mm, 22*mm, 22*mm, 22*mm, 22*mm]))
 
-    # ---- 4. 吞吐 ----
+
+def _section_throughput(story, perf, charts):
+
     story.append(Spacer(1, 5*mm))
     story.append(P("5. 写入与加密吞吐", H1))
     tw = perf.get("write_single", {})
@@ -679,7 +666,9 @@ def build():
                 f"解密 {prim['10KB']['decrypt_mb_s']:.0f} MB/s。"
                 f"（KDF 仅在建库/rekey 时执行一次，不计入消息面吞吐）", BODY))
 
-    # ---- 5. 搜索曲线 ----
+
+def _section_search_curve(story, perf, charts):
+
     story.append(PageBreak())
     story.append(P("6. 搜索延迟随数据量扩展（优化后绝对值）", H1))
     if charts["search"]:
@@ -708,7 +697,9 @@ def build():
                 f"{verdict}；模糊检索 {first['fuzzy_ms']:.2f}ms → "
                 f"{last['fuzzy_ms']:.2f}ms。", SMALL))
 
-    # ---- 6. 备份恢复 / 加密模式 ----
+
+def _section_backup_encryption(story, perf):
+
     story.append(Spacer(1, 5*mm))
     story.append(P("7. 备份、恢复与加密模式", H1))
     br = perf.get("backup_restore", {})
@@ -733,7 +724,9 @@ def build():
     if bk_rows:
         story.append(kv_table(bk_rows))
 
-    # ---- 7. 并发 ----
+
+def _section_concurrency(story, perf):
+
     story.append(Spacer(1, 5*mm))
     story.append(P("8. 多线程并发压测与正确性", H1))
     cc = perf.get("concurrency", {})
@@ -767,7 +760,9 @@ def build():
             story.append(P('<font color="#c0392b">异常样本：' +
                            "; ".join(cc["error_samples"][:3]) + "</font>", SMALL))
 
-    # ---- 8. 资源占用 ----
+
+def _section_resources(story, perf):
+
     story.append(Spacer(1, 5*mm))
     story.append(P("9. 资源占用", H1))
     misc = perf.get("misc", {})
@@ -790,7 +785,13 @@ def build():
     if rows:
         story.append(kv_table(rows))
 
-    # ---- 9. 结论 ----
+
+def _section_conclusions(story, perf, tests, scale, pre, status_ok, bench_ok):
+
+    tw = perf.get("write_single", {})
+    cc = perf.get("concurrency", {})
+    br = perf.get("backup_restore", {})
+
     story.append(Spacer(1, 5*mm))
     story.append(P("10. 结论", H1))
     conclusions = []
@@ -827,6 +828,45 @@ def build():
     for c in conclusions:
         story.append(P("• " + c, BODY))
 
+def build():
+    perf = load_perf()
+    pre = load_pre_perf()
+    tests = load_tests()
+    cov = load_coverage()
+    env = perf["env"]
+    scale = perf["scale"]
+    ver = env.get("mindforge_version", "?")
+
+    charts = {
+        "latency": chart_latency(perf),
+        "throughput": chart_throughput(perf),
+        "search": chart_search_curve(perf),
+        "search_compare": chart_search_compare(pre, perf),
+        "crypto": chart_crypto(perf),
+    }
+
+    out_pdf = RESULTS / f"MindForge_v{ver}_test_perf_report.pdf"
+    doc = SimpleDocTemplate(str(out_pdf), pagesize=A4,
+                            leftMargin=16*mm, rightMargin=16*mm,
+                            topMargin=15*mm, bottomMargin=15*mm,
+                            title=f"MindForge v{ver} 全面测试与性能报告")
+
+    status_ok = tests["available"] and tests["failures"] == 0 and tests["errors"] == 0
+    bench_ok = perf.get("passed", False)
+
+    story = []
+    _cover_section(story, ver, tests, cov, scale, env, perf, pre, status_ok, bench_ok)
+    _section_tests_overview(story, tests, cov)
+    _section_security_audit(story)
+    _section_search_compare(story, pre, perf, scale, charts)
+    _section_crud_latency(story, perf, scale, charts)
+    _section_throughput(story, perf, charts)
+    _section_search_curve(story, perf, charts)
+    _section_backup_encryption(story, perf)
+    _section_concurrency(story, perf)
+    _section_resources(story, perf)
+    _section_conclusions(story, perf, tests, scale, pre, status_ok, bench_ok)
+
     story.append(Spacer(1, 4*mm))
     story.append(P("数据来源：benchmarks/perf_benchmark.py 采集 "
                    "(benchmarks/results/perf_results.json)；"
@@ -836,7 +876,6 @@ def build():
     doc.build(story)
     print(f"PDF 已生成: {out_pdf}")
     return out_pdf
-
 
 if __name__ == "__main__":
     build()

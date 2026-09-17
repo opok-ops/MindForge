@@ -77,8 +77,8 @@ class PersonalityEngine:
                     self.profiles[profile.user_id] = profile
                 except (json.JSONDecodeError, TypeError, ValueError):
                     pass
-        except sqlite3.OperationalError:
-            pass
+        except sqlite3.OperationalError as _prof_err:
+            logger.warning("加载用户画像失败，画像检索可能降级: %s", _prof_err)
 
     def get_profile(self, user_id: str = "default") -> UserProfile:
         """获取用户画像"""
@@ -266,5 +266,5 @@ class PersonalityEngine:
                     tags=["profile", profile.user_id],
                     source_agent="personality_engine",
                 )
-        except (sqlite3.OperationalError, ValueError):
-            pass
+        except (sqlite3.OperationalError, ValueError) as _prof_err:
+            logger.warning("持久化用户画像失败: %s", _prof_err)

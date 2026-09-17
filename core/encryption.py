@@ -1,5 +1,5 @@
 """
-MindForge v5.6.0 加密引擎
+MindForge 加密引擎
 AES-256-GCM + PBKDF2 密钥派生（版本化 KDF 参数）
 """
 

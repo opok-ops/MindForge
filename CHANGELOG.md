@@ -3,6 +3,60 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [5.7.0] - 2026-09-17
+
+### Added
+- **P1 加密搜索兜底（方案 A，core/storage.py + core/query.py）**：加密模式下 search 路径对
+  `encrypted=1` 条目批量解密后在内存做关键词匹配，结果标记 `approximate: true`；
+  CLI JSON 与 `/api/search` 响应同步透传。牺牲性能换正确性：启用加密后关键词/模糊搜索不再 0 命中。
+- **记忆健康仪表盘（`StorageEngine.memory_health_dashboard` + `MindForge.memory_health_dashboard`）**：
+  一站式健康视图——总记忆数、分类/层级分布、衰减桶、冲突数、加密比例、FTS 一致性、数据库完整性。
+- **FTS 一致性自检（`check_fts_consistency`）**：扫描 memories 与 memory_fts 差异
+  （孤儿条目/缺失条目），支持 `repair=True` 自动修复；加密模式返回 `fts_enabled=False` 由兜底负责。
+- **批量导入进度回调（`MindForge.import_json` 新增 `progress_callback` / `progress_interval`）**：
+  每 N 条回调一次 `callback(已处理, 总数)`，便于 CLI 进度条与 API 进度上报；回调异常不阻断导入。
+- **`add_drama` 新增 `current_episode` 参数**：修复 `import_dramas_from_json` 因 kwargs 与
+  `add_drama`/`add_scene`/`add_character` 签名不符导致导入 100% 失败（drama/scene/character 三条路径）。
+
+### Fixed
+- **search-history 端到端修复**：`get_search_history` SQL 引用不存在的 `audit_log.query` 列且全仓库无写入
+  路径；新增 `record_search`（audit action='search'）+ ACTION_WHITELIST 扩展 + SQL 按查询词聚合，
+  `mf.search()` 后 `mf.search_history()` 正常返回。
+- **复习系统**：`complete_review` 更新后缓存失效（补 `_memory_cache.invalidate`）；
+  `list_due_reviews` 排除 TTL 过期记忆；`integrator.py` 补 `logging` import。
+- **静默异常审计（P2）**：storage.py 15 处、mindforge.py 10 处、modules 层 13 处
+  `except...pass` 升级为 `logger.warning` 或加说明注释（缓存/OSError 类统一降级日志）。
+- **docstring 版本漂移（P2）**：17 个模块头部与类 docstring 移除旧版本号引用，
+  历史性逐函数注解（如 `# v5.6.2 安全修复`）保留。
+- **`bulk_update_memory_fields` 白名单扩展（P2）**：6 → 16 字段
+  （importance/privacy/layer/memory_type/starred/pinned/expires_at/access_count/source_agent/source_session），
+  值归一化（枚举取 .value、starred/pinned 转 0/1、expires_at 转 float）；
+  category/tags 仍走 batch_update/update_memory 的 FTS 同步路径（刻意设计，避免索引漂移）。
+
+### Security
+- **API 统一参数校验层**：`_sanitize_category`/`_validate_tags`/`_validate_importance`/
+  `_validate_starred`/`_validate_source_agent`，接入 POST /api/memories、POST /api/import、PUT /api/memories/{id}。
+- **分级限流**：读 100 req/60s、写 30 req/60s、批量导入 10 req/60s（per IP，IPv6 /64 归一化）。
+- **审计完整性**：batch_update 审计记录完整 ID 列表（上限 100）+ total_ids/ids_audited + 超限 sha256。
+- **错误信息脱敏**：全端点确认 500 走通用响应，异常路径不泄露文件路径/SQL/堆栈。
+
+### Changed
+- **API 路由文档（P2）**：server.py docstring 补充完整路由表（方法/路径/说明/分发位置/认证/限流）。
+- **CHANGELOG 归档**：v5.6.7 及更早归入「历史版本」折叠区，首页仅展示最近 3 个版本。
+
+### Maintenance
+- **v6.py 占位实现审查**：保留（接口预留 + `NotImplementedError` 快速失败设计，不启用新行为）。
+- **CI**：测试 job 增加 pytest-cov 覆盖率输出；新增实验性 type-check job（mypy，不阻断）。
+- **benchmarks/generate_report.py**：`build()` 拆分（458 → 各 `_section_*` 渲染函数）。
+
+### Tests
+- 新增 `tests/test_v570_encrypted_fallback.py`（10 例）、`tests/test_v570_coverage_expansion.py`
+  （42 例）、`tests/test_v570_drama_and_utils.py`（34 例）：短剧全生命周期、四模块冒烟、
+  storage/mindforge 方法三态、多 Agent、FTS 一致性自检与修复、健康仪表盘、导入进度回调。
+- 全量测试 751 项全部通过；行覆盖率总体 58% → 66%（core/storage 51%→66%、
+  mindforge 49% 保持不变）。方法级"被测试引用"覆盖率 storage 112→191/224（85%）、
+  mindforge 115→168/232（72%），核心模块未测公开方法 219→99（<100，达成计划目标）。
+
 ## [5.6.9] - 2026-09-16
 
 一轮**全文检索（FTS）同步**缺陷修复：批量更新与自动过期两条路径此前会改写
@@ -109,6 +163,9 @@ All notable changes to MindForge will be documented in this file.
   注：越界相对导入扫描早前只覆盖 4 个显式列出的文件，因此漏掉了 `core/mindforge.py` 的 10 处
   兜底写法；本轮改为遍历全仓库 `.py` 并按语法树（`ImportFrom.level >= 2`）判定，避免再次漏检。
 
+
+<details>
+<summary><b>历史版本（v5.6.7 及更早）</b></summary>
 
 ## [5.6.7] - 2026-09-14
 
@@ -502,3 +559,5 @@ All notable changes to MindForge will be documented in this file.
 
 ### Migration
 - Existing databases are automatically migrated on first connection: `expires_at` column added with `DEFAULT 0` (never expires), with an index for efficient expired-item queries. No data loss.
+
+</details>

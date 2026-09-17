@@ -1,9 +1,9 @@
 """
-MindForge v5.5.8 主入口类
+MindForge 主入口类
 统一的 API 接口，集成所有核心功能
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Callable
 from pathlib import Path
 from datetime import datetime, timezone
 import json
@@ -107,7 +107,7 @@ class _ArchivedEntryView:
 
 
 class MindForge:
-    """MindForge 主类 - AI Agent 终身记忆系统 v5.3.7"""
+    """MindForge 主类 - AI Agent 终身记忆系统"""
 
     def __init__(self, config: Optional[MemoryConfig] = None, **kwargs):
         if config is None:
@@ -793,6 +793,7 @@ class MindForge:
                 try:
                     self._index.remove_memory(mid)
                 except Exception:
+                    # 索引清理失败不阻断主流程：检索可回退 FTS5/fuzzy 持久层
                     pass
         
         return count
@@ -909,6 +910,7 @@ class MindForge:
                     link_map[src] = []
                 link_map[src].append(tgt)
         except Exception:
+            # 链接图加载失败仅影响图谱增强，基础检索不受影响
             pass
 
         exported = 0
@@ -1136,6 +1138,23 @@ class MindForge:
         """获取统计信息"""
         return self._storage.get_stats()
 
+    def memory_health_dashboard(self) -> Dict[str, Any]:
+        """记忆健康仪表盘（v5.7.0 新增）
+
+        一站式健康视图：总记忆数、分类/层级分布、衰减状态、冲突数、
+        加密比例、FTS 一致性、数据库完整性。数据聚合见
+        StorageEngine.memory_health_dashboard。
+        """
+        return self._storage.memory_health_dashboard()
+
+    def check_fts_consistency(self, repair: bool = False) -> Dict[str, Any]:
+        """FTS 索引一致性自检（v5.7.0 新增）
+
+        扫描 memories 与 memory_fts 差异（孤儿条目/缺失条目），
+        repair=True 时自动修复。加密模式下返回 fts_enabled=False。
+        """
+        return self._storage.check_fts_consistency(repair=repair)
+
     def count_memories(self, category: Optional[str] = None,
                        layer: Optional[MemoryLayer] = None) -> int:
         """统计记忆数量（v5.4.8 P2-004 修复：补充缺失的 facade 方法）
@@ -1326,11 +1345,15 @@ class MindForge:
     def import_json(self, input_path: str,
                     skip_duplicates: bool = True,
                     target_layer: Optional[MemoryLayer] = None,
-                    dedup_threshold: float = 0.0) -> Dict[str, int]:
+                    dedup_threshold: float = 0.0,
+                    progress_callback: Optional[Callable[[int, int], None]] = None,
+                    progress_interval: int = 100) -> Dict[str, int]:
         """从 JSON 文件导入记忆
 
         v5.2.9 安全加固：路径校验 + 内容长度限制 + 枚举校验
         v5.4.6 新增：智能导入去重（dedup_threshold > 0 时启用语义相似度去重）
+        v5.7.0 新增：progress_callback / progress_interval 批量导入进度回调，
+        每处理 progress_interval 条调用一次 callback(已处理数, 总数)。
 
         Args:
             input_path: JSON 文件路径
@@ -1380,8 +1403,9 @@ class MindForge:
                             pass
                     logger.info("智能去重已启用 (threshold=%.2f, existing=%d, embedding=on, vec_cache=%d)",
                                 dedup_threshold, len(_existing_contents), len(_existing_vec_cache))
-            except Exception:
-                pass
+            except Exception as _dedup_err:
+                # v5.7.0 P2：去重辅助失败不影响记忆写入，降级为仅内容精确匹配
+                logger.warning("智能去重辅助初始化失败，降级为精确匹配: %s", _dedup_err)
             if not _dedup_engine:
                 logger.info("智能去重已启用 (threshold=%.2f, existing=%d, embedding=off)",
                             dedup_threshold, len(_existing_contents))
@@ -1514,6 +1538,15 @@ class MindForge:
             except (ValueError, TypeError, KeyError, AttributeError):
                 stats["failed"] += 1
 
+            # v5.7.0：批量导入进度回调（每 N 条一次；回调异常不阻断导入）
+            _done = sum(stats.values())
+            if progress_callback is not None and (
+                    _done % max(1, int(progress_interval)) == 0 or _done == len(memories)):
+                try:
+                    progress_callback(_done, len(memories))
+                except Exception as _cb_err:
+                    logger.warning("import_json 进度回调失败: %s", _cb_err)
+
         return stats
 
     def import_csv(self, input_path: str,
@@ -1578,9 +1611,11 @@ class MindForge:
                             if v is not None:
                                 _existing_vec_cache[ex_id] = v
                         except Exception:
+                            # 单条预计算失败跳过，不影响其余条目
                             pass
-            except Exception:
-                pass
+            except Exception as _dedup_emb_err:
+                # v5.7.0 P2：去重辅助失败不影响记忆写入，降级为仅内容精确匹配
+                logger.warning("智能去重嵌入预计算失败，降级为精确匹配: %s", _dedup_emb_err)
 
         _MAX_CONTENT = 1000000
 
@@ -2052,6 +2087,7 @@ class MindForge:
             try:
                 self._index.remove_memory(mid)
             except Exception:
+                # 索引清理失败不阻断主流程：检索可回退 FTS5/fuzzy 持久层
                 pass
         
         return count
@@ -2087,6 +2123,7 @@ class MindForge:
             try:
                 self._index.remove_memory(mid)
             except Exception:
+                # 索引清理失败不阻断主流程：检索可回退 FTS5/fuzzy 持久层
                 pass
         
         return count
@@ -2120,6 +2157,7 @@ class MindForge:
             try:
                 self._index.remove_memory(mid)
             except Exception:
+                # 索引清理失败不阻断主流程：检索可回退 FTS5/fuzzy 持久层
                 pass
         
         return count
@@ -2156,6 +2194,7 @@ class MindForge:
             try:
                 self._index.remove_memory(source_id)
             except Exception:
+                # 索引清理失败不阻断主流程：检索可回退 FTS5/fuzzy 持久层
                 pass
             try:
                 self._index.remove_memory(target_id)
@@ -2164,6 +2203,7 @@ class MindForge:
                     "tags": result.tags or [],
                 })
             except Exception:
+                # 索引重建失败不阻断主流程：检索可回退 FTS5/fuzzy 持久层
                 pass
             # 发布事件（惰性初始化 EventBus）
             try:
@@ -2324,6 +2364,7 @@ class MindForge:
                 self._index = IndexEngine()
                 self._rebuild_index_from_storage()
             except Exception:
+                # 索引重建失败不阻断主流程：检索可回退 FTS5/fuzzy 持久层
                 pass
         return result
 
@@ -2439,6 +2480,7 @@ class MindForge:
                 elif strategy == "keep_b" and conflict.get("memory_a_id"):
                     self._index.remove_memory(conflict["memory_a_id"])
             except Exception:
+                # 索引清理失败不阻断主流程：检索可回退 FTS5/fuzzy 持久层
                 pass
         return result
 
@@ -4839,8 +4881,8 @@ class MindForge:
                     if act.added_tags:
                         self._storage.append_tags(act.memory_id, act.added_tags)
                     applied += 1
-                except Exception:
-                    pass
+                except Exception as _act_err:
+                    logger.warning("应用记忆动作（调整重要性/追加标签）失败: %s", _act_err)
             return {
                 "conflicts_found": len(conflicts),
                 "conflicts": [c.to_dict() for c in conflicts[:50]],

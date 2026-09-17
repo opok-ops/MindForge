@@ -3,12 +3,15 @@ MindForge v5.0 记忆整合器
 记忆摘要、时间线、关联整合
 """
 
+import logging
 import time
 from dataclasses import dataclass
 from typing import List, Dict, Optional
 from collections import defaultdict
 
 from core.storage import StorageEngine, MemoryEntry
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -58,8 +61,9 @@ class MemoryIntegrator:
             if entry.encrypted:
                 try:
                     content = self.storage.decrypt_content(entry)
-                except (ValueError, TypeError):
-                    pass
+                except (ValueError, TypeError) as _dec_err:
+                    logger.warning("整合记忆 %s 解密失败，跳过该条: %s",
+                                   entry.id, _dec_err)
             preview = content[:80] + "..." if len(content) > 80 else content
             key_points.append(preview)
 
@@ -113,8 +117,9 @@ class MemoryIntegrator:
         if target.encrypted:
             try:
                 target_content = self.storage.decrypt_content(target)
-            except (ValueError, TypeError):
-                pass
+            except (ValueError, TypeError) as _dec_err:
+                logger.warning("整合目标记忆 %s 解密失败，跳过: %s",
+                               target.id, _dec_err)
 
         target_words = set(target_content.lower().split())
 
@@ -129,8 +134,9 @@ class MemoryIntegrator:
             if entry.encrypted:
                 try:
                     content = self.storage.decrypt_content(entry)
-                except (ValueError, TypeError):
-                    pass
+                except (ValueError, TypeError) as _dec_err:
+                    logger.warning("整合记忆 %s 解密失败，跳过该条: %s",
+                                   entry.id, _dec_err)
 
             entry_words = set(content.lower().split())
             common = target_words & entry_words

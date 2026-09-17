@@ -1,5 +1,5 @@
 """
-MindForge v5.5.2 查询引擎
+MindForge 查询引擎
 语义检索 + 知识图谱查询 + 上下文优化
 """
 
@@ -46,6 +46,8 @@ class RecallResult:
     strategy_used: str
     token_estimate: int
     layers_used: List[str] = field(default_factory=list)
+    # v5.7.0 P1：加密兜底启用时为 True，表示部分结果来自全量解密扫描
+    approximate: bool = False
 
 
 # v5.5.5 P1 新增：中文技术同义词词典（50+ 组）
@@ -284,6 +286,31 @@ class QueryEngine:
                         "安装命令: pip install sentence-transformers"
                     )
 
+        # v5.7.0 P1（v5.5.7 遗留）：加密模式全量解密扫描兜底。
+        # 加密库 content 列为空、FTS5 刻意不落明文（磁盘静态加密）；TF-IDF/fuzzy
+        # 虽已在内存解密后召回加密记忆，但为覆盖一切进程形态（内存索引淘汰、
+        # 纯 FTS 部署、水合时机之外），当召回不足时对加密条目批量解密扫描，
+        # 牺牲性能换正确性：保证关键词/模糊搜索对加密记忆不 0 命中。
+        # 结果统一标记 approximate=True（结果仍按分数参与排序与精排）。
+        approximate = False
+        if self.storage.encrypted:
+            _qualified = [s for s in score_map.values() if s >= min_relevance]
+            if len(_qualified) < max_results:
+                try:
+                    _fallback_hits = self.storage.search_encrypted_fallback(
+                        query, limit=max_results * 2, threshold=0.1)
+                except Exception as _fallback_err:
+                    # 兜底失败不阻断主路径（如密钥暂不可用），仅记录降级
+                    logger.warning("加密记忆兜底扫描失败，已跳过: %s", _fallback_err)
+                    _fallback_hits = []
+                if _fallback_hits:
+                    approximate = True
+                    for _fb_item in _fallback_hits:
+                        _fb_entry = _fb_item["entry"]
+                        _fb_score = min(0.95, float(_fb_item["score"]))
+                        if _fb_score >= score_map.get(_fb_entry.id, 0.0):
+                            score_map[_fb_entry.id] = _fb_score
+
         # v5.5.2 perf: entry cache to avoid double-fetch in pre-filter + result build
         # Note: intentionally NOT passing agent_id/session_id to get_memory here,
         # to avoid updating access stats for memories that are filtered out.
@@ -353,6 +380,12 @@ class QueryEngine:
             if len(chunks) >= max_results:
                 break
 
+        # v5.7.0 P2：记录搜索历史（审计写入失败不阻断主路径）
+        try:
+            self.storage.record_search(query)
+        except Exception:
+            pass
+
         elapsed = (time.time() - start) * 1000
         token_estimate = sum(len(c.content) for c in chunks) // 4
 
@@ -365,6 +398,7 @@ class QueryEngine:
             strategy_used=strategy_used,
             token_estimate=token_estimate,
             layers_used=used_layers,
+            approximate=approximate,
         )
 
     def get_session_context(self,

@@ -1,5 +1,5 @@
 """
-MindForge v5.4.2 共享记忆冲突解决
+MindForge 共享记忆冲突解决
 
 联邦/多 Agent 场景下，多个节点可能并发更新同一条共享记忆。
 本模块提供持久化的冲突检测与解决：
@@ -261,8 +261,8 @@ class SharedConflictResolver:
                     self.storage.save_version(
                         local_id, local.content or "", local.category,
                         list(local.tags or []), local.importance, actor="conflict-lww")
-                except Exception:
-                    pass
+                except Exception as _ver_err:
+                    logger.warning("冲突解决前保存旧版本失败: %s", _ver_err)
                 # v5.4.2 修复：检查 update_memory 返回值，失败时回退到 keep_both
                 updated = self.storage.update_memory(local_id, content=incoming_content,
                                                      actor=actor or from_peer)
@@ -310,8 +310,8 @@ class SharedConflictResolver:
                 self.storage.link_memories(local_id, new_entry.id,
                                            link_type="conflict_branch",
                                            note=f"v5.4.2 冲突分支（{conflict_id}）")
-            except Exception:
-                pass
+            except Exception as _link_err:
+                logger.warning("冲突分支关联失败: %s", _link_err)
             resolution = "keep_both"
 
         self._mark(conflict_id, "resolved", resolution, resolved_memory_id, actor)
@@ -488,8 +488,8 @@ class SharedConflictResolver:
                     if branch is not None:
                         self.storage.delete_memory(branch_id)
                         result["freed_memory_ids"].append(branch_id)
-                except Exception:
-                    pass
+                except Exception as _del_err:
+                    logger.warning("删除冲突分支记忆失败: %s", _del_err)
             try:
                 conn.execute(
                     "DELETE FROM memory_links"
@@ -498,8 +498,8 @@ class SharedConflictResolver:
                     " AND link_type = 'conflict_branch'",
                     (row["local_memory_id"], branch_id,
                      branch_id, row["local_memory_id"]))
-            except Exception:
-                pass
+            except Exception as _link_err:
+                logger.warning("清理冲突分支关联失败: %s", _link_err)
             conn.execute(
                 "UPDATE share_conflicts SET status = 'archived'"
                 " WHERE id = ?",

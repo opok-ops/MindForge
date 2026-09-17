@@ -1,5 +1,5 @@
 """
-MindForge v5.3.9 记忆 → 技能转化引擎
+MindForge 记忆 → 技能转化引擎
 ====================================
 核心想法：一组「解决某问题」的记忆，可以被抽象成可复用的技能模板：
     Skill = {name, description, triggers, slots, steps, examples, tags}

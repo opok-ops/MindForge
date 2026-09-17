@@ -274,7 +274,7 @@
       }
 
       if (!results.length) {
-        list.innerHTML = '<li class="search-empty">没有匹配 <b>' + esc(q) + '</b> 的内容<br>试试「加密」「召回」「5.6.9」「MCP」</li>';
+        list.innerHTML = '<li class="search-empty">没有匹配 <b>' + esc(q) + '</b> 的内容<br>试试「加密」「召回」「5.7.0」「MCP」</li>';
         active = -1;
         input.removeAttribute('aria-activedescendant');
         return;

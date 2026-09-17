@@ -628,8 +628,8 @@ button.chip[aria-pressed="true"] { color: var(--text); background: var(--grad-so
 
     <div class="pv-side-note">
       <b>关于本页</b><br>
-      这是 MindForge Web 的<b>界面形态预览</b>。上一版页面里的示例记忆、图谱与事件流已全部移除，
-      现在页面上出现的每一个数字都来自你本机运行中的 MindForge REST API。<br><br>
+      这是 MindForge Web 的<b>界面形态预览</b>。本页<b>不内置任何示例数据</b>，
+      页面上出现的每一个数字都来自你本机运行中的 MindForge REST API。<br><br>
       点开任意数据视图，未连接时只会看到连接引导，不会看到替代数据。<br><br>
       本地已有能力可用 <a href="demo.html">交互演示</a> 体验。
     </div>
@@ -686,8 +686,9 @@ button.chip[aria-pressed="true"] { color: var(--text); background: var(--grad-so
 
       <p class="pv-notice" role="note">
         <svg class="icon icon-sm" aria-hidden="true"><use href="#i-search"/></svg>
-        <span><b>与上一版的差别</b>：上一版展示的「覆盖率 40% / 重要度 20% / 频次 15% / 衰减 20%」评分拆解，
-        是页面自己算的，<b>接口并不返回这些分因子</b>。现在只展示接口真实给出的字段。</span>
+        <span><b>关于评分构成</b>：检索接口只返回单一 <code>relevance_score</code>，
+        <b>不返回分因子明细</b>（覆盖率 / 重要度 / 频次 / 衰减）。本页只展示接口真实给出的字段，
+        不自行构造评分构成。</span>
       </p>
 
       <div class="pv-tools">
@@ -762,8 +763,8 @@ button.chip[aria-pressed="true"] { color: var(--text); background: var(--grad-so
 
       <p class="pv-notice" role="note">
         <svg class="icon icon-sm" aria-hidden="true"><use href="#i-alert"/></svg>
-        <span><b>不做曲线拟合</b>：上一版页面的「Ebbinghaus 双曲线」是画出来的示意图。
-        这里改为直接按接口返回的真实 strength 与写入天数打点，不生成未经测量的衰减曲线。</span>
+        <span><b>不做曲线拟合</b>：本页不生成 Ebbinghaus 衰减曲线这类未经测量的示意图，
+        直接按接口返回的真实 <code>strength</code> 与写入时间打点。</span>
       </p>
 
       <div id="tl-body"></div>
@@ -832,7 +833,8 @@ button.chip[aria-pressed="true"] { color: var(--text); background: var(--grad-so
             </tbody>
           </table>
         </div>
-        <p class="pv-block-desc" style="margin-top:12px">上一版页面写的 <b>Writer / Guest 两级角色是不存在的</b>，已删除。权限判定为
+        <p class="pv-block-desc" style="margin-top:12px">空间中只有 <b>owner / editor / reader 三级角色</b>，
+        不存在 Writer、Guest 之类的中间层级。权限判定为
         <code>check_permission(space_id, agent_id, required)</code>，本质是等级比较（<code>_ROLE_RANK[role] &gt;= _ROLE_RANK[required]</code>）。</p>
       </div>
 

@@ -7,8 +7,14 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
-    # 仅升级补丁/次版本，不自动跨大版本（大版本需人工评估）
+    # 仅升级补丁/次版本，不自动跨大版本（大版本需人工评估）。
+    # 注意：Dependabot 的 versioning-strategy 控制的是「新版本号如何写进清单」，
+    # 而不是升级幅度；真正决定是否跨大版本的是下面的 ignore 规则。
     versioning-strategy: increase
+    ignore:
+      # 大版本一律不自动提：需人工评估 breaking change 后手动升级。
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     labels:
       - "dependencies"
       - "security"
@@ -19,5 +25,9 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    ignore:
+      # action 跨大版本（如 v5 -> v7）常伴随输入/输出契约变更，需人工评估。
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     labels:
       - "github-actions"

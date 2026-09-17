@@ -36,7 +36,7 @@
   "applicationSubCategory": "AI Agent Memory System",
   "operatingSystem": "Windows, macOS, Linux",
   "programmingLanguage": "Python",
-  "softwareVersion": "5.7.0",
+  "softwareVersion": "5.7.1",
   "toolCount": 33,
   "moduleCount": 15,
   "testCount": 751,
@@ -144,7 +144,7 @@
         </svg>
       </span>
       <span class="brand-name">MindForge</span>
-      <span class="brand-ver">v5.7.0</span>
+      <span class="brand-ver">v5.7.1</span>
     </a>
 
     <div class="search" id="site-search" role="search">
@@ -209,7 +209,7 @@
         <div class="hero-liquid" aria-hidden="true"><i></i><i></i><i></i></div>
       <div class="hero-badges reveal">
         <span class="hero-badge">
-          <b>v5.7.0</b>
+          <b>v5.7.1</b>
           <span class="sep" aria-hidden="true"></span>
           <span>四层记忆架构 · 六路混合检索 · 端侧加密</span>
         </span>
@@ -331,7 +331,7 @@
           </div>
           <pre class="term-body"><code><span class="l"><span class="tk-prompt">$</span> git clone https://github.com/opok-ops/MindForge.git</span>
 <span class="l"><span class="tk-prompt">$</span> cd MindForge && pip install -e .</span>
-<span class="l dim">Successfully installed mindforge-5.7.0</span>
+<span class="l dim">Successfully installed mindforge-5.7.1</span>
 <span class="l"><span class="tk-prompt">$</span> python</span>
 <span class="l dim">&gt;&gt;&gt; from MindForge import MindForge</span>
 <span class="l dim">&gt;&gt;&gt; m = MindForge(db_path="./data/memory.db")</span>
@@ -449,8 +449,8 @@
   <div class="container">
     <div class="section-head reveal">
       <span class="tag"><span class="tag-dot" aria-hidden="true"></span>关于开发者</span>
-      <h2 id="dev-title">一个人，从第一行代码敲到 v5.7.0</h2>
-      <p>写这套系统的只有一个人。没有团队，没有融资——小顾一个人从第一行代码敲到 v5.7.0，每一行都是自己写的。</p>
+      <h2 id="dev-title">一个人，从第一行代码敲到 v5.7.1</h2>
+      <p>写这套系统的只有一个人。没有团队，没有融资——小顾一个人从第一行代码敲到 v5.7.1，每一行都是自己写的。</p>
     </div>
 
     <div class="web-card glass reveal" style="text-align:left;max-width:880px">
@@ -462,10 +462,10 @@
         </div>
       </div>
       <p style="color:var(--text-dim);line-height:1.8;margin-bottom:18px">MindForge 是我一个人打磨的 AI Agent 终身记忆系统：四层记忆架构、知识图谱、六路混合检索、端侧 AES-256-GCM 加密、联邦网络，全部本地运行、数据不上云。没有名校背景，也没有大厂履历，每一行代码都是自己敲出来的。</p>
-      <p style="color:var(--text-dim);line-height:1.8;margin-bottom:22px">从第一行代码到现在 v5.7.0，没有团队，没有融资，就一个人、一台电脑，一个版本一个版本往上堆。751 个测试用例全部通过，33 个 MCP 工具，15 个核心模块，GitHub Actions CI 全绿。学历不能定义一个人的上限，但代码可以证明一个人的态度。</p>
+      <p style="color:var(--text-dim);line-height:1.8;margin-bottom:22px">从第一行代码到现在 v5.7.1，没有团队，没有融资，就一个人、一台电脑，一个版本一个版本往上堆。761 个测试用例全部通过，33 个 MCP 工具，15 个核心模块，GitHub Actions CI 全绿。学历不能定义一个人的上限，但代码可以证明一个人的态度。</p>
 
       <div class="about-stats">
-        <div class="about-stat"><b>751</b><span>测试用例全绿</span></div>
+        <div class="about-stat"><b>761</b><span>测试用例全绿</span></div>
         <div class="about-stat"><b>33</b><span>MCP 工具</span></div>
         <div class="about-stat"><b>15</b><span>核心模块</span></div>
         <div class="about-stat"><b>100%</b><span>本地加密 · 不上云</span></div>
@@ -908,12 +908,27 @@
     <div class="section-head reveal">
       <span class="tag"><span class="tag-dot" aria-hidden="true"></span>更新日志</span>
       <h2 id="cl-title">每次迭代，都在进化</h2>
-      <p>从 v5.3.3 到 v5.7.0，功能扩展、安全加固与 Bug 修复的完整轨迹（近期重点版本）。</p>
+      <p>从 v5.3.3 到 v5.7.1，功能扩展、安全加固与 Bug 修复的完整轨迹（近期重点版本）。</p>
     </div>
 
     <div class="cl-list">
       <article class="cl-item is-latest glass reveal">
-        <div class="cl-meta"><span class="cl-ver">v5.7.0</span><span class="cl-date">2026-09-17</span><span class="cl-kind cl-kind-latest">最新</span></div>
+        <div class="cl-meta"><span class="cl-ver">v5.7.1</span><span class="cl-date">2026-09-17</span><span class="cl-kind cl-kind-latest">最新</span></div>
+        <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
+        <div class="cl-body">
+          <h4>加密兜底去重扫描 · FTS5 多词召回 · 限流/连接/向量警告修复</h4>
+          <ul>
+            <li><b>加密兜底性能去重（P1）</b>：v5.7.0 引入的兜底在主路径 fuzzy 已跑过时二次全表扫描+逐条解密；重构后加密模式下 fuzzy 结果直接复用，命中加密条目只标记 <code>approximate</code>，结果构建段对已回填明文的条目跳过重复 AES-GCM 解密。</li>
+            <li><b>FTS5 多词召回（P2）</b>：此前把整个 query 包成单短语，英文多词必须按顺序出现；改为按空白分词后各短语用 <code>OR</code> 连接，中文无空格仍为单短语，行为不变。</li>
+            <li><b>限流与连接治理（P2）</b>：_RateLimiter 空键清理死代码修正（过滤后立即清理）；ThreadingHTTPServer 每请求新建线程导致的 SQLite 连接堆积，现请求结束显式关闭本线程连接。</li>
+            <li><b>向量维度警告（P3）</b>：换 embedding 模型后旧嵌入维度不匹配此前被静默跳过，现一次性日志提示跳过条数并建议 <code>rebuild_embeddings()</code>。</li>
+            <li><b>测试</b>：新增 10 项 v5.7.1 回归，全量 761 项通过。</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="cl-item glass reveal">
+        <div class="cl-meta"><span class="cl-ver">v5.7.0</span><span class="cl-date">2026-09-17</span><span class="cl-kind">修复</span></div>
         <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
         <div class="cl-body">
           <h4>加密搜索兜底 · API 安全加固 · 测试覆盖扩展 · 健康仪表盘</h4>

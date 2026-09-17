@@ -84,21 +84,24 @@ class _RateLimiter:
         self._lock = threading.Lock()
 
     def check(self, client_ip: str) -> bool:
-        """返回 True 表示允许，False 表示限流"""
+        """返回 True 表示允许，False 表示限流
+
+        v5.7.1 修复：原实现在 append 后才判断空键（此时 times 必非空，
+        清理逻辑是死代码）。改为过滤后立即清理空键——某 IP 的历史请求
+        全部过期时删除该键，避免冷 IP 永久驻留字典。
+        """
         now = time.time()
         with self._lock:
-            times = self._requests[client_ip]
-            times = [t for t in times if now - t < self.window]
-            if len(times) >= self.max_requests:
-                # 仍写回（保留未过期的计数），但不追加本次请求
-                self._requests[client_ip] = times
-                return False
-            times.append(now)
-            # 计数为空则删除键，避免长期驻留
+            times = [t for t in self._requests[client_ip] if now - t < self.window]
+            # 过滤后为空 → 该 IP 历史已过期，删除空键避免常驻
             if not times:
                 self._requests.pop(client_ip, None)
             else:
                 self._requests[client_ip] = times
+            if len(times) >= self.max_requests:
+                return False
+            times.append(now)
+            self._requests[client_ip] = times
             # IP 总数上限：丢弃最久未活动的键
             if len(self._requests) > self._MAX_TRACKED_IPS:
                 excess = len(self._requests) - self._MAX_TRACKED_IPS
@@ -201,6 +204,14 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
             self.handle_error(request, client_address)
         finally:
             self.shutdown_request(request)
+            # v5.7.1：请求线程结束时显式关闭本线程的 SQLite 连接，
+            # 避免 ThreadingHTTPServer 每请求新建线程导致连接对象堆积。
+            try:
+                mf = MindForgeAPIHandler.mindforge
+                if mf is not None and hasattr(mf, "storage"):
+                    mf.storage.close_thread_conn()
+            except Exception:
+                pass
             with self._thread_lock:
                 self._active_threads -= 1
 

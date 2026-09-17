@@ -28,6 +28,8 @@ except ImportError:
     _HAS_PSUTIL = False
 
 logger = logging.getLogger(__name__)
+# v5.7.1：向量维度不匹配只警告一次
+_vector_dim_mismatch_warned = False
 
 from .types import (
     PrivacyLevel, Importance, MemoryType, MemoryLayer,
@@ -6792,6 +6794,19 @@ class StorageEngine:
                 pass
             self._conn_local.conn = None
 
+    def close_thread_conn(self) -> None:
+        """关闭当前线程持有的 SQLite 连接（v5.7.1 新增）
+
+        ThreadingHTTPServer 每请求新建线程，线程结束后连接对象靠 GC 回收。
+        长期高并发下未关闭连接堆积会占用 fd 与内存。本方法供请求线程在
+        finally 中显式关闭本线程连接；挂账访问计数仍留在共享字典里，
+        由后续 flush_access / close 落库，不丢。
+        """
+        try:
+            self._close_conns()
+        except Exception:
+            logger.debug("close_thread_conn failed", exc_info=True)
+
     def checkpoint(self):
         """执行 WAL 检查点，确保所有数据落盘（v5.6.0 新增）
 
@@ -8089,11 +8104,14 @@ class StorageEngine:
             " LIMIT ?",
             (scan_limit,))
         chunk = []
+        _dim_mismatch = 0
         for mem_id, blob in cur:
             if engine and engine.is_available:
                 dv = engine.deserialize(blob)
                 if dv and len(dv) == len(vec):
                     chunk.append((mem_id, dv))
+                elif dv:
+                    _dim_mismatch += 1
             else:
                 # engine 不可用时，使用通用反序列化（float32 小端序）
                 dv = self._deserialize_vector_fallback(blob, len(vec))
@@ -8104,6 +8122,14 @@ class StorageEngine:
                 chunk = []
         if chunk:
             self._score_vector_chunk(vec, chunk, engine, heap, pool)
+        # v5.7.1：维度不匹配被静默跳过，只警告一次
+        global _vector_dim_mismatch_warned
+        if _dim_mismatch > 0 and not _vector_dim_mismatch_warned:
+            _vector_dim_mismatch_warned = True
+            logger.warning(
+                "向量检索跳过 %d 条维度不匹配的旧嵌入（查询维度=%d）。"
+                "换 embedding 模型后请运行 rebuild_embeddings() 全量重建。",
+                _dim_mismatch, len(vec))
         if not heap:
             return []
         scored = [(mid, sc) for sc, mid in sorted(heap, key=lambda x: x[0], reverse=True)]

@@ -209,12 +209,14 @@ class QueryEngine:
             if s >= score_map.get(doc_id, 0.0):
                 score_map[doc_id] = s
 
-        # 路 2：Fuzzy（TF-IDF 召回不足时补充）
+        # 路 2：Fuzzy（TF-IDF 召回不足时补充；v5.7.1：加密模式下总是跑，
+        # 供加密兜底复用结果，避免二次全表扫描）
         positive = sum(1 for _, s in tfidf_results if s >= min_relevance)
-        if positive < max_results:
-            supplements = self.storage.fuzzy_search(
+        fuzzy_hits = []
+        if self.storage.encrypted or positive < max_results:
+            fuzzy_hits = self.storage.fuzzy_search(
                 query, limit=max_results * 2, threshold=0.1)
-            for item in supplements:
+            for item in fuzzy_hits:
                 entry = item["entry"]
                 s = min(0.95, float(item["score"]))
                 if s >= score_map.get(entry.id, 0.0):
@@ -286,30 +288,14 @@ class QueryEngine:
                         "安装命令: pip install sentence-transformers"
                     )
 
-        # v5.7.0 P1（v5.5.7 遗留）：加密模式全量解密扫描兜底。
-        # 加密库 content 列为空、FTS5 刻意不落明文（磁盘静态加密）；TF-IDF/fuzzy
-        # 虽已在内存解密后召回加密记忆，但为覆盖一切进程形态（内存索引淘汰、
-        # 纯 FTS 部署、水合时机之外），当召回不足时对加密条目批量解密扫描，
-        # 牺牲性能换正确性：保证关键词/模糊搜索对加密记忆不 0 命中。
-        # 结果统一标记 approximate=True（结果仍按分数参与排序与精排）。
+        # v5.7.0 P1（v5.5.7 遗留）：加密模式兜底标记。
+        # v5.7.1 重构：加密模式下路 2 fuzzy_search 必然跑过（见上），其结果
+        # 已对加密条目内存解密打分并合并进 score_map。这里只需判断本次召回
+        # 是否含加密条目来设置 approximate 标记，不再二次全表扫描。
         approximate = False
-        if self.storage.encrypted:
-            _qualified = [s for s in score_map.values() if s >= min_relevance]
-            if len(_qualified) < max_results:
-                try:
-                    _fallback_hits = self.storage.search_encrypted_fallback(
-                        query, limit=max_results * 2, threshold=0.1)
-                except Exception as _fallback_err:
-                    # 兜底失败不阻断主路径（如密钥暂不可用），仅记录降级
-                    logger.warning("加密记忆兜底扫描失败，已跳过: %s", _fallback_err)
-                    _fallback_hits = []
-                if _fallback_hits:
-                    approximate = True
-                    for _fb_item in _fallback_hits:
-                        _fb_entry = _fb_item["entry"]
-                        _fb_score = min(0.95, float(_fb_item["score"]))
-                        if _fb_score >= score_map.get(_fb_entry.id, 0.0):
-                            score_map[_fb_entry.id] = _fb_score
+        if self.storage.encrypted and fuzzy_hits:
+            if any(h["entry"].encrypted for h in fuzzy_hits):
+                approximate = True
 
         # v5.5.2 perf: entry cache to avoid double-fetch in pre-filter + result build
         # Note: intentionally NOT passing agent_id/session_id to get_memory here,
@@ -354,7 +340,9 @@ class QueryEngine:
                 continue
 
             content_text = entry.content
-            if entry.encrypted:
+            # v5.7.1：fuzzy_search 已对加密条目回填明文（entry.content 非空），
+            # 直接用；仅未解密（content 为空串，来自 get_memory）时才解密。
+            if entry.encrypted and not content_text:
                 # v5.6.2 安全修复：单条解密失败不中断整个搜索，跳过坏数据
                 try:
                     content_text = self.storage.decrypt_content(entry)

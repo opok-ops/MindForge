@@ -113,7 +113,7 @@ class TestFts5QueryEscaping(_V547Case):
             ("C++", '"C++"'),
             ("hello:world", '"hello:world"'),
             ("(test)", '"(test)"'),
-            ("MySQL 复制", '"MySQL 复制"'),
+            ("MySQL 复制", '"MySQL" OR "复制"'),
         ]
         for raw, expect in cases:
             with self.subTest(query=raw):

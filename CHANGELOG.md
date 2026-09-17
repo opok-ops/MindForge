@@ -3,6 +3,26 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [5.7.1] - 2026-09-17
+
+### Fixed
+- **P1 加密兜底性能去重（core/query.py）**：v5.7.0 引入的加密兜底在主路径 fuzzy_search
+  已跑过时二次调用 `search_encrypted_fallback`，加密模式下每次搜索跑两遍全表+逐条解密。
+  重构为：加密模式下路 2 fuzzy_search 必然执行，结果直接复用；兜底段只判断本次召回
+  是否含加密条目来设置 `approximate` 标记，不再二次扫描。结果构建段对 fuzzy 已回填明文
+  的条目跳过重复解密，消除每命中一条加密记忆就多一次 AES-GCM 解密。
+- **P2 FTS5 多词召回（core/indexer.py）**：`_escape_fts5_query` 此前把整个 query 包成单短语，
+  英文多词（如 "search bug"）必须按顺序出现，召回率低。改为按空白分词后各短语用 `OR` 连接；
+  中文无空格仍为单短语查询，行为不变。
+- **P2 限流空键死代码（api/server.py）**：`_RateLimiter.check()` 原在 append 后才判断空键
+  （此时 times 必非空，清理逻辑永不执行）。改为过滤后立即清理空键——某 IP 历史全部过期时
+  删除该键，避免冷 IP 永久驻留字典。
+- **P2 请求线程 SQLite 连接泄漏（core/storage.py + api/server.py）**：ThreadingHTTPServer
+  每请求新建线程，thread-local 连接靠 GC 回收。新增 `StorageEngine.close_thread_conn()`，
+  在 `_process_request_thread` finally 中显式关闭本线程连接，避免长期高并发下连接对象堆积。
+- **P3 向量维度不匹配静默跳过（core/storage.py）**：换 embedding 模型后旧嵌入维度不匹配被
+  静默跳过，用户无感知。新增一次性 `logger.warning`，提示跳过条数与建议 `rebuild_embeddings()`。
+
 ## [5.7.0] - 2026-09-17
 
 ### Added

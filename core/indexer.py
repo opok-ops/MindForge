@@ -308,20 +308,26 @@ class IndexEngine:
 
     @staticmethod
     def _escape_fts5_query(query: str) -> str:
-        """转义 FTS5 查询特殊字符（v5.4.7 新增）
+        """转义 FTS5 查询特殊字符（v5.4.7 新增，v5.7.1 优化多词召回）
 
         FTS5 MATCH 语法中 + - * ( ) " : 等是特殊字符，
         直接传入会导致 OperationalError。用双引号包裹为短语查询，
         同时转义内部的双引号。
+
+        v5.7.1：按空白分词后用 OR 连接各短语。英文/数字多词查询
+        （如 "search bug"）可同时召回含任一短语的文档；中文无空格
+        仍为单短语查询，行为不变。
         """
-        # 去除首尾空白
         q = query.strip()
         if not q:
             return q
-        # 转义内部双引号
-        q = q.replace('"', '""')
-        # 用双引号包裹为短语查询
-        return f'"{q}"'
+        tokens = [t for t in q.split() if t]
+        # 单 token（含中文无空格）保持原短语行为
+        if len(tokens) <= 1:
+            return '"' + q.replace('"', '""') + '"'
+        # 多 token：各自转义为短语后 OR 连接
+        escaped = ['"' + t.replace('"', '""') + '"' for t in tokens]
+        return " OR ".join(escaped)
 
     def fts_search(self, conn: sqlite3.Connection, query: str,
                    top_k: int = 10) -> List[Tuple[str, float]]:

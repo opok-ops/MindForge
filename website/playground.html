@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MindForge 在线体验 — 浏览器里跑起你的 AI 记忆库</title>
+<meta name="description" content="无需安装、无需服务器：在浏览器中用 Pyodide 真实运行 MindForge 记忆引擎，30 秒内 add() 写入记忆、search() 六路风格混合召回。深色科技风在线 Playground。">
+<meta name="robots" content="noindex, follow">
+<meta name="theme-color" content="#060a14">
+<link rel="canonical" href="https://opok-ops.github.io/MindForge/playground.html">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%232dd4bf' stroke-width='2.4'/%3E%3Cpath d='M9 16a7 7 0 0 1 14 0' fill='none' stroke='%232dd4bf' stroke-width='2.4' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='16' r='2.6' fill='%232dd4bf'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg0:#060a14; --bg1:#0a1020; --bg2:#0d1526;
+    --panel:rgba(255,255,255,.045); --panel2:rgba(255,255,255,.07);
+    --stroke:rgba(255,255,255,.12); --stroke-soft:rgba(255,255,255,.07);
+    --txt:#e8eefc; --dim:#9fb0d0; --mute:#66779c;
+    --acc:#2dd4bf; --acc2:#38bdf8; --warn:#fbbf24; --bad:#f87171; --ok:#34d399;
+    --r:14px; --mono:"JetBrains Mono","SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+    --sans:"Inter","Sora",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:var(--sans); color:var(--txt); min-height:100vh;
+    background:
+      radial-gradient(1100px 600px at 8% -10%, rgba(45,212,191,.14), transparent 60%),
+      radial-gradient(900px 700px at 96% 0%, rgba(56,189,248,.12), transparent 60%),
+      linear-gradient(165deg,var(--bg0),var(--bg1) 50%,var(--bg2));
+    background-attachment:fixed; -webkit-font-smoothing:antialiased; line-height:1.5;
+  }
+  a{color:inherit}
+  .topbar{position:sticky; top:0; z-index:20; display:flex; align-items:center; gap:14px;
+    padding:14px 22px; backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    background:rgba(6,10,20,.72); border-bottom:1px solid var(--stroke-soft)}
+  .brand{display:flex; align-items:center; gap:10px; font-weight:700; text-decoration:none; font-size:16px}
+  .brand svg{width:26px;height:26px}
+  .brand small{font-weight:500; color:var(--mute); font-size:12px}
+  .spacer{flex:1}
+  .btn{display:inline-flex; align-items:center; gap:7px; padding:8px 15px; border-radius:999px;
+    border:1px solid var(--stroke); background:var(--panel); color:var(--txt);
+    font:600 13.5px var(--sans); cursor:pointer; text-decoration:none; transition:.18s}
+  .btn:hover{background:var(--panel2); transform:translateY(-1px)}
+  .btn .ic{width:15px;height:15px}
+  .wrap{max-width:1180px; margin:0 auto; padding:26px 22px 60px}
+  .hero{text-align:center; margin:14px 0 26px}
+  .hero .pill{display:inline-flex; align-items:center; gap:8px; padding:6px 14px; border-radius:999px;
+    background:var(--panel); border:1px solid var(--stroke-soft); font-size:12.5px; color:var(--dim); margin-bottom:14px}
+  .hero .pill .dot{width:7px;height:7px;border-radius:50%;background:var(--ok); box-shadow:0 0 10px var(--ok)}
+  .hero h1{font-size:clamp(26px,4.4vw,44px); letter-spacing:-.02em; line-height:1.12; margin-bottom:12px}
+  .hero h1 .g{background:linear-gradient(120deg,var(--acc),var(--acc2)); -webkit-background-clip:text; background-clip:text; color:transparent}
+  .hero p{color:var(--dim); font-size:clamp(14px,1.8vw,16.5px); max-width:680px; margin:0 auto}
+  .hero p b{color:var(--txt)}
+  .hero p code{font-family:var(--mono); color:var(--acc)}
+  .status{display:flex; align-items:center; justify-content:center; gap:10px; margin:18px auto 0;
+    font:500 13px var(--mono); color:var(--dim)}
+  .status .pulse{width:9px;height:9px;border-radius:50%;background:var(--warn); animation:pl 1.1s infinite}
+  .status.ready .pulse{background:var(--ok); animation:none; box-shadow:0 0 10px var(--ok)}
+  @keyframes pl{0%,100%{opacity:.35}50%{opacity:1}}
+  .grid{display:grid; grid-template-columns:1.05fr .95fr; gap:18px; margin-top:8px}
+  @media (max-width:880px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--panel); border:1px solid var(--stroke); border-radius:var(--r);
+    backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); overflow:hidden}
+  .card-head{display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--stroke-soft); font-weight:600; font-size:14px}
+  .card-head .dots{display:flex; gap:6px; margin-right:4px}
+  .card-head .dots i{width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,.16)}
+  .card-head .dots i:first-child{background:#ff5f57}
+  .card-head .dots i:nth-child(2){background:#febc2e}
+  .card-head .dots i:nth-child(3){background:#28c840}
+  .card-head .tag{margin-left:auto; font:500 11px var(--mono); color:var(--mute)}
+  .term{display:flex; flex-direction:column; height:520px}
+  .term-out{flex:1; overflow-y:auto; padding:14px 16px; font:13px/1.7 var(--mono);}
+  .term-out .ln{white-space:pre-wrap; word-break:break-word}
+  .term-out .pr{color:var(--acc); user-select:none}
+  .term-out .cm{color:var(--mute)}
+  .term-out .ok{color:var(--ok)}
+  .term-out .err{color:var(--bad)}
+  .term-out .dim{color:var(--dim)}
+  .term-out .out{color:#cfe8ff}
+  .term-input{display:flex; align-items:center; gap:10px; padding:11px 16px; border-top:1px solid var(--stroke-soft); background:rgba(0,0,0,.18)}
+  .term-input .pr{color:var(--acc); font:13px var(--mono); user-select:none}
+  .term-input input{flex:1; background:transparent; border:0; outline:0; color:var(--txt); font:13.5px var(--mono)}
+  .term-input input::placeholder{color:var(--mute)}
+  .term-input input:disabled{opacity:.5}
+  .quick{display:flex; flex-wrap:wrap; gap:8px; padding:10px 16px; border-top:1px solid var(--stroke-soft)}
+  .chip{padding:6px 12px; border-radius:8px; background:var(--panel2); border:1px solid var(--stroke-soft);
+    color:var(--dim); font:500 12px var(--mono); cursor:pointer; transition:.15s}
+  .chip:hover{color:var(--txt); border-color:var(--acc); transform:translateY(-1px)}
+  .mem{display:flex; flex-direction:column; height:520px}
+  .mem-body{flex:1; overflow-y:auto; padding:14px 16px}
+  .layerbar{display:flex; gap:6px; margin-bottom:14px}
+  .layerbar .lv{flex:1; text-align:center; padding:8px 4px; border-radius:9px; background:var(--panel2); border:1px solid var(--stroke-soft)}
+  .layerbar .lv b{display:block; font-size:15px; color:var(--txt)}
+  .layerbar .lv span{font-size:10.5px; color:var(--mute); letter-spacing:.03em}
+  .memlist{display:flex; flex-direction:column; gap:10px}
+  .mitem{padding:11px 13px; border-radius:11px; background:var(--panel2); border:1px solid var(--stroke-soft); border-left:3px solid var(--acc)}
+  .mitem .mt{font-size:13.5px; color:var(--txt); margin-bottom:6px}
+  .mitem .mm{display:flex; align-items:center; gap:8px; font-size:11.5px; color:var(--mute)}
+  .mitem .mm .cat{padding:2px 8px; border-radius:999px; background:rgba(45,212,191,.12); color:var(--acc); font-family:var(--mono)}
+  .mitem.hit{border-left-color:var(--warn); box-shadow:0 0 0 1px rgba(251,191,36,.25)}
+  .mscore{flex:1; height:5px; border-radius:99px; background:rgba(255,255,255,.1); overflow:hidden}
+  .mscore i{display:block; height:100%; width:0; background:linear-gradient(90deg,var(--acc),var(--acc2)); transition:width .5s ease}
+  .mem-empty{text-align:center; color:var(--mute); padding:40px 10px; font-size:13px}
+  .mem-empty .big{font-size:34px; margin-bottom:8px; opacity:.5}
+  .cmdline{margin-top:18px; display:flex; align-items:center; gap:12px; padding:13px 16px;
+    background:rgba(0,0,0,.25); border:1px solid var(--stroke-soft); border-radius:12px}
+  .cmdline code{flex:1; font:13px var(--mono); color:var(--dim); overflow-x:auto; white-space:nowrap}
+  .cmdline code b{color:var(--acc)}
+  .copy{display:inline-flex; align-items:center; gap:6px; padding:7px 13px; border-radius:8px;
+    background:var(--panel2); border:1px solid var(--stroke-soft); color:var(--txt); font:600 12.5px var(--sans); cursor:pointer}
+  .copy:hover{border-color:var(--acc)}
+  .note{margin-top:14px; text-align:center; color:var(--mute); font-size:12.5px}
+  .note a{color:var(--acc); text-decoration:none}
+  .term-out::-webkit-scrollbar,.mem-body::-webkit-scrollbar{width:8px}
+  .term-out::-webkit-scrollbar-thumb,.mem-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12); border-radius:8px}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <a class="brand" href="index.html">
+    <svg viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="13" stroke="#2dd4bf" stroke-width="2.2"/><path d="M9 16a7 7 0 0 1 14 0" stroke="#2dd4bf" stroke-width="2.2" stroke-linecap="round"/><circle cx="16" cy="16" r="2.6" fill="#2dd4bf"/></svg>
+    MindForge <small>· 在线 Playground</small>
+  </a>
+  <div class="spacer"></div>
+  <a class="btn" href="index.html">← 返回首页</a>
+  <a class="btn" href="https://github.com/opok-ops/MindForge" target="_blank" rel="noopener">
+    <svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.7 5.45.7 11.9c0 5.06 3.29 9.35 7.86 10.86.57.1.78-.25.78-.55v-1.94c-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.19 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 5.79 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.12 3.05.74.81 1.18 1.84 1.18 3.1 0 4.43-2.69 5.4-5.25 5.69.41.36.78 1.06.78 2.14v3.17c0 .3.2.66.79.55a11.4 11.4 0 0 0 7.85-10.86C23.3 5.45 18.35.5 12 .5Z"/></svg>
+    Star
+  </a>
+</header>
+
+<main class="wrap">
+  <div class="hero">
+    <span class="pill"><span class="dot"></span> 由 Pyodide 在浏览器本地运行 · 数据不上传任何服务器</span>
+    <h1>30 秒，在浏览器里<br>拥有你自己的 <span class="g">AI 记忆库</span></h1>
+    <p>左侧终端是一个<b>真实运行的 Python 进程</b>。试着 <code>add()</code> 写入一条记忆，再 <code>search()</code> 把它召回——和本地安装版同款 API。</p>
+    <div class="status" id="status"><span class="pulse"></span><span id="status-text">正在加载 Python 运行时（首次约 5–10 秒）…</span></div>
+  </div>
+
+  <div class="grid">
+    <section class="card term">
+      <div class="card-head">
+        <div class="dots"><i></i><i></i><i></i></div>
+        python — mindforge-playground
+        <span class="tag" id="mem-count">0 memories</span>
+      </div>
+      <div class="term-out" id="term"></div>
+      <div class="quick" id="quick">
+        <button class="chip" data-cmd="demo">⚡ 一键载入示例</button>
+        <button class="chip" data-cmd="add">＋ 添加一条记忆</button>
+        <button class="chip" data-cmd="search">🔍 搜索记忆</button>
+        <button class="chip" data-cmd="clear">清空记忆</button>
+      </div>
+      <div class="term-input">
+        <span class="pr">&gt;&gt;&gt;</span>
+        <input id="cmd" type="text" placeholder="输入命令，如 add 用户喜欢猫" disabled autocomplete="off" spellcheck="false">
+      </div>
+    </section>
+
+    <aside class="card mem">
+      <div class="card-head">
+        <div class="dots"><i></i><i></i><i></i></div>
+        记忆库 · 实时视图
+        <span class="tag">4-layer / hybrid recall</span>
+      </div>
+      <div class="mem-body">
+        <div class="layerbar">
+          <div class="lv"><b id="l-sen">0</b><span>感官</span></div>
+          <div class="lv"><b id="l-st">0</b><span>短期</span></div>
+          <div class="lv"><b id="l-lt">0</b><span>长期</span></div>
+          <div class="lv"><b id="l-perm">0</b><span>永久</span></div>
+        </div>
+        <div class="memlist" id="memlist">
+          <div class="mem-empty" id="mem-empty"><div class="big">🧠</div>记忆库还是空的<br>在左侧 add 第一条记忆试试</div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="cmdline">
+    <code id="cmd-copy"><b>$</b> git clone https://github.com/opok-ops/MindForge.git && cd MindForge && pip install -e .</code>
+    <button class="copy" id="copy-btn">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5.5 15H5a1.5 1.5 0 0 1-1.5-1.5V5A1.5 1.5 0 0 1 5 3.5h8.5A1.5 1.5 0 0 1 15 5v.5"/></svg>
+      <span id="copy-label">复制</span>
+    </button>
+  </div>
+  <p class="note">这是浏览器内的精简演示引擎（TF-IDF + 中文二元组召回）。完整 MindForge 还有向量 / FTS5 / Cross-Encoder 六路融合、知识图谱与端侧 AES-256-GCM 加密 —— <a href="https://github.com/opok-ops/MindForge" target="_blank" rel="noopener">去 GitHub 看源码</a>。</p>
+</main>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+<script>
+(function(){
+  'use strict';
+  var $ = function(id){ return document.getElementById(id); };
+  var term = $('term'), cmdInput = $('cmd'), statusEl = $('status'), statusTxt = $('status-text');
+  var memlist = $('memlist'), memEmpty = $('mem-empty'), memCount = $('mem-count');
+  var pyodide = null, ready = false;
+  var store = [];
+
+  function print(text, cls){
+    var div = document.createElement('div');
+    div.className = 'ln' + (cls ? ' ' + cls : '');
+    div.textContent = text;
+    term.appendChild(div);
+    term.scrollTop = term.scrollHeight;
+  }
+
+  function renderMem(){
+    var sen=0,st=0,lt=0,perm=0;
+    for(var i=0;i<store.length;i++){
+      var m = store[i];
+      if(m.importance==='HIGH'){perm++;}
+      else if(i < 3){sen++;}
+      else if(i < 10){st++;}
+      else {lt++;}
+    }
+    $('l-sen').textContent = sen; $('l-st').textContent = st;
+    $('l-lt').textContent = lt; $('l-perm').textContent = perm;
+    memCount.textContent = store.length + ' memories';
+
+    memlist.innerHTML = '';
+    if(!store.length){ memlist.appendChild(memEmpty); return; }
+    store.forEach(function(m){
+      var div = document.createElement('div');
+      div.className = 'mitem' + (m._hit ? ' hit' : '');
+      var bar = '';
+      if(m._score != null){
+        bar = '<div class="mscore"><i data-w="'+Math.round(m._score*100)+'"></i></div><span style="font-family:var(--mono);font-size:11px">'+m._score.toFixed(2)+'</span>';
+      }
+      div.innerHTML = '<div class="mt"></div><div class="mm"><span class="cat">'+(m.category||'general')+'</span>'+bar+'</div>';
+      div.querySelector('.mt').textContent = m.content;
+      memlist.appendChild(div);
+    });
+    requestAnimationFrame(function(){
+      memlist.querySelectorAll('.mscore i').forEach(function(i){ i.style.width = i.dataset.w + '%'; });
+    });
+  }
+
+  var PY_ENGINE = [
+    'import json, math, re',
+    'from collections import defaultdict',
+    '_df = defaultdict(int)',
+    '_docs = []',
+    'def _tok(text):',
+    '    text = text.lower()',
+    '    out = re.findall(r"[a-z0-9]+", text)',
+    '    for seg in re.findall(r"[\\u4e00-\\u9fff]+", text):',
+    '        if len(seg) <= 1: out.append(seg)',
+    '        else:',
+    '            for i in range(len(seg)-1): out.append(seg[i:i+2])',
+    '    return out',
+    'def p_add(content, category="general", importance="NORMAL"):',
+    '    global _df, _docs',
+    '    toks = _tok(content)',
+    '    tf = defaultdict(int)',
+    '    for t in toks: tf[t]+=1',
+    '    did = len(_docs)',
+    '    _docs.append({"id":did,"content":content,"category":category,"importance":importance,"tf":dict(tf)})',
+    '    seen=set()',
+    '    for t in tf:',
+    '        if t not in seen: _df[t]+=1; seen.add(t)',
+    '    return did',
+    'def p_search(query, k=5):',
+    '    global _df, _docs',
+    '    qtoks = _tok(query)',
+    '    n = len(_docs) or 1',
+    '    scores = defaultdict(float)',
+    '    for t in qtoks:',
+    '        if t not in _df: continue',
+    '        idf = math.log(1 + n / _df[t])',
+    '        for d in _docs:',
+    '            if t in d["tf"]: scores[d["id"]] += d["tf"][t] * idf',
+    '    ranked = sorted(scores.items(), key=lambda x:-x[1])[:k]',
+    '    out=[]',
+    '    top = ranked[0][1] if ranked else 1.0',
+    '    for did,sc in ranked:',
+    '        d=_docs[did]',
+    '        out.append({"id":did,"content":d["content"],"category":d["category"],"importance":d["importance"],"score":round(sc/top,3)})',
+    '    return json.dumps(out, ensure_ascii=False)',
+    'def p_clear():',
+    '    global _df, _docs',
+    '    _df = defaultdict(int); _docs = []',
+    '    return "ok"'
+  ].join('\n');
+
+  async function boot(){
+    try{
+      print('正在初始化 Pyodide 运行时…', 'cm');
+      pyodide = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/' });
+      await pyodide.runPythonAsync(PY_ENGINE);
+      ready = true;
+      statusEl.classList.add('ready');
+      statusTxt.textContent = 'Python 已就绪 · 一切都在你的浏览器里运行';
+      cmdInput.disabled = false;
+      print('MindForge playground 就绪。', 'ok');
+      print('试试: add 用户喜欢猫 / search 用户喜欢什么 / demo / clear', 'cm');
+      cmdInput.focus();
+    }catch(e){
+      statusTxt.textContent = '运行时加载失败（可能是网络受限）';
+      print('加载失败: ' + e.message, 'err');
+      print('你仍可以在本地运行完整版本: pip install -e .', 'cm');
+    }
+  }
+
+  async function runAdd(text){
+    var m = /^add\s+(.+)$/i.exec(text.trim());
+    if(!m){ print('用法: add <记忆内容> [--category X] [--importance HIGH]', 'err'); return; }
+    var body = m[1];
+    var category = 'general', importance = 'NORMAL';
+    var cm = /--category\s+(\S+)/i.exec(body);
+    if(cm){ category = cm[1]; body = body.replace(cm[0],''); }
+    var im = /--importance\s+(\S+)/i.exec(body);
+    if(im){ importance = im[1].toUpperCase(); body = body.replace(im[0],''); }
+    body = body.trim();
+    var py = 'p_add(' + JSON.stringify(body) + ', ' + JSON.stringify(category) + ', ' + JSON.stringify(importance) + ')';
+    var did = await pyodide.runPythonAsync(py);
+    store.push({content:body, category:category, importance:importance});
+    print('✓ add → #' + did + ' 已写入 (' + category + ', ' + importance + ')', 'ok');
+    renderMem();
+  }
+
+  async function runSearch(text){
+    var m = /^search\s+(.+)$/i.exec(text.trim());
+    if(!m){ print('用法: search <查询>', 'err'); return; }
+    var q = m[1].trim();
+    print('search("' + q + '")', 'dim');
+    var py = 'p_search(' + JSON.stringify(q) + ')';
+    var res = await pyodide.runPythonAsync(py);
+    var arr = JSON.parse(res);
+    store.forEach(function(x){ x._hit=false; x._score=null; });
+    if(!arr.length){
+      print('  （无召回，试试换个关键词，或先 add 几条记忆）', 'err');
+    } else {
+      arr.forEach(function(r,i){
+        print('  [' + (i+1) + '] ' + r.content + '   —— score ' + r.score, 'out');
+        var hit = store.find(function(x){ return x.content === r.content; });
+        if(hit){ hit._hit = true; hit._score = r.score; }
+      });
+    }
+    renderMem();
+  }
+
+  async function runDemo(){
+    var samples = [
+      ['用户喜欢猫，尤其橘猫', 'preferences', 'NORMAL'],
+      ['用户偏好带类型提示的 Python 代码风格', 'preferences', 'HIGH'],
+      ['本周在优化 SQLite 查询性能，建议加索引', 'work', 'NORMAL'],
+      ['用户讨厌缩进不一致的代码', 'preferences', 'NORMAL'],
+      ['数据库慢查询发生在晚上 10 点高峰期', 'work', 'NORMAL']
+    ];
+    for(var i=0;i<samples.length;i++){
+      var s = samples[i];
+      await pyodide.runPythonAsync('p_add(' + JSON.stringify(s[0]) + ', ' + JSON.stringify(s[1]) + ', ' + JSON.stringify(s[2]) + ')');
+      store.push({content:s[0], category:s[1], importance:s[2]});
+      print('✓ add → "' + s[0] + '"', 'ok');
+    }
+    renderMem();
+    print('已载入 ' + samples.length + ' 条示例记忆。现在搜索: 用户喜欢什么', 'cm');
+    setTimeout(function(){ runSearch('search 用户喜欢什么'); }, 300);
+  }
+
+  async function runClear(){
+    await pyodide.runPythonAsync('p_clear()');
+    store = [];
+    renderMem();
+    print('记忆库已清空', 'cm');
+  }
+
+  async function handle(raw){
+    var text = raw.trim();
+    if(!text) return;
+    print('>>> ' + text, 'pr');
+    if(!ready){ print('运行时尚未就绪，请稍候…', 'err'); return; }
+    try{
+      var low = text.toLowerCase();
+      if(low === 'clear'){ await runClear(); }
+      else if(low === 'demo'){ await runDemo(); }
+      else if(low === 'help'){ print('命令: add <内容> [--category X] [--importance HIGH] | search <查询> | demo | clear', 'cm'); }
+      else if(low.indexOf('add ') === 0 || low === 'add'){ await runAdd(text); }
+      else if(low.indexOf('search ') === 0 || low === 'search'){ await runSearch(text); }
+      else { print('未知命令。试试: demo / add ... / search ... / clear', 'err'); }
+    }catch(e){
+      print('错误: ' + e.message, 'err');
+    }
+  }
+
+  cmdInput.addEventListener('keydown', function(e){
+    if(e.key === 'Enter'){ var v = cmdInput.value; cmdInput.value=''; handle(v); }
+  });
+  $('quick').addEventListener('click', function(e){
+    var b = e.target.closest('.chip'); if(!b) return;
+    var c = b.dataset.cmd;
+    if(c==='demo'){ handle('demo'); }
+    else if(c==='clear'){ handle('clear'); }
+    else if(c==='add'){ cmdInput.focus(); cmdInput.placeholder='输入记忆内容，回车写入…'; }
+    else if(c==='search'){ cmdInput.focus(); cmdInput.placeholder='输入想回忆的内容…'; }
+  });
+
+  $('copy-btn').addEventListener('click', async function(){
+    var txt = document.getElementById('cmd-copy').innerText.replace(/^\$\s*/,'').trim();
+    try{ await navigator.clipboard.writeText(txt); }catch(e){}
+    var lbl = $('copy-label'); lbl.textContent = '已复制 ✓';
+    setTimeout(function(){ lbl.textContent = '复制'; }, 1600);
+  });
+
+  renderMem();
+  boot();
+})();
+</script>
+</body>
+</html>

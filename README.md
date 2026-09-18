@@ -191,6 +191,13 @@ memory:
 
 ---
 
+## Security & Upgrade Notes
+
+- **`MINDFORGE_PASSWORD` (encrypted databases)**: with an encrypted database (key file present), set the `MINDFORGE_PASSWORD` environment variable so the process can unlock it. This is required for the **dsh-mindforge bridge** and any non-interactive integration (MCP / REST API / scripts) that reads or writes an encrypted store; otherwise operations fail with an "encrypted database needs a password" error.
+- **`EXPERIMENTAL_HMAC_XOR` migration**: v5.5.7 removed the HMAC-XOR 降级加密 (downgrade encryption) path. Any blobs created under that experimental downgrade mode can no longer be decrypted. Back up your database **before upgrading** if you previously enabled this flag.
+
+---
+
 ## License
 
 [MIT](LICENSE) — Copyright (c) 2026 MindForge Project

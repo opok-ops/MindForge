@@ -2635,7 +2635,10 @@ def main(argv=None):
                        choices=["sensory", "short_term", "long_term", "permanent"], help="记忆层级")
     p_add.add_argument("--type", default="text",
                        choices=["text", "image", "audio", "code", "structured"], help="记忆类型")
-    p_add.add_argument("--session", default="cli", help="会话 ID")
+    # v5.7.x fix: --session 默认空串，与 p_search / Python API 默认身份一致。
+# 此前默认 "cli"，而 search 默认 session_id=""，INTERNAL 隐私校验
+# (source_session == session_id) 不通过，CLI add 后 search 返回 0。
+p_add.add_argument("--session", default="", help="会话 ID（默认空，与 search/Python API 默认身份一致）")
     p_add.add_argument("--agent", default="cli", help="Agent ID")
     p_add.add_argument("--star", action="store_true", help="添加后直接收藏")
 

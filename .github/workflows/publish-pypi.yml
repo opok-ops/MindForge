@@ -1,0 +1,57 @@
+name: Publish to PyPI
+
+# 触发条件：
+#   1) 在 GitHub 上创建并发布 Release（推荐方式，会自动打 tag）
+#   2) 或手动推送形如 v* 的标签（如 v5.7.2）
+# 发布方式：PyPI Trusted Publisher（OIDC），无需在仓库中存放 API token。
+# 首次使用前，请先在 PyPI 项目设置里配置 trusted publisher：
+#   Owner: opok-ops
+#   Repository name: MindForge
+#   Workflow name: publish-pypi.yml
+#   Environment name: pypi（与下方 environment 一致）
+
+on:
+  release:
+    types: [published]
+  push:
+    tags:
+      - "v*"
+
+# 默认只读；仅在发布 job 内申请 id-token 写权限用于 OIDC 签发。
+permissions:
+  contents: read
+
+jobs:
+  pypi-publish:
+    name: Build and publish to PyPI
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/mindforge
+    permissions:
+      id-token: write # 必需：向 PyPI/OIDC 提供短期身份令牌
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install build and twine
+        run: python -m pip install --upgrade pip build twine
+
+      - name: Build distribution (sdist + wheel)
+        run: python -m build
+
+      - name: Check distribution metadata
+        run: python -m twine check dist/*
+
+      - name: Publish package to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # 不设置 password：完全依靠 OIDC trusted publisher。
+          # 若 PyPI 侧尚未配置 trusted publisher，此步骤会失败，
+          # 请按文件顶部注释在 PyPI 项目设置中完成配置后重试。
+          print-hash: true

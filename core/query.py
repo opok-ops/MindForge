@@ -326,6 +326,7 @@ class QueryEngine:
 
         # ===== 第二阶段：构建结果 =====
         chunks = []
+        seen_contents: set = set()
         for doc_id, score in raw_results:
             if score < min_relevance:
                 break
@@ -349,6 +350,14 @@ class QueryEngine:
                 except Exception:
                     logger.warning("记忆 %s 解密失败，已跳过", entry.id)
                     continue
+
+            # v5.7.2：内容去重——不同 ID 但 content 完全相同的记忆只保留
+            # 分数最高的一条（raw_results 已按分数降序），避免用户重复 add
+            # 相同内容时搜索结果出现重复卡片。
+            content_key = hash(content_text)
+            if content_key in seen_contents:
+                continue
+            seen_contents.add(content_key)
 
             chunk = MemoryChunk(
                 memory_id=entry.id,

@@ -6,10 +6,14 @@ Four-Tier Memory · Knowledge Graph · Local-First · AES-256-GCM Encryption · 
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-5.7.2-green.svg)](https://github.com/opok-ops/MindForge)
+[![Version](https://img.shields.io/badge/version-5.7.2-green.svg)](https://github.com/opok-ops/MindForge/releases)
+[![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![CI](https://github.com/opok-ops/MindForge/actions/workflows/ci.yml/badge.svg)](https://github.com/opok-ops/MindForge/actions/workflows/ci.yml)
+[![Documentation](https://img.shields.io/badge/docs-pages-blue.svg)](https://opok-ops.github.io/MindForge/)
 
-> 🇨🇳 [中文文档](README.zh-CN.md) | 📖 [Documentation](docs/) | 📝 [Changelog](CHANGELOG.md) | ⭐ [Discussions](https://github.com/opok-ops/MindForge/discussions)
+> 🇨🇳 [中文文档](README.zh-CN.md) | 🌐 [Live Demo](https://opok-ops.github.io/MindForge/) | 📖 [Documentation](docs/) | 💬 [Discussions](https://github.com/opok-ops/MindForge/discussions) | ⭐ [Releases](https://github.com/opok-ops/MindForge/releases)
+
+**If MindForge saves you time, please star ⭐ the repo — it helps a solo dev keep going!**
 
 ---
 

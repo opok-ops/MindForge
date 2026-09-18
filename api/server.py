@@ -338,6 +338,13 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
+        # v5.7.2 安全加固：统一安全响应头
+        # - X-Content-Type-Options: nosniff 防止 MIME 嗅探
+        # - X-Frame-Options: DENY 防止点击劫持
+        # - Referrer-Policy: no-referrer 不泄漏来源 URL
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
         # v5.4.8 安全修复：CORS 限制为配置的源（默认仅允许同源）
         allowed_origin = os.environ.get("MINDFORGE_CORS_ORIGIN", "")
         if allowed_origin:
@@ -845,6 +852,13 @@ def start_api_server(mindforge_instance, host="127.0.0.1", port=8080,
     # v5.6.1 安全修复：非 localhost 绑定且未设置 API Key 时拒绝启动
     api_key = os.environ.get("MINDFORGE_API_KEY", "")
     is_localhost = host in ("127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1")
+    # v5.7.2 安全加固：API Key 强度校验（<16 字符给警告）
+    if api_key and len(api_key) < 16:
+        logger.warning(
+            "MINDFORGE_API_KEY 长度仅 %d 字符，建议至少 16 字符（"
+            "建议: python -c 'import secrets; print(secrets.token_urlsafe(32))'",
+            len(api_key),
+        )
     if not is_localhost and not api_key:
         raise SecurityError(
             "拒绝在非 localhost 地址上启动无认证的 API。"

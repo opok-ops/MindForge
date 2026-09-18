@@ -39,7 +39,9 @@ All data (SQLite database, keys, logs) stays on the user's machine under the use
 
 - Authentication via `Authorization: Bearer <token>` using `hmac.compare_digest` (constant-time comparison).
 - Rate limiting: 100 req/60s read, 30 req/60s write, 10 req/60s bulk import, per client IP.
-- Security response headers on all JSON responses: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`.
+- Security response headers on all JSON responses: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store` (sensitive memory content is never cached by browsers or proxies).
+- `Strict-Transport-Security: max-age=31536000` is sent automatically **only when the server's own TLS is enabled** (`ssl_certfile`); not sent on plain-HTTP local deployments. For HTTPS reverse-proxy deployments, configure HSTS at the proxy layer.
+- Header audit conclusions (v5.7.2): `Content-Security-Policy` not set — API-only service, low impact, optional; `X-XSS-Protection` not set — deprecated by modern browsers.
 - CORS restricted to explicitly configured origin (same-origin by default).
 - All unhandled exceptions return a generic `{"error": "Internal server error"}`; tracebacks go to debug logs only, never to the HTTP response.
 - TLS optional (TLS 1.2+ minimum) when cert/key files are provided.

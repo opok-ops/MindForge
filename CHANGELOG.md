@@ -3,6 +3,38 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [5.7.2] - 2026-09-18
+
+一轮**安全响应头审计与加固**发布：对 API 全部响应头做系统性审计并落地可执行项，
+其余项给出明确结论与依据。不涉及新依赖、不改变对外数据契约（新增响应头属纯增量）。
+
+### Security
+- **统一安全响应头（api/server.py）**：所有 JSON 响应新增
+  `X-Content-Type-Options: nosniff`（防 MIME 嗅探）、`X-Frame-Options: DENY`（防点击劫持）、
+  `Referrer-Policy: no-referrer`（不泄漏来源 URL）。
+- **`Cache-Control: no-store`（新增）**：敏感记忆 API 禁止缓存，防止记忆内容落入
+  浏览器或中间缓存。
+- **HSTS 条件下发（新增）**：服务端启用 TLS（`ssl_certfile`）时自动下发
+  `Strict-Transport-Security: max-age=31536000`；纯 HTTP 本地部署不下发，避免浏览器
+  强记策略后拒绝明文调试。HTTPS 反向代理部署时建议在代理层配置。
+- **API Key 强度校验**：`MINDFORGE_API_KEY` 少于 16 字符时启动告警，并给出
+  `secrets.token_urlsafe(32)` 生成建议。
+- **SECURITY.md 合规说明**：新增「API Security Baseline」章节（认证/限流/响应头/
+  CORS/错误脱敏/TLS 基线）。
+
+### 安全响应头审计结论
+| 响应头 | 审计前 | 结论 | 处理 |
+|--------|--------|------|------|
+| Strict-Transport-Security | 未设置 | HTTPS 部署可加 | TLS 启用时自动下发；反代部署在代理层加 |
+| Content-Security-Policy | 未设置 | 纯 API 服务影响低，可选 | 暂不设置（结论记录于 SECURITY.md） |
+| X-XSS-Protection | 未设置 | 已被现代浏览器废弃 | 不设置 |
+| Cache-Control | 未设置 | 敏感 API 可加 no-store | 已全局下发 `no-store` |
+
+### Tests
+- 新增 `tests/test_v572_security.py`（4 项）：响应头齐全性、纯 HTTP 不下发 HSTS、
+  TLS 启用时下发 HSTS、类默认开关为 False。
+- 全量测试 **765 项全部通过**。
+
 ## [5.7.1] - 2026-09-17
 
 ### Fixed

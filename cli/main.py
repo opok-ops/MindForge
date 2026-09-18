@@ -103,7 +103,7 @@ except ImportError:
     except (ImportError, ValueError):
         # 兜底值：仅当 core/version 完全不可导入时启用。发版时必须与
         # core/version.py 的 __version__ 一起更新（见发版清单），否则漂移。
-        __version__ = "5.7.1"
+        __version__ = "5.7.2"
 
 # 懒加载 modules：仅在对应命令执行时才导入，大幅加速 CLI 启动
 _modules_cache = {}

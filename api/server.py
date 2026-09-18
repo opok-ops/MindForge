@@ -333,6 +333,9 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
     # MindForge 实例由 server 注入
     mindforge = None
 
+    # v5.7.2 安全加固：服务端 TLS 启用时下发 HSTS（由 start_api_server 设置）
+    _tls_enabled = False
+
     def _send_json(self, data, status=200):
         body = json.dumps(data, ensure_ascii=False, default=str).encode("utf-8")
         self.send_response(status)
@@ -342,9 +345,15 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
         # - X-Content-Type-Options: nosniff 防止 MIME 嗅探
         # - X-Frame-Options: DENY 防止点击劫持
         # - Referrer-Policy: no-referrer 不泄漏来源 URL
+        # - Cache-Control: no-store 敏感记忆数据禁止落入浏览器/中间缓存
+        # - Strict-Transport-Security: 仅服务端 TLS 启用时下发（见 start_api_server）
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Cache-Control", "no-store")
+        # 用 getattr 兜底：响应桩/测试对象可能不是 MindForgeAPIHandler 实例
+        if getattr(self, "_tls_enabled", False):
+            self.send_header("Strict-Transport-Security", "max-age=31536000")
         # v5.4.8 安全修复：CORS 限制为配置的源（默认仅允许同源）
         allowed_origin = os.environ.get("MINDFORGE_CORS_ORIGIN", "")
         if allowed_origin:
@@ -870,6 +879,8 @@ def start_api_server(mindforge_instance, host="127.0.0.1", port=8080,
 
     # v5.6.1: TLS 支持
     use_https = bool(ssl_certfile)
+    # v5.7.2 安全加固：TLS 启用时下发 HSTS；纯 HTTP 本地部署不下发（避免误伤）
+    MindForgeAPIHandler._tls_enabled = use_https
     if use_https:
         import ssl as _ssl
         if not ssl_keyfile:

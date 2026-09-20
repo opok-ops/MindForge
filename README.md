@@ -2,6 +2,8 @@
 
 **A local-first, production-grade memory system for AI agents.**
 
+> **Maintainer** — **Xiao Gu (小顾)**, born in 2008 · GitHub: [opok-ops](https://github.com/opok-ops) · 抖音: [shidianduo3116](https://v.douyin.com/ZIsw2VpuT9o/) · 小红书: [4406811524](https://xhslink.cn/o/3m71WBRPD17) · Feedback: [2638895480@qq.com](mailto:2638895480@qq.com)
+
 MindForge gives AI agents a persistent, structured long-term memory: a four-tier lifecycle model, knowledge graphs, hybrid retrieval, end-to-end encryption, and MCP / CLI / REST interfaces. All data stays on your machine.
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
@@ -15,8 +17,6 @@ MindForge gives AI agents a persistent, structured long-term memory: a four-tier
 [![Documentation](https://img.shields.io/badge/docs-pages-blue.svg)](https://opok-ops.github.io/MindForge/)
 
 [English](README.md) · [中文文档](README.zh-CN.md) · [Live Demo](https://opok-ops.github.io/MindForge/) · [Documentation](docs/) · [Discussions](https://github.com/opok-ops/MindForge/discussions)
-
-> **Developer** · [小顾](https://github.com/opok-ops) · 抖音 [shidianduo3116](https://v.douyin.com/ZIsw2VpuT9o/) · 小红书 [4406811524](https://xhslink.cn/o/3m71WBRPD17) · 反馈 [2638895480@qq.com](mailto:2638895480@qq.com)
 
 ---
 

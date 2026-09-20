@@ -2,6 +2,8 @@
 
 **生产级 AI Agent 终身记忆系统，本地优先。**
 
+> **维护者** — **小顾**，2008 年出生 · GitHub: [opok-ops](https://github.com/opok-ops) · 抖音: [shidianduo3116](https://v.douyin.com/ZIsw2VpuT9o/) · 小红书: [4406811524](https://xhslink.cn/o/3m71WBRPD17) · 反馈: [2638895480@qq.com](mailto:2638895480@qq.com)
+
 MindForge 为 AI Agent 提供持久、结构化的长期记忆：四层记忆生命周期、知识图谱、混合检索、端到端加密，以及 MCP / CLI / REST 统一接口。所有数据运行并存储在本机。
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
@@ -15,8 +17,6 @@ MindForge 为 AI Agent 提供持久、结构化的长期记忆：四层记忆生
 [![Documentation](https://img.shields.io/badge/docs-pages-blue.svg)](https://opok-ops.github.io/MindForge/)
 
 [English](README.md) · [中文文档](README.zh-CN.md) · [在线体验](https://opok-ops.github.io/MindForge/) · [完整文档](docs/) · [讨论区](https://github.com/opok-ops/MindForge/discussions)
-
-> **Developer** · [小顾](https://github.com/opok-ops) · 抖音 [shidianduo3116](https://v.douyin.com/ZIsw2VpuT9o/) · 小红书 [4406811524](https://xhslink.cn/o/3m71WBRPD17) · 反馈 [2638895480@qq.com](mailto:2638895480@qq.com)
 
 ---
 

@@ -95,7 +95,7 @@ class GenericAPIAdapter:
     def _handle_get(self, params: Dict) -> Optional[Dict]:
         entry = self.cm.get(
             self._require(params, "id"),
-            actor=params.get("actor", "api"),
+            actor=params.get("actor", ""),  # v5.7.3：未传 actor 视同本机内部调用
             session_id=params.get("session_id", ""),
         )
         return entry.to_dict() if entry else None
@@ -105,7 +105,7 @@ class GenericAPIAdapter:
             query=params["query"],
             max_results=params.get("limit", 10),
             categories=params.get("categories"),
-            agent_id=params.get("actor", "api"),
+            agent_id=params.get("actor", ""),  # v5.7.3：未传 actor 视同本机内部调用
             session_id=params.get("session_id", ""),
         )
         return {
@@ -140,14 +140,14 @@ class GenericAPIAdapter:
             content=params.get("content"),
             category=params.get("category"),
             tags=params.get("tags"),
-            actor=params.get("actor", "api"),
+            actor=params.get("actor", ""),  # v5.7.3：未传 actor 视同本机内部调用
             session_id=params.get("session_id", ""),
         )
 
     def _handle_delete(self, params: Dict) -> bool:
         return self.cm.delete(
             self._require(params, "id"),
-            actor=params.get("actor", "api"),
+            actor=params.get("actor", ""),  # v5.7.3：未传 actor 视同本机内部调用
             session_id=params.get("session_id", ""),
         )
 

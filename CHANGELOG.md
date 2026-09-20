@@ -3,6 +3,51 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [5.7.3] - 2026-09-20
+
+隐私边界加固 + 加密导出发布：修复 API 与核心层的越权读改写路径，
+新增 `export-json` / `import-json` 密码加密传输能力。
+
+### Security（高危修复）
+
+- **INTERNAL 记忆空值越权修复（modules/privacy.py）**：`check_access` 重构为
+  「本机无身份调用（CLI/单用户）放行；显式身份（含远程 anonymous）必须与来源
+  agent/session 精确匹配，空值不参与匹配」。此前空 `actor`/`session_id` 与
+  INTERNAL 级来源恒等，任何调用者可越权读取 INTERNAL 记忆。
+- **API 读改写路径 fail-closed（api/server.py）**：已配置 `MINDFORGE_API_KEY` 的
+  部署中，未声明调用者回落为 `anonymous`（仅可访问 PUBLIC），不再回落为空身份
+  放行隐私记忆；`GET/PUT/DELETE /api/memories/{id}`、`/api/search`、`/api/export`
+  全部透传 `actor`/`session_id`，杜绝持 Key 越权改删他人 PRIVATE/STRICT 记忆。
+- **2FA 在线穷举防护（modules/privacy.py）**：验证码校验新增失败计数与
+  60 秒锁定期（5 次失败触发），防暴力破解；仅内存态、进程重启自动清零。
+- **访问日志脱敏（api/server.py）**：`log_message` 剥离 query string 与路径中的
+  记忆 ID，搜索词与记忆 ID 不再写入日志。
+- **legacy 密钥错误密码锁死修复（core/encryption.py）**：旧版密钥文件（无
+  `verify_blob`）输入错误密码不再静默放行并重写密钥文件，避免正确密码被永久
+  锁死的可用性事故。
+- **rekey 环境变量残留清理（cli/main.py）**：`cmd_rekey` 以 try/finally 包裹，
+  确保明文旧密码从环境变量清理。
+
+### Features
+
+- **加密导出/导入（v5.7.3 新增）**：`mindforge export-json --password <pwd>`
+  以 AES-256-GCM（PBKDF2-SHA256，600,000 次迭代）加密导出记忆备份；
+  `mindforge import-json <file> --password <pwd>` 解密导入。密文不落明文，
+  导出文件含版本化 KDF 参数，密码错误时拒绝导入并保留目标库原状。
+
+### Fixed
+
+- **`/api/import` 非 dict 条目崩溃（api/server.py）**：不再抛 AttributeError-500，
+  计入 failed 列表继续处理其余条目。
+
+### Tests
+
+- 新增 `tests/test_v573_security.py`（15 项）：INTERNAL 越权、API 写路径身份
+  透传、2FA 限速、非 dict 导入等回归覆盖。
+- 新增 `tests/test_v573_encrypted_export.py`（6 项）：加密导出格式、密文不可读、
+  正确/错误密码、无密码提示、端到端往返。
+- 全量测试 **789 项全部通过**（768 基线 + 21 新增）。
+
 ## [5.7.2] - 2026-09-18
 
 一轮**安全响应头审计与加固**发布：对 API 全部响应头做系统性审计并落地可执行项，

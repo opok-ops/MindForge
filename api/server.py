@@ -52,8 +52,10 @@ from MindForge import __version__ as MF_VERSION
 try:
     from core.encryption import SecurityError
 except ImportError:
+
     class SecurityError(Exception):
         pass
+
 
 # 确保项目根目录在 path 中
 _PROJECT_ROOT = Path(__file__).parent.parent
@@ -75,6 +77,7 @@ class _RateLimiter:
     - 对跟踪的 IP 总数设上限（默认 10000），超出时丢弃最久未活动的 IP，
       防止长期运行（数月）后字典无界增长导致内存泄漏。
     """
+
     _MAX_TRACKED_IPS = 10000
 
     def __init__(self, max_requests=100, window_seconds=60):
@@ -124,6 +127,7 @@ def _normalize_ip(ip: str) -> str:
     IPv4 直接使用原地址。
     """
     import ipaddress
+
     try:
         addr = ipaddress.ip_address(ip)
     except ValueError:
@@ -142,6 +146,7 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
     防止大量并发请求耗尽服务器资源（线程、内存、文件描述符）。
     超过限制时返回 503 Service Unavailable。
     """
+
     max_threads = 50
     daemon_threads = True
 
@@ -162,8 +167,7 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
                         b"HTTP/1.1 503 Service Unavailable\r\n"
                         b"Content-Type: application/json\r\n"
                         b"Content-Length: " + str(len(body)).encode() + b"\r\n"
-                        b"\r\n"
-                        + body
+                        b"\r\n" + body
                     )
                 except Exception:
                     pass
@@ -190,8 +194,7 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
                     b"HTTP/1.1 503 Service Unavailable\r\n"
                     b"Content-Type: application/json\r\n"
                     b"Content-Length: " + str(len(body)).encode() + b"\r\n"
-                    b"\r\n"
-                    + body
+                    b"\r\n" + body
                 )
             except Exception:
                 pass
@@ -364,8 +367,10 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
         #      X-Forwarded-Proto: https 到达——纯 HTTP 直连绝不因伪造头下发。
         if getattr(self, "_tls_enabled", False):
             self.send_header("Strict-Transport-Security", "max-age=31536000")
-        elif (getattr(self, "_trust_proxy", False)
-              and self.headers.get("X-Forwarded-Proto", "").lower() == "https"):
+        elif (
+            getattr(self, "_trust_proxy", False)
+            and self.headers.get("X-Forwarded-Proto", "").lower() == "https"
+        ):
             self.send_header("Strict-Transport-Security", "max-age=31536000")
         # v5.4.8 安全修复：CORS 限制为配置的源（默认仅允许同源）
         allowed_origin = os.environ.get("MINDFORGE_CORS_ORIGIN", "")
@@ -373,8 +378,12 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", allowed_origin)
             # v5.6.5 P2 #15：Allow-Methods/Headers 仅在显式配置 Allow-Origin
             # （即确实允许跨域）时才下发，避免未开启 CORS 却无条件暴露跨域策略。
-            self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-            self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+            self.send_header(
+                "Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS"
+            )
+            self.send_header(
+                "Access-Control-Allow-Headers", "Content-Type, Authorization"
+            )
         self.end_headers()
         self.wfile.write(body)
 
@@ -389,7 +398,12 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
             return None
         # v5.4.8 安全修复：请求体大小限制
         if content_length > MAX_BODY_SIZE:
-            self._send_json({"error": f"Request body too large (max {MAX_BODY_SIZE // 1024 // 1024}MB)"}, 413)
+            self._send_json(
+                {
+                    "error": f"Request body too large (max {MAX_BODY_SIZE // 1024 // 1024}MB)"
+                },
+                413,
+            )
             return None
         if content_length < 0:
             return None
@@ -397,6 +411,7 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
         try:
             # P2 #23 修复：外部输入用安全 JSON 解析（深度+大小限制）
             from core.storage import _safe_json_loads
+
             return _safe_json_loads(raw.decode("utf-8"))
         except (ValueError, json.JSONDecodeError, UnicodeDecodeError):
             return None
@@ -408,7 +423,7 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
         """
         if not path.startswith(prefix):
             return ""
-        mem_id = path[len(prefix):]
+        mem_id = path[len(prefix) :]
         # v5.6.2 安全校验：拒绝路径遍历字符、空字节、过长 ID
         if not mem_id or len(mem_id) > 128:
             return ""
@@ -450,7 +465,16 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
             query_actor = (qs.get("agent", [""])[0] or "").strip()
             return query_actor[:128]
         # 默认：不采信任何客户端自报身份
-        return (os.environ.get("MINDFORGE_AGENT_ID", "") or "").strip()[:128]
+        server_agent = (os.environ.get("MINDFORGE_AGENT_ID", "") or "").strip()[:128]
+        if server_agent:
+            return server_agent
+        # v5.7.3 安全修复：已配置 API Key 的部署中，未声明的调用者一律按
+        # anonymous 处理（fail-closed），仅可访问 PUBLIC 级记忆；杜绝空身份
+        # 绕过 _filter_by_privacy 全量读取 PRIVATE/STRICT 记忆。
+        if (os.environ.get("MINDFORGE_API_KEY", "") or "").strip():
+            return "anonymous"
+        # 本地单用户无 API Key 模式：保留空身份（本机全量可见），兼容 CLI 场景
+        return ""
 
     def _check_auth(self):
         """验证 Bearer Token（通过 MINDFORGE_API_KEY 环境变量配置）
@@ -466,10 +490,12 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
             # P1 修复：默认 fail-closed，显式设置 ALLOW_NOAUTH=1 才开放本地无认证
             allow_noauth = os.environ.get("MINDFORGE_ALLOW_NOAUTH", "0").strip().lower()
             if allow_noauth not in ("1", "true", "yes", "on"):
-                self._send_json({"error": "Unauthorized (MINDFORGE_API_KEY required)"}, 401)
+                self._send_json(
+                    {"error": "Unauthorized (MINDFORGE_API_KEY required)"}, 401
+                )
                 return False
             # 显式开启的无认证模式：记录一次性告警
-            if not getattr(self.__class__, '_auth_warned', False):
+            if not getattr(self.__class__, "_auth_warned", False):
                 logger.warning(
                     "MINDFORGE_API_KEY not set — API is open to all LOCAL requests. "
                     "Set MINDFORGE_API_KEY to require authentication, or set "
@@ -534,7 +560,8 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                     # v5.6.5 P3 #22：存储不可用属服务暂时不可用，返回 503 而非 500
                     logger.error("health_check storage failure: %s", he)
                     self._send_json(
-                        {"status": "unhealthy", "error": "storage unavailable"}, 503)
+                        {"status": "unhealthy", "error": "storage unavailable"}, 503
+                    )
                     return
                 # P2-02 安全修复：/api/health 全程无需认证（见 do_GET 的分发条件），
                 # 因此无论是否配置 MINDFORGE_API_KEY，都只回最小化状态，绝不外泄
@@ -554,7 +581,11 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                 tag_counts = {}
                 for row in rows:
                     try:
-                        tags = json.loads(row[0]) if row[0].strip().startswith('[') else [t.strip() for t in row[0].split(',') if t.strip()]
+                        tags = (
+                            json.loads(row[0])
+                            if row[0].strip().startswith("[")
+                            else [t.strip() for t in row[0].split(",") if t.strip()]
+                        )
                     except (json.JSONDecodeError, TypeError):
                         continue
                     if not isinstance(tags, list):
@@ -565,7 +596,13 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                         if not clean:
                             continue
                         tag_counts[clean] = tag_counts.get(clean, 0) + 1
-                self._send_json({"tags": sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)})
+                self._send_json(
+                    {
+                        "tags": sorted(
+                            tag_counts.items(), key=lambda x: x[1], reverse=True
+                        )
+                    }
+                )
 
             elif path == "/api/search":
                 q = qs.get("q", [""])[0]
@@ -573,34 +610,58 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                     self._send_json({"error": "Missing query parameter 'q'"}, 400)
                     return
                 # v5.4.7 修复 H-1：安全解析参数
-                limit = _safe_int(qs.get("limit", ["10"])[0], default=10, min_val=1, max_val=1000)
-                min_relevance = _safe_float(qs.get("min_relevance", ["0.3"])[0], default=0.3, min_val=0.0, max_val=1.0)
+                limit = _safe_int(
+                    qs.get("limit", ["10"])[0], default=10, min_val=1, max_val=1000
+                )
+                min_relevance = _safe_float(
+                    qs.get("min_relevance", ["0.3"])[0],
+                    default=0.3,
+                    min_val=0.0,
+                    max_val=1.0,
+                )
                 categories = qs.get("categories", None)
                 result = self.mindforge.search(
                     query=q,
                     max_results=limit,
                     min_relevance=min_relevance,
                     categories=categories,
+                    # v5.7.3 安全修复：透传调用者身份，search 内部按隐私等级过滤
+                    agent_id=self._extract_actor(qs),
+                    session_id=(qs.get("session", [""])[0] or ""),
                 )
                 chunks = []
                 if hasattr(result, "chunks"):
                     for chunk in result.chunks:
-                        chunks.append({
-                            "id": chunk.memory_id,
-                            "content": chunk.content,
-                            "category": chunk.category,
-                            "relevance_score": chunk.relevance_score,
-                            "tags": chunk.tags if hasattr(chunk, "tags") else [],
-                        })
-                self._send_json({"query": q, "results": chunks, "total": len(chunks),
-                             "approximate": getattr(result, "approximate", False)})
+                        chunks.append(
+                            {
+                                "id": chunk.memory_id,
+                                "content": chunk.content,
+                                "category": chunk.category,
+                                "relevance_score": chunk.relevance_score,
+                                "tags": chunk.tags if hasattr(chunk, "tags") else [],
+                            }
+                        )
+                self._send_json(
+                    {
+                        "query": q,
+                        "results": chunks,
+                        "total": len(chunks),
+                        "approximate": getattr(result, "approximate", False),
+                    }
+                )
 
             elif path == "/api/memories":
                 # v5.4.7 修复 H-1：安全解析参数
-                limit = _safe_int(qs.get("limit", ["50"])[0], default=50, min_val=1, max_val=10000)
-                offset = _safe_int(qs.get("offset", ["0"])[0], default=0, min_val=0, max_val=1000000)
+                limit = _safe_int(
+                    qs.get("limit", ["50"])[0], default=50, min_val=1, max_val=10000
+                )
+                offset = _safe_int(
+                    qs.get("offset", ["0"])[0], default=0, min_val=0, max_val=1000000
+                )
                 # v5.7.0 P2：分类参数消毒
-                category = _sanitize_category(qs.get("category", [None])[0], default=None)
+                category = _sanitize_category(
+                    qs.get("category", [None])[0], default=None
+                )
                 # F1 修复：列表接口接入隐私过滤（X-Agent-Id 头 / agent 查询参数）
                 entries = self.mindforge.list(
                     category=category,
@@ -612,16 +673,30 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                 memories = []
                 for e in entries:
                     memories.append(e.to_dict() if hasattr(e, "to_dict") else vars(e))
-                self._send_json({"memories": memories, "total": len(memories), "limit": limit, "offset": offset})
+                self._send_json(
+                    {
+                        "memories": memories,
+                        "total": len(memories),
+                        "limit": limit,
+                        "offset": offset,
+                    }
+                )
 
             elif path.startswith("/api/memories/"):
                 mem_id = self._extract_mem_id(path)
                 if not mem_id:
                     self._send_json({"error": "Invalid memory ID"}, 400)
                     return
-                entry = self.mindforge.get(mem_id)
+                entry = self.mindforge.get(
+                    mem_id,
+                    # v5.7.3 安全修复：透传调用者身份，单条读取同样校验隐私等级
+                    actor=self._extract_actor(qs),
+                    session_id=(qs.get("session", [""])[0] or ""),
+                )
                 if entry:
-                    self._send_json(entry.to_dict() if hasattr(entry, "to_dict") else vars(entry))
+                    self._send_json(
+                        entry.to_dict() if hasattr(entry, "to_dict") else vars(entry)
+                    )
                 else:
                     self._send_json({"error": "Memory not found"}, 404)
 
@@ -633,25 +708,31 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                     actor=self._extract_actor(qs),
                     session_id=(qs.get("session", [""])[0] or ""),
                 )
-                memories = [e.to_dict() if hasattr(e, "to_dict") else vars(e) for e in entries]
+                memories = [
+                    e.to_dict() if hasattr(e, "to_dict") else vars(e) for e in entries
+                ]
                 # P3-3: 截断时添加 truncated 标志
                 truncated = len(entries) >= max_export_limit
-                self._send_json({
-                    "version": MF_VERSION,
-                    "total": len(memories),
-                    "truncated": truncated,
-                    "max_limit": max_export_limit if truncated else None,
-                    "memories": memories,
-                })
+                self._send_json(
+                    {
+                        "version": MF_VERSION,
+                        "total": len(memories),
+                        "truncated": truncated,
+                        "max_limit": max_export_limit if truncated else None,
+                        "memories": memories,
+                    }
+                )
 
             elif path == "/":
                 # v5.6.5 P2 #16：根路径不再枚举完整 API 端点清单，
                 # 避免在信息探测阶段向未授权方暴露攻击面。
-                self._send_json({
-                    "name": "MindForge REST API",
-                    "version": MF_VERSION,
-                    "health": "/api/health",
-                })
+                self._send_json(
+                    {
+                        "name": "MindForge REST API",
+                        "version": MF_VERSION,
+                        "health": "/api/health",
+                    }
+                )
 
             else:
                 self._send_json({"error": "Not found"}, 404)
@@ -693,7 +774,9 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                     return
                 # v5.7.0 P2：统一参数校验层
                 try:
-                    category = _sanitize_category(body.get("category", "general"), default="general")
+                    category = _sanitize_category(
+                        body.get("category", "general"), default="general"
+                    )
                     tags = _validate_tags(body.get("tags", []))
                     importance = _validate_importance(body.get("importance"))
                     starred = _validate_starred(body.get("starred"))
@@ -709,7 +792,9 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                     starred=starred,
                     source_agent=source_agent,
                 )
-                self._send_json(entry.to_dict() if hasattr(entry, "to_dict") else vars(entry), 201)
+                self._send_json(
+                    entry.to_dict() if hasattr(entry, "to_dict") else vars(entry), 201
+                )
 
             elif path == "/api/import":
                 memories = body.get("memories", [])
@@ -723,22 +808,32 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                     self._send_json({"error": "Field 'memories' must be a list"}, 400)
                     return
                 if len(memories) > MAX_IMPORT_BATCH:
-                    self._send_json({"error": f"Too many memories (max {MAX_IMPORT_BATCH})"}, 400)
+                    self._send_json(
+                        {"error": f"Too many memories (max {MAX_IMPORT_BATCH})"}, 400
+                    )
                     return
                 imported = 0
                 failed = 0
                 for mem in memories:
+                    # v5.7.3 修复：非 dict 条目计入 failed，不再整批抛 AttributeError->500
+                    if not isinstance(mem, dict):
+                        failed += 1
+                        continue
                     # v5.7.0 P2：逐条参数校验，非法条目计入 failed
                     try:
                         content = mem.get("content", "")
                         if not isinstance(content, str) or not content.strip():
                             failed += 1
                             continue
-                        category = _sanitize_category(mem.get("category", "general"), default="general")
+                        category = _sanitize_category(
+                            mem.get("category", "general"), default="general"
+                        )
                         tags = _validate_tags(mem.get("tags", []))
                         importance = _validate_importance(mem.get("importance"))
                         starred = _validate_starred(mem.get("starred"))
-                        source_agent = _validate_source_agent(mem.get("source_agent", ""))
+                        source_agent = _validate_source_agent(
+                            mem.get("source_agent", "")
+                        )
                     except ValueError:
                         failed += 1
                         continue
@@ -766,6 +861,7 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
     def do_PUT(self):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
+        qs = parse_qs(parsed.query)
 
         # v5.6.1: 写操作也加限流；v5.7.0 P2：写路径走更严配额
         if not self._check_rate_limit(write=True):
@@ -796,7 +892,11 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                 # v5.7.0 P2：统一参数校验层
                 try:
                     category = _sanitize_category(body.get("category"), default=None)
-                    tags = _validate_tags(body.get("tags")) if body.get("tags") is not None else None
+                    tags = (
+                        _validate_tags(body.get("tags"))
+                        if body.get("tags") is not None
+                        else None
+                    )
                     importance = _validate_importance(body.get("importance"))
                     starred = _validate_starred(body.get("starred"))
                 except ValueError as ve:
@@ -809,6 +909,10 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                     tags=tags,
                     importance=importance,
                     starred=starred,
+                    # v5.7.3 安全修复：写路径透传调用者身份，
+                    # update 内部 check_access 按来源校验，杜绝持 Key 越权改删
+                    actor=self._extract_actor(qs),
+                    session_id=(qs.get("session", [""])[0] or ""),
                 )
                 if success:
                     self._send_json({"status": "updated", "id": mem_id})
@@ -821,10 +925,10 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
             _log_unhandled_api_error(e)
             self._send_json({"error": "Internal server error"}, 500)
 
-
     def do_DELETE(self):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
+        qs = parse_qs(parsed.query)
 
         # v5.6.1: 写操作也加限流；v5.7.0 P2：写路径走更严配额
         if not self._check_rate_limit(write=True):
@@ -839,7 +943,13 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                 if not mem_id:
                     self._send_json({"error": "Invalid memory ID"}, 400)
                     return
-                success = self.mindforge.delete(mem_id)
+                success = self.mindforge.delete(
+                    mem_id,
+                    # v5.7.3 安全修复：删除路径透传调用者身份，按来源校验属主，
+                    # 杜绝持 Key 越权删除他人 PRIVATE/STRICT 记忆
+                    actor=self._extract_actor(qs),
+                    session_id=(qs.get("session", [""])[0] or ""),
+                )
                 if success:
                     self._send_json({"status": "deleted", "id": mem_id})
                 else:
@@ -852,11 +962,33 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
             self._send_json({"error": "Internal server error"}, 500)
 
     def log_message(self, format, *args):
-        logger.info("%s - %s", self.address_string(), format % args)
+        # v5.7.3 隐私加固：访问日志剥离 query string 与路径中的记忆 ID，
+        # 避免搜索词/记忆 ID 落盘。
+        try:
+            safe_args = list(args)
+            if len(safe_args) >= 2 and isinstance(safe_args[1], str):
+                line = safe_args[1]
+                # 拆分请求行，仅保留 method + path（query 丢弃）
+                parts = line.split()
+                if len(parts) >= 2 and parts[1].startswith("/"):
+                    path = urlparse(parts[1]).path or "/"
+                else:
+                    path = urlparse(line).path or "/"
+                # 记忆 ID 这类路径参数统一脱敏为占位符
+                path = re.sub(r"/api/memories/[^/?#]+", "/api/memories/{id}", path)
+                safe_args[1] = f"{parts[0]} {path}" if parts else path
+            logger.info("%s - %s", self.address_string(), format % tuple(safe_args))
+        except Exception:
+            logger.info("%s - %s", self.address_string(), format % args)
 
 
-def start_api_server(mindforge_instance, host="127.0.0.1", port=8080,
-                     ssl_certfile: str = "", ssl_keyfile: str = ""):
+def start_api_server(
+    mindforge_instance,
+    host="127.0.0.1",
+    port=8080,
+    ssl_certfile: str = "",
+    ssl_keyfile: str = "",
+):
     """启动 REST API 服务器
 
     Args:
@@ -896,12 +1028,12 @@ def start_api_server(mindforge_instance, host="127.0.0.1", port=8080,
     MindForgeAPIHandler._tls_enabled = use_https
     # HTTPS 反向代理场景：MINDFORGE_TRUST_PROXY=1 显式信任代理后，
     # 请求带 X-Forwarded-Proto: https 时同样下发 HSTS（见 _send_json）。
-    MindForgeAPIHandler._trust_proxy = (
-        os.environ.get("MINDFORGE_TRUST_PROXY", "0").strip().lower()
-        in ("1", "true", "yes", "on")
-    )
+    MindForgeAPIHandler._trust_proxy = os.environ.get(
+        "MINDFORGE_TRUST_PROXY", "0"
+    ).strip().lower() in ("1", "true", "yes", "on")
     if use_https:
         import ssl as _ssl
+
         if not ssl_keyfile:
             ssl_keyfile = ssl_certfile
         ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_SERVER)

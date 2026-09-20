@@ -6,7 +6,7 @@
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-5.7.2-green.svg)](https://github.com/opok-ops/MindForge)
+[![Version](https://img.shields.io/badge/version-5.7.3-green.svg)](https://github.com/opok-ops/MindForge)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
 [![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
@@ -40,10 +40,11 @@
 
 ## 为什么值得 Star ⭐？
 
-- **本地优先、隐私安全** —— 记忆永不离开你的设备，可选 AES-256-GCM 静态加密
-- **永久免费** —— MIT 协议，可自托管，零云依赖
-- **原生 MCP** —— 33 个 MCP 工具，分钟级接入 Claude Code、OpenClaw 或任意 MCP 客户端
-- **独立开发者维护** —— 每一颗 Star 都是对本地优先 AI 记忆方向最真实的认可
+- **本机优先 & 隐私** — 记忆不出本机，可选 AES-256-GCM 静态加密
+- **加密备份（v5.7.3 新增）** — `export-json --password` 生成 AES-256-GCM + PBKDF2 加密备份，文件泄露也无法读取记忆
+- **永不收费** — MIT 协议，可自托管，零云端依赖
+- **原生 MCP** — 33 个 MCP 工具，分钟级接入 Claude Code、OpenClaw 或任意 MCP 客户端
+- **独立开发者维护** — 每一颗 Star 都是对本地优先 AI 记忆方向最真实的认可
 
 ---
 
@@ -129,6 +130,7 @@ MindForge stats
 - **六路混合检索** — 向量 + FTS5 + TF-IDF + Fuzzy + 查询扩展 + Cross-Encoder 重排
 - **知识图谱** — 自动实体/关系提取、路径查找、关联推理召回
 - **隐私引擎** — 四级隔离（PUBLIC/INTERNAL/PRIVATE/STRICT）+ AES-256-GCM + PBKDF2-SHA256
+- **加密导出/导入** — `export-json --password` / `import-json --password` AES-256-GCM 加密备份（v5.7.3）
 - **联邦记忆** — P2P 多 Agent 共享，信任等级、细粒度 ACL、冲突解决
 - **意图路由** — 三层路由（正则→关键词→LLM 兜底），10+ 业务意图分类
 - **冲突检测** — 反义词对、属性值不一致、时间线冲突 + 自动衰减
@@ -137,7 +139,7 @@ MindForge stats
 - **CLI** — 200+ 命令，支持 bash/zsh/fish 自动补全
 - **REST API** — 标准 HTTP API，支持非 Python 应用
 - **多后端 Embedding** — sentence-transformers / OpenAI / Ollama / 自定义 HTTP
-- **751+ 测试用例** — 全面测试覆盖，CI 集成安全扫描（bandit + pip-audit）
+- **780+ 测试用例** — 全面测试覆盖，CI 集成安全扫描（bandit + pip-audit）
 
 ---
 

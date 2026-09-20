@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PrivacyScanResult:
     """隐私扫描结果"""
+
     is_sensitive: bool = False
     suggested_privacy: PrivacyLevel = PrivacyLevel.INTERNAL
     confidence: float = 0.0
@@ -34,6 +35,7 @@ class PrivacyScanResult:
 @dataclass
 class AccessGrant:
     """访问授权"""
+
     grant_id: str
     memory_id: str
     grantee: str
@@ -44,19 +46,35 @@ class AccessGrant:
 
 
 SENSITIVE_PATTERNS = {
-    "phone": [r'1[3-9]\d{9}'],
-    "email": [r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'],
-    "id_card": [r'\d{17}[\dXx]'],
-    "bank_card": [r'\d{16,19}'],
-    "password": [r'(password|passwd|pwd|密码)\s*[:=]\s*\S+'],
-    "address": [r'(地址|住址|家|住)\s*[:：]\s*.+'],
-    "name": [r'(姓名|名字)\s*[:：]\s*.+'],
+    "phone": [r"1[3-9]\d{9}"],
+    "email": [r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"],
+    "id_card": [r"\d{17}[\dXx]"],
+    "bank_card": [r"\d{16,19}"],
+    "password": [r"(password|passwd|pwd|密码)\s*[:=]\s*\S+"],
+    "address": [r"(地址|住址|家|住)\s*[:：]\s*.+"],
+    "name": [r"(姓名|名字)\s*[:：]\s*.+"],
 }
 
 SENSITIVE_KEYWORDS = [
-    "密码", "秘钥", "密钥", "token", "secret", "私密", "隐私",
-    "身份证", "银行卡", "手机号", "邮箱", "地址", "工资", "收入",
-    "病历", "健康", "性", "账号", "口令",
+    "密码",
+    "秘钥",
+    "密钥",
+    "token",
+    "secret",
+    "私密",
+    "隐私",
+    "身份证",
+    "银行卡",
+    "手机号",
+    "邮箱",
+    "地址",
+    "工资",
+    "收入",
+    "病历",
+    "健康",
+    "性",
+    "账号",
+    "口令",
 ]
 
 
@@ -70,6 +88,10 @@ class PrivacyEngine:
     # 已授予的验证窗口。会话表仅存于内存，进程重启后自动清空（需重新验证），
     # 因此不存在跨重启的 monotonic 基准漂移问题。
     _2FA_VERIFY_WINDOW = 300  # 秒（按 time.monotonic() 计算的相对时长）
+
+    # v5.7.3 安全加固：2FA 连续失败阈值与锁定时长（防在线穷举）
+    _2FA_MAX_FAILURES = 5
+    _2FA_LOCK_SECONDS = 60
 
     # v5.6.5 P1 #7：过期授权的后台清理节流间隔（秒）
     _GRANT_PURGE_INTERVAL = 300
@@ -85,6 +107,9 @@ class PrivacyEngine:
         self._second_factor_token_hashes: Dict[str, str] = {}
         # v5.6.2 安全修复：记录已通过 2FA 验证的会话（actor -> 验证时间戳）
         self._verified_2fa_sessions: Dict[str, float] = {}
+        # v5.7.3 安全加固：2FA 失败计数与锁定截止时间（仅内存，重启即失效）
+        self._2fa_fail_counts: Dict[str, int] = {}
+        self._2fa_locked_until: Dict[str, float] = {}
         # v5.4.2 安全修复：持久化 grants 和 2FA tokens 到 SQLite，重启不丢失
         self._init_persistence()
         self._load_persisted_data()
@@ -120,18 +145,26 @@ class PrivacyEngine:
         try:
             conn = self.storage._get_conn()
             # 加载 grants
-            rows = conn.execute("SELECT grant_id, memory_id, grantee, granted_by, granted_at, expires_at, access_level FROM access_grants").fetchall()
+            rows = conn.execute(
+                "SELECT grant_id, memory_id, grantee, granted_by, granted_at, expires_at, access_level FROM access_grants"
+            ).fetchall()
             for row in rows:
                 grant = AccessGrant(
-                    grant_id=row[0], memory_id=row[1], grantee=row[2],
-                    granted_by=row[3], granted_at=row[4],
-                    expires_at=row[5], access_level=row[6]
+                    grant_id=row[0],
+                    memory_id=row[1],
+                    grantee=row[2],
+                    granted_by=row[3],
+                    granted_at=row[4],
+                    expires_at=row[5],
+                    access_level=row[6],
                 )
                 if row[1] not in self._grants:
                     self._grants[row[1]] = []
                 self._grants[row[1]].append(grant)
             # v5.6.2 安全修复：加载 token_hash（而非空字符串），重启后验证码仍可验证
-            token_rows = conn.execute("SELECT actor, token_hash FROM second_factor_tokens").fetchall()
+            token_rows = conn.execute(
+                "SELECT actor, token_hash FROM second_factor_tokens"
+            ).fetchall()
             for row in token_rows:
                 self._second_factor_token_hashes[row[0]] = row[1]
         except sqlite3.Error as e:
@@ -147,14 +180,16 @@ class PrivacyEngine:
             for pattern in patterns:
                 if re.search(pattern, text, re.IGNORECASE):
                     detected_types.append(info_type)
-                    masked = re.sub(pattern, '[已脱敏]', masked, flags=re.IGNORECASE)
+                    masked = re.sub(pattern, "[已脱敏]", masked, flags=re.IGNORECASE)
                     if info_type in ("password", "id_card", "bank_card"):
                         max_sensitivity = max(max_sensitivity, 3)
                     else:
                         max_sensitivity = max(max_sensitivity, 2)
                     break
 
-        keyword_count = sum(1 for kw in SENSITIVE_KEYWORDS if kw.lower() in text.lower())
+        keyword_count = sum(
+            1 for kw in SENSITIVE_KEYWORDS if kw.lower() in text.lower()
+        )
         if keyword_count > 0:
             max_sensitivity = max(max_sensitivity, 1)
             if "敏感词" not in detected_types:
@@ -185,10 +220,13 @@ class PrivacyEngine:
             },
         )
 
-    def check_access(self, entry: MemoryEntry,
-                     actor: str = "",
-                     session_id: str = "") -> Tuple[bool, str]:
+    def check_access(
+        self, entry: MemoryEntry, actor: str = "", session_id: str = ""
+    ) -> Tuple[bool, str]:
         """检查访问权限"""
+        # v5.7.3 安全修复：保留原始 actor 判定"本机无身份调用"（CLI/单用户部署），
+        # 与远程显式自称 anonymous 相区分，避免无来源 INTERNAL 记忆被误拒或越权。
+        raw_actor = actor
         if not actor:
             actor = "anonymous"
 
@@ -196,7 +234,15 @@ class PrivacyEngine:
             return True, "公开级记忆"
 
         if entry.privacy == PrivacyLevel.INTERNAL:
-            if entry.source_agent == actor or entry.source_session == session_id:
+            # 本机进程内无身份调用（CLI / 单用户部署 / 进程内适配器未传 actor）：
+            # 视同用户本人放行；一旦调用者显式携带身份（含 anonymous），
+            # 必须精确匹配来源，杜绝远程越权读取。
+            if not raw_actor and not session_id:
+                return True, "本机内部调用"
+            # 有来源：必须精确匹配，空值不参与匹配（杜绝越权读取）
+            if (entry.source_agent and entry.source_agent == actor) or (
+                entry.source_session and entry.source_session == session_id
+            ):
                 return True, "同 Agent/会话"
             return False, "内部级记忆仅同 Agent/会话可访问"
 
@@ -214,10 +260,14 @@ class PrivacyEngine:
 
         return False, "未知隐私级别"
 
-    def grant_access(self, memory_id: str, grantee: str,
-                     granted_by: str = "",
-                     duration_hours: Optional[float] = None,
-                     access_level: str = "read") -> AccessGrant:
+    def grant_access(
+        self,
+        memory_id: str,
+        grantee: str,
+        granted_by: str = "",
+        duration_hours: Optional[float] = None,
+        access_level: str = "read",
+    ) -> AccessGrant:
         """授予访问权限
 
         P1 安全修复：验证调用者（granted_by）有权授权 — 必须是记忆所有者
@@ -237,7 +287,11 @@ class PrivacyEngine:
                 raise ValueError(f"记忆不存在: {memory_id}")
             # 检查是否为所有者（source_agent 或 metadata 中的 owner 字段）
             entry_owner = getattr(entry, "source_agent", "") or ""
-            meta_owner = (entry.metadata or {}).get("owner", "") if hasattr(entry, "metadata") else ""
+            meta_owner = (
+                (entry.metadata or {}).get("owner", "")
+                if hasattr(entry, "metadata")
+                else ""
+            )
             is_owner = (granted_by == entry_owner) or (granted_by == meta_owner)
 
         # 非所有者拒绝授权（admin 角色可在未来扩展）
@@ -265,7 +319,15 @@ class PrivacyEngine:
             conn = self.storage._get_conn()
             conn.execute(
                 "INSERT OR REPLACE INTO access_grants (grant_id, memory_id, grantee, granted_by, granted_at, expires_at, access_level) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (grant.grant_id, grant.memory_id, grant.grantee, grant.granted_by, grant.granted_at, grant.expires_at, grant.access_level)
+                (
+                    grant.grant_id,
+                    grant.memory_id,
+                    grant.grantee,
+                    grant.granted_by,
+                    grant.granted_at,
+                    grant.expires_at,
+                    grant.access_level,
+                ),
             )
             conn.commit()
         except sqlite3.Error as e:
@@ -280,13 +342,15 @@ class PrivacyEngine:
 
         with self._grants_lock:
             self._grants[memory_id] = [
-                g for g in self._grants[memory_id]
-                if g.grantee != grantee
+                g for g in self._grants[memory_id] if g.grantee != grantee
             ]
         # v5.4.2：同步删除持久化记录
         try:
             conn = self.storage._get_conn()
-            conn.execute("DELETE FROM access_grants WHERE memory_id = ? AND grantee = ?", (memory_id, grantee))
+            conn.execute(
+                "DELETE FROM access_grants WHERE memory_id = ? AND grantee = ?",
+                (memory_id, grantee),
+            )
             conn.commit()
         except sqlite3.Error as e:
             logger.error("撤销授权持久化失败: %s", e)
@@ -302,8 +366,11 @@ class PrivacyEngine:
         removed = 0
         with self._grants_lock:
             for mid in list(self._grants.keys()):
-                alive = [g for g in self._grants[mid]
-                         if not (g.expires_at is not None and g.expires_at < now)]
+                alive = [
+                    g
+                    for g in self._grants[mid]
+                    if not (g.expires_at is not None and g.expires_at < now)
+                ]
                 removed += len(self._grants[mid]) - len(alive)
                 if alive:
                     self._grants[mid] = alive
@@ -315,7 +382,8 @@ class PrivacyEngine:
                 conn.execute(
                     "DELETE FROM access_grants "
                     "WHERE expires_at IS NOT NULL AND expires_at < ?",
-                    (now,))
+                    (now,),
+                )
                 conn.commit()
             except sqlite3.Error as e:
                 logger.error("清理过期授权持久化失败: %s", e)
@@ -391,7 +459,7 @@ class PrivacyEngine:
             conn = self.storage._get_conn()
             conn.execute(
                 "INSERT OR REPLACE INTO second_factor_tokens (actor, token_hash, created_at) VALUES (?, ?, ?)",
-                (actor, token_hash, time.time())
+                (actor, token_hash, time.time()),
             )
             conn.commit()
         except sqlite3.Error as e:
@@ -414,6 +482,11 @@ class PrivacyEngine:
         """
         if not actor or not code:
             return False
+        now = time.monotonic()
+        # v5.7.3 安全加固：锁定期内直接拒绝，避免在线穷举验证码
+        locked_until = self._2fa_locked_until.get(actor, 0.0)
+        if now < locked_until:
+            return False
         token_hash = self._second_factor_token_hashes.get(actor)
         if not token_hash:
             return False
@@ -421,13 +494,29 @@ class PrivacyEngine:
         code_hash = hashlib.sha256(code.encode()).hexdigest()
         ok = hmac.compare_digest(token_hash, code_hash)
         if ok:
-            # 验证通过，记录会话基准（time.monotonic，仅存内存，重启即失效）
-            self._verified_2fa_sessions[actor] = time.monotonic()
-        return ok
+            # 验证通过：清零失败计数，记录会话（time.monotonic，仅存内存，重启即失效）
+            self._2fa_fail_counts.pop(actor, None)
+            self._verified_2fa_sessions[actor] = now
+            return True
+
+        # 验证失败：累计计数，达到阈值触发锁定
+        failures = self._2fa_fail_counts.get(actor, 0) + 1
+        self._2fa_fail_counts[actor] = failures
+        if failures >= self._2FA_MAX_FAILURES:
+            self._2fa_locked_until[actor] = now + self._2FA_LOCK_SECONDS
+            self._2fa_fail_counts.pop(actor, None)
+            logger.warning(
+                "2FA 验证连续失败 %d 次，锁定 actor=%s 共 %.0f 秒",
+                failures,
+                actor,
+                self._2FA_LOCK_SECONDS,
+            )
+        return False
 
     def generate_compliance_report(self) -> dict:
         """生成合规报告"""
         import time
+
         stats = self.storage.get_stats()
 
         total = stats.get("total", 0)
@@ -453,8 +542,9 @@ class PrivacyEngine:
             "audit_log_entries": len(audit_log),
         }
 
-    def export_with_privacy(self, entries: List[MemoryEntry],
-                            anonymize: bool = False) -> List[dict]:
+    def export_with_privacy(
+        self, entries: List[MemoryEntry], anonymize: bool = False
+    ) -> List[dict]:
         """带隐私保护的导出"""
         result = []
         for entry in entries:
@@ -503,5 +593,7 @@ class PrivacyEngine:
             "high_risk_count": sum(1 for s in risk_scores if s > 0.7),
             "medium_risk_count": sum(1 for s in risk_scores if 0.3 < s <= 0.7),
             "low_risk_count": sum(1 for s in risk_scores if s <= 0.3),
-            "high_risk_categories": sorted(categories_risk.items(), key=lambda x: x[1], reverse=True)[:5],
+            "high_risk_categories": sorted(
+                categories_risk.items(), key=lambda x: x[1], reverse=True
+            )[:5],
         }

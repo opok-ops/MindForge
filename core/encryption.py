@@ -380,12 +380,19 @@ def init_engine(password: str, key_file: str = "./data/.key") -> EncryptionEngin
             if not _verify_key_password(engine, key_data):
                 raise SecurityError("密码错误")
 
-            # 如果是 legacy 密钥文件（无 verify_blob），升级写入新格式
+            # v5.7.3 安全修复：legacy 密钥文件（无 verify_blob）不再自动升级重写。
+            # 原实现：legacy 文件 _verify_key_password 恒返回 True → 密码即使错误也会
+            # 用错误密码派生的 engine 重写密钥文件并写入新格式 verify_blob → 此后
+            # 用户输入正确密码也无法通过校验，被永久锁死（只能用正确密码解密旧数据，
+            # 却因 verify_blob 校验失败而拒绝启动）。
+            # 现改为：legacy 文件保持只读加载，格式升级统一交由显式 `rekey` 命令
+            # （rekey 会先验证旧密码再写入新格式，见 rekey_engine）。
             if "verify_blob" not in key_data:
-                try:
-                    _write_key_file(key_path, salt, kdf_params, engine)
-                except Exception:
-                    pass  # 升级写入失败不影响使用
+                import logging as _logging
+                _logging.getLogger("core.encryption").warning(
+                    "检测到 legacy 密钥文件（无 verify_blob）。为避免密码校验失效，"
+                    "已跳过自动格式升级；如需升级请运行 `mindforge rekey`。"
+                )
         else:
             # 新密钥文件：使用当前推荐的 KDF 参数
             kdf_params = KDFParams()

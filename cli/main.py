@@ -103,41 +103,52 @@ except ImportError:
     except (ImportError, ValueError):
         # 兜底值：仅当 core/version 完全不可导入时启用。发版时必须与
         # core/version.py 的 __version__ 一起更新（见发版清单），否则漂移。
-        __version__ = "5.7.2"
+        __version__ = "5.7.3"
 
 # 懒加载 modules：仅在对应命令执行时才导入，大幅加速 CLI 启动
 _modules_cache = {}
+
 
 def _lazy_import(name):
     if name not in _modules_cache:
         if name == "TaxonomyManager":
             from modules.categorizer import TaxonomyManager
+
             _modules_cache[name] = TaxonomyManager
         elif name == "RecallConfig":
             from modules.recall import RecallConfig
+
             _modules_cache[name] = RecallConfig
         elif name == "KnowledgeGraph":
             from modules.knowledge_graph import KnowledgeGraph
+
             _modules_cache[name] = KnowledgeGraph
         elif name == "MemoryEvolution":
             from modules.evolution import MemoryEvolution
+
             _modules_cache[name] = MemoryEvolution
         elif name == "PersonalityEngine":
             from modules.personality import PersonalityEngine
+
             _modules_cache[name] = PersonalityEngine
         elif name == "MultimodalMemory":
             from modules.multimodal import MultimodalMemory
+
             _modules_cache[name] = MultimodalMemory
         elif name == "FederatedMemory":
             from modules.federated import FederatedMemory
+
             _modules_cache[name] = FederatedMemory
         elif name == "PrivacyEngine":
             from modules.privacy import PrivacyEngine
+
             _modules_cache[name] = PrivacyEngine
         elif name == "MemoryIntegrator":
             from modules.integrator import MemoryIntegrator
+
             _modules_cache[name] = MemoryIntegrator
     return _modules_cache[name]
+
 
 COLORS = {
     "cyan": "\033[96m",
@@ -208,8 +219,14 @@ _ALLOWED_EXPORT_EXTS = {".md", ".html", ".xml", ".json", ".xlsx", ".csv", ".txt"
 _ALLOWED_IMPORT_EXTS = {".md", ".xml", ".json", ".xlsx", ".csv", ".txt"}
 
 
-def _validate_path(path_str, base_dir=None, must_exist=False,
-                   allow_symlinks=False, max_size=None, allowed_exts=None):
+def _validate_path(
+    path_str,
+    base_dir=None,
+    must_exist=False,
+    allow_symlinks=False,
+    max_size=None,
+    allowed_exts=None,
+):
     """校验文件路径安全性，防止路径遍历攻击（v5.2.7 新增）
 
     Args:
@@ -243,7 +260,9 @@ def _validate_path(path_str, base_dir=None, must_exist=False,
         raise ValueError(f"路径解析失败: {e}")
 
     # 校验在允许的基础目录内（防止路径遍历越界）
-    base_dirs = [Path(b).resolve() for b in ([base_dir] if base_dir else _ALLOWED_BASE_DIRS)]
+    base_dirs = [
+        Path(b).resolve() for b in ([base_dir] if base_dir else _ALLOWED_BASE_DIRS)
+    ]
     in_allowed = False
     for b in base_dirs:
         try:
@@ -253,7 +272,9 @@ def _validate_path(path_str, base_dir=None, must_exist=False,
         except ValueError:
             continue
     if not in_allowed:
-        raise ValueError(f"路径越界：只允许在 {', '.join(str(b) for b in base_dirs)} 之下")
+        raise ValueError(
+            f"路径越界：只允许在 {', '.join(str(b) for b in base_dirs)} 之下"
+        )
 
     # 符号链接检查
     if not allow_symlinks:
@@ -268,7 +289,9 @@ def _validate_path(path_str, base_dir=None, must_exist=False,
     if allowed_exts is not None:
         ext = resolved.suffix.lower()
         if ext not in allowed_exts:
-            raise ValueError(f"不支持的文件类型: {ext}（允许: {', '.join(sorted(allowed_exts))}）")
+            raise ValueError(
+                f"不支持的文件类型: {ext}（允许: {', '.join(sorted(allowed_exts))}）"
+            )
 
     # 存在性检查
     if must_exist and not resolved.exists():
@@ -322,15 +345,14 @@ def _safe_import_path(input_path, max_size=100 * 1024 * 1024):
     )
 
 
-
 def print_banner():
     if _json_mode:
         return
     banner = f"""
-{COLORS['cyan']}╔══════════════════════════════════════════════════════╗
-║        {COLORS['bold']}MindForge v{__version__} - AI Agent 终身记忆系统{COLORS['reset']}{COLORS['cyan']}        ║
+{COLORS["cyan"]}╔══════════════════════════════════════════════════════╗
+║        {COLORS["bold"]}MindForge v{__version__} - AI Agent 终身记忆系统{COLORS["reset"]}{COLORS["cyan"]}        ║
 ║      四层记忆架构 · 知识图谱 · 多模态 · 人格化      ║
-╚══════════════════════════════════════════════════════╝{COLORS['reset']}
+╚══════════════════════════════════════════════════════╝{COLORS["reset"]}
 """
     print(banner)
 
@@ -342,7 +364,7 @@ def cmd_init(args):
     print("=" * 50)
 
     # 非加密模式（CI/自动化场景）
-    if getattr(args, 'no_encrypt', False):
+    if getattr(args, "no_encrypt", False):
         try:
             config = MemoryConfig(
                 db_path=args.db_path,
@@ -367,9 +389,14 @@ def cmd_init(args):
         password = env_password
         if len(password) < 8:
             print(c("⚠️  警告：密码建议至少 8 位", "yellow"))
-    elif getattr(args, 'password', None):
+    elif getattr(args, "password", None):
         password = args.password
-        print(c("⚠️  警告：--password 会在进程列表中可见，建议改用 MINDFORGE_PASSWORD 环境变量", "yellow"))
+        print(
+            c(
+                "⚠️  警告：--password 会在进程列表中可见，建议改用 MINDFORGE_PASSWORD 环境变量",
+                "yellow",
+            )
+        )
         if len(password) < 8:
             print(c("⚠️  警告：密码建议至少 8 位", "yellow"))
     else:
@@ -385,7 +412,12 @@ def cmd_init(args):
                 print(c("❌ 两次密码不一致", "red"))
                 return 1
         except (EOFError, OSError):
-            print(c("❌ 无法读取密码：非交互式环境请设置 MINDFORGE_PASSWORD 环境变量或使用 --password", "red"))
+            print(
+                c(
+                    "❌ 无法读取密码：非交互式环境请设置 MINDFORGE_PASSWORD 环境变量或使用 --password",
+                    "red",
+                )
+            )
             return 1
 
         if len(password) < 8:
@@ -427,6 +459,7 @@ def _get_memory(args) -> MindForge:
     # 加密模式下需要密码初始化
     if encrypted:
         import os
+
         password = os.environ.get("MINDFORGE_PASSWORD", "")
         if not password and sys.stdin.isatty():
             try:
@@ -450,10 +483,25 @@ def _get_memory(args) -> MindForge:
             else:
                 print(c("\n❌ 加密数据库需要密码才能操作", "red"), file=sys.stderr)
                 print(c("   请通过以下方式之一提供密码：", "yellow"), file=sys.stderr)
-                print(c("   1. 设置环境变量：export MINDFORGE_PASSWORD=\"你的密码\"", "yellow"), file=sys.stderr)
-                print(c("   2. 在交互式终端中运行（会提示输入密码）", "yellow"), file=sys.stderr)
-                print(c("   3. 如使用 dsh-mindforge bridge，在宿主环境中 export MINDFORGE_PASSWORD", "yellow"), file=sys.stderr)
-            if hasattr(mf, 'close'):
+                print(
+                    c(
+                        '   1. 设置环境变量：export MINDFORGE_PASSWORD="你的密码"',
+                        "yellow",
+                    ),
+                    file=sys.stderr,
+                )
+                print(
+                    c("   2. 在交互式终端中运行（会提示输入密码）", "yellow"),
+                    file=sys.stderr,
+                )
+                print(
+                    c(
+                        "   3. 如使用 dsh-mindforge bridge，在宿主环境中 export MINDFORGE_PASSWORD",
+                        "yellow",
+                    ),
+                    file=sys.stderr,
+                )
+            if hasattr(mf, "close"):
                 mf.close()
             sys.exit(1)
 
@@ -495,10 +543,18 @@ def cmd_add(args):
         starred=getattr(args, "star", False),
     )
 
-    if getattr(args, 'json_output', False):
-        _json_out({"status": "ok", "id": entry.id, "content": entry.content,
-                   "category": entry.category, "tags": entry.tags,
-                   "layer": entry.layer.value, "importance": args.importance})
+    if getattr(args, "json_output", False):
+        _json_out(
+            {
+                "status": "ok",
+                "id": entry.id,
+                "content": entry.content,
+                "category": entry.category,
+                "tags": entry.tags,
+                "layer": entry.layer.value,
+                "importance": args.importance,
+            }
+        )
         cm.close()
         return 0
     print(c("\n✅ 记忆已保存", "green"))
@@ -529,31 +585,44 @@ def cmd_search(args):
         use_embedding=use_embedding,
     )
 
-    if getattr(args, 'json_output', False):
-        _json_out({
-            "chunks": [{"memory_id": c.memory_id, "content": c.content,
-                        "category": c.category, "layer": c.layer.value,
-                        "relevance_score": c.relevance_score, "tags": c.tags}
-                       for c in result.chunks],
-            "total_found": result.total_found,
-            "query_time_ms": result.query_time_ms,
-            "strategy_used": result.strategy_used,
-            "token_estimate": result.token_estimate,
-            "layers_used": result.layers_used,
-            "approximate": getattr(result, "approximate", False),
-        })
+    if getattr(args, "json_output", False):
+        _json_out(
+            {
+                "chunks": [
+                    {
+                        "memory_id": c.memory_id,
+                        "content": c.content,
+                        "category": c.category,
+                        "layer": c.layer.value,
+                        "relevance_score": c.relevance_score,
+                        "tags": c.tags,
+                    }
+                    for c in result.chunks
+                ],
+                "total_found": result.total_found,
+                "query_time_ms": result.query_time_ms,
+                "strategy_used": result.strategy_used,
+                "token_estimate": result.token_estimate,
+                "layers_used": result.layers_used,
+                "approximate": getattr(result, "approximate", False),
+            }
+        )
         cm.close()
         return 0
 
-    print(f"\n找到 {c(result.total_found, 'cyan')} 条相关记忆"
-          f"（耗时 {result.query_time_ms}ms）")
+    print(
+        f"\n找到 {c(result.total_found, 'cyan')} 条相关记忆"
+        f"（耗时 {result.query_time_ms}ms）"
+    )
     print(f"策略：{result.strategy_used} | 预估 tokens：{result.token_estimate}")
     print(f"涉及层级：{', '.join(result.layers_used)}")
 
     for i, chunk in enumerate(result.chunks, 1):
-        print(f"\n--- 结果 {i} [{chunk.category}] "
-              f"相关度:{c(f'{chunk.relevance_score:.3f}', 'green')} "
-              f"[{chunk.layer.value}] ---")
+        print(
+            f"\n--- 结果 {i} [{chunk.category}] "
+            f"相关度:{c(f'{chunk.relevance_score:.3f}', 'green')} "
+            f"[{chunk.layer.value}] ---"
+        )
         content = chunk.content[:300]
         print(content)
         if len(chunk.content) > 300:
@@ -625,8 +694,17 @@ def cmd_update(args):
         starred = False
 
     # 至少要更新一个字段
-    if not any([args.content, args.category, args.tags, args.privacy,
-                args.importance, args.layer, starred is not None]):
+    if not any(
+        [
+            args.content,
+            args.category,
+            args.tags,
+            args.privacy,
+            args.importance,
+            args.layer,
+            starred is not None,
+        ]
+    ):
         print(c("⚠️  请至少指定一个要更新的字段", "yellow"))
         return 1
 
@@ -678,10 +756,15 @@ def cmd_delete(args):
     )
 
     if success:
-        if getattr(args, 'json_output', False):
+        if getattr(args, "json_output", False):
             # v5.5.6 fix: 参数名为 id 而非 memory_id（此前 AttributeError）
-            _json_out({"status": "ok", "id": args.id,
-                       "action": "hard_delete" if args.hard else "soft_delete"})
+            _json_out(
+                {
+                    "status": "ok",
+                    "id": args.id,
+                    "action": "hard_delete" if args.hard else "soft_delete",
+                }
+            )
             cm.close()
             return 0
         action = "彻底删除" if args.hard else "移到回收站"
@@ -742,8 +825,10 @@ def cmd_recent(args):
         offset=args.offset,
     )
 
-    print(f"\n最近 {c(str(args.hours), 'cyan')} 小时内添加的记忆"
-          f"（共 {c(str(len(entries)), 'cyan')} 条）")
+    print(
+        f"\n最近 {c(str(args.hours), 'cyan')} 小时内添加的记忆"
+        f"（共 {c(str(len(entries)), 'cyan')} 条）"
+    )
 
     for entry in entries:
         star_mark = "⭐ " if entry.starred else ""
@@ -810,9 +895,11 @@ def cmd_list(args):
     created_before = None
     if args.after:
         from datetime import datetime
+
         created_after = datetime.fromisoformat(args.after).timestamp()
     if args.before:
         from datetime import datetime
+
         created_before = datetime.fromisoformat(args.before).timestamp()
 
     entries = cm.list(
@@ -856,24 +943,29 @@ def cmd_list(args):
 
         star_mark = "⭐ " if entry.starred else ""
 
-        print(f"\n{'='*50}")
+        print(f"\n{'=' * 50}")
         print(f"ID:       {entry.id[:16]}...")
-        print(f"分类:     [{entry.category}]  "
-              f"隐私: {c(entry.privacy.value, privacy_color)}  "
-              f"层级: {c(entry.layer.value, layer_color)}  "
-              f"重要性: {entry.importance.value}")
+        print(
+            f"分类:     [{entry.category}]  "
+            f"隐私: {c(entry.privacy.value, privacy_color)}  "
+            f"层级: {c(entry.layer.value, layer_color)}  "
+            f"重要性: {entry.importance.value}"
+        )
         if entry.starred:
             print("状态:     ⭐ 已收藏")
         print(f"标签:     {', '.join(entry.tags) if entry.tags else '无'}")
         print(f"类型:     {entry.memory_type.value}")
-        print(f"创建:     {format_time(entry.created_at)}  "
-              f"访问: {entry.access_count} 次")
+        print(
+            f"创建:     {format_time(entry.created_at)}  访问: {entry.access_count} 次"
+        )
         print(f"预览: {star_mark}{entry.preview[:80]}...")
 
     if total > args.limit + args.offset:
         remaining = total - args.limit - args.offset
-        print(f"\n... 还有 {remaining} 条"
-              f"（使用 --offset {args.offset + args.limit} 查看更多）")
+        print(
+            f"\n... 还有 {remaining} 条"
+            f"（使用 --offset {args.offset + args.limit} 查看更多）"
+        )
 
     cm.close()
     return 0
@@ -885,7 +977,7 @@ def cmd_stats(args):
 
     if args.detailed:
         stats = cm.detailed_stats()
-        if getattr(args, 'json_output', False):
+        if getattr(args, "json_output", False):
             _json_out(stats)
             cm.close()
             return 0
@@ -931,7 +1023,7 @@ def cmd_stats(args):
     else:
         stats = cm.stats()
         # v5.5.6 fix: 非 detailed 模式也支持 --json 输出（此前无 JSON 分支）
-        if getattr(args, 'json_output', False):
+        if getattr(args, "json_output", False):
             # 附加数据库路径信息（便于插件集成）
             stats["db_path"] = args.db_path or ""
             _json_out(stats)
@@ -980,9 +1072,11 @@ def cmd_batch_delete(args):
     created_before = None
     if args.after:
         from datetime import datetime
+
         created_after = datetime.fromisoformat(args.after).timestamp()
     if args.before:
         from datetime import datetime
+
         created_before = datetime.fromisoformat(args.before).timestamp()
 
     starred = None
@@ -1038,8 +1132,7 @@ def cmd_tag_search(args):
 
     for entry in entries:
         star_mark = "⭐ " if entry.starred else ""
-        print(f"\n--- [{entry.category}] "
-              f"{star_mark}{entry.preview[:60]} ---")
+        print(f"\n--- [{entry.category}] {star_mark}{entry.preview[:60]} ---")
         print(f"  标签: {', '.join(entry.tags)}")
         print(f"  层级: {entry.layer.value} | 重要性: {entry.importance.value}")
         print(f"  创建: {format_time(entry.created_at)}")
@@ -1125,6 +1218,7 @@ def _generate_dashboard_html(dashboard: dict) -> str:
 
     v5.6.2 安全修复：所有动态内容使用 html.escape() 转义，防止存储型 XSS。
     """
+
     def _e(s: object) -> str:
         return html.escape(str(s))
 
@@ -1134,17 +1228,23 @@ def _generate_dashboard_html(dashboard: dict) -> str:
 
     cat_rows = ""
     for cat in dashboard.get("category_distribution", [])[:10]:
-        cat_rows += f"<tr><td>{_e(cat['category'])}</td><td>{_e(cat['count'])}</td></tr>\n"
+        cat_rows += (
+            f"<tr><td>{_e(cat['category'])}</td><td>{_e(cat['count'])}</td></tr>\n"
+        )
 
     decay_rows = ""
     for item in dashboard.get("decay_warnings", [])[:10]:
-        decay_rows += (f"<tr><td>{_e(str(item['content'])[:60])}...</td><td>{_e(item['category'])}</td>"
-                       f"<td>{_e(item['forgetting_score'])}</td><td>{_e(item['access_count'])}</td></tr>\n")
+        decay_rows += (
+            f"<tr><td>{_e(str(item['content'])[:60])}...</td><td>{_e(item['category'])}</td>"
+            f"<td>{_e(item['forgetting_score'])}</td><td>{_e(item['access_count'])}</td></tr>\n"
+        )
 
     access_rows = ""
     for item in dashboard.get("top_access_low_importance", []):
-        access_rows += (f"<tr><td>{_e(str(item['content'])[:60])}...</td><td>{_e(item['category'])}</td>"
-                        f"<td>{_e(item['access_count'])}</td><td>{_e(item['importance'])}</td></tr>\n")
+        access_rows += (
+            f"<tr><td>{_e(str(item['content'])[:60])}...</td><td>{_e(item['category'])}</td>"
+            f"<td>{_e(item['access_count'])}</td><td>{_e(item['importance'])}</td></tr>\n"
+        )
 
     return f"""<!DOCTYPE html>
 <html lang="zh">
@@ -1167,13 +1267,13 @@ tr:nth-child(even) {{ background: #f9f9f9; }}
 </head>
 <body>
 <h1>MindForge Health Dashboard</h1>
-<p>Generated: {_e(dashboard.get('generated_at', ''))}</p>
+<p>Generated: {_e(dashboard.get("generated_at", ""))}</p>
 
 <div class="summary">
-  <div class="card"><div class="num">{_e(dashboard.get('total_memories', 0))}</div><div class="label">Total Memories</div></div>
-  <div class="card"><div class="num">{_e(dashboard.get('summary', {}).get('categories', 0))}</div><div class="label">Categories</div></div>
-  <div class="card"><div class="num">{_e(dashboard.get('summary', {}).get('decay_warning_count', 0))}</div><div class="label">Decay Warnings</div></div>
-  <div class="card"><div class="num">{_e(dashboard.get('summary', {}).get('high_access_low_importance_count', 0))}</div><div class="label">High Access / Low Importance</div></div>
+  <div class="card"><div class="num">{_e(dashboard.get("total_memories", 0))}</div><div class="label">Total Memories</div></div>
+  <div class="card"><div class="num">{_e(dashboard.get("summary", {}).get("categories", 0))}</div><div class="label">Categories</div></div>
+  <div class="card"><div class="num">{_e(dashboard.get("summary", {}).get("decay_warning_count", 0))}</div><div class="label">Decay Warnings</div></div>
+  <div class="card"><div class="num">{_e(dashboard.get("summary", {}).get("high_access_low_importance_count", 0))}</div><div class="label">High Access / Low Importance</div></div>
 </div>
 
 <h2>Memory Growth Curve (Recent 15 Days)</h2>
@@ -1200,14 +1300,14 @@ def cmd_health(args):
     cm = _get_memory(args)
 
     # v5.4.6 仪表盘模式
-    if getattr(args, 'dashboard', False):
+    if getattr(args, "dashboard", False):
         print_banner()
         print(c("📊 MindForge 记忆健康仪表盘", "bold"))
         print("=" * 50)
 
         dashboard = cm.health_dashboard()
 
-        if getattr(args, 'html', False):
+        if getattr(args, "html", False):
             # 输出 HTML 报告
             html_report = _generate_dashboard_html(dashboard)
             output_file = Path("./data/health_dashboard.html")
@@ -1223,10 +1323,14 @@ def cmd_health(args):
 
     result = cm.health_check()
 
-    if getattr(args, 'json_output', False):
+    if getattr(args, "json_output", False):
         _json_out(result)
         cm.close()
-        return 0 if result["status"] == "healthy" else (1 if result["status"] == "warning" else 2)
+        return (
+            0
+            if result["status"] == "healthy"
+            else (1 if result["status"] == "warning" else 2)
+        )
 
     print_banner()
     print(c("🩺 MindForge 健康检查", "bold"))
@@ -1241,20 +1345,30 @@ def cmd_health(args):
     status_icon = {"healthy": "✅", "warning": "⚠️", "critical": "🚨"}.get(status, "❓")
 
     print(f"\n总体状态：{status_icon} {c(status.upper(), status_color)}")
-    print(f"完整性检查：{c(result['integrity_check'], 'green' if result['integrity_check'] == 'ok' else 'red')}")
+    print(
+        f"完整性检查：{c(result['integrity_check'], 'green' if result['integrity_check'] == 'ok' else 'red')}"
+    )
     print(f"总记忆数：  {c(str(result['total_memories']), 'cyan')}")
     print(f"数据库大小：{format_size(result['db_size_bytes'])}")
 
     idx = result["indexes"]
     print("\n📊 索引状态：")
-    print(f"   预期 {idx['expected']} 个，找到 {c(str(idx['found']), 'green' if idx['found'] == idx['expected'] else 'red')} 个")
+    print(
+        f"   预期 {idx['expected']} 个，找到 {c(str(idx['found']), 'green' if idx['found'] == idx['expected'] else 'red')} 个"
+    )
     if idx["missing"]:
         print(f"   缺失：{', '.join(idx['missing'])}")
 
     print("\n📋 数据一致性：")
-    print(f"   孤立 FTS 记录：    {c(str(result['fts_orphans']), 'yellow' if result['fts_orphans'] else 'green')}")
-    print(f"   孤立审计日志：    {c(str(result['audit_orphans']), 'yellow' if result['audit_orphans'] else 'green')}")
-    print(f"   加密不一致条目：  {c(str(result['encrypted_inconsistent']), 'red' if result['encrypted_inconsistent'] else 'green')}")
+    print(
+        f"   孤立 FTS 记录：    {c(str(result['fts_orphans']), 'yellow' if result['fts_orphans'] else 'green')}"
+    )
+    print(
+        f"   孤立审计日志：    {c(str(result['audit_orphans']), 'yellow' if result['audit_orphans'] else 'green')}"
+    )
+    print(
+        f"   加密不一致条目：  {c(str(result['encrypted_inconsistent']), 'red' if result['encrypted_inconsistent'] else 'green')}"
+    )
 
     print("\n💡 建议：")
     for rec in result["recommendations"]:
@@ -1308,7 +1422,9 @@ def cmd_vacuum(args):
 
     # 重建前健康状态
     before = cm.health_check()
-    print(f"\n重建前：孤立 FTS 记录 = {c(str(before['fts_orphans']), 'yellow' if before['fts_orphans'] else 'green')}")
+    print(
+        f"\n重建前：孤立 FTS 记录 = {c(str(before['fts_orphans']), 'yellow' if before['fts_orphans'] else 'green')}"
+    )
 
     print(c("\n正在重建 FTS 索引...", "cyan"))
     result = cm.rebuild_fts()
@@ -1330,7 +1446,9 @@ def cmd_vacuum(args):
     print(f"   已索引条目：{c(str(result['indexed']), 'cyan')}")
     print(f"   耗时：{result['duration_ms']} ms")
     print(f"   VACUUM：{'✅ 已执行' if vacuum_ok else '⚠️ 跳过'}")
-    print(f"\n重建后：孤立 FTS 记录 = {c(str(after['fts_orphans']), 'green' if after['fts_orphans'] == 0 else 'yellow')}")
+    print(
+        f"\n重建后：孤立 FTS 记录 = {c(str(after['fts_orphans']), 'green' if after['fts_orphans'] == 0 else 'yellow')}"
+    )
     print(f"总体状态：{after['status']}")
     cm.close()
     return 0
@@ -1396,15 +1514,19 @@ def cmd_analyze(args):
 
     print("\n🔥 活跃度分析：")
     total_access = sum(e.access_count for e in cm.list(limit=99999))
-    avg_access = total_access / stats['total'] if stats['total'] > 0 else 0
+    avg_access = total_access / stats["total"] if stats["total"] > 0 else 0
     print(f"   总访问次数：      {c(str(total_access), 'purple')}")
     print(f"   平均访问次数：    {avg_access:.2f}")
 
-    hot_entries = sorted(cm.list(limit=100), key=lambda e: e.access_count, reverse=True)[:5]
+    hot_entries = sorted(
+        cm.list(limit=100), key=lambda e: e.access_count, reverse=True
+    )[:5]
     if hot_entries:
         print("\n   🔥 热门记忆 TOP5：")
         for i, e in enumerate(hot_entries, 1):
-            print(f"      {i}. [{e.category}] {e.preview[:40]}... ({e.access_count} 次访问)")
+            print(
+                f"      {i}. [{e.category}] {e.preview[:40]}... ({e.access_count} 次访问)"
+            )
 
     print("\n🏷️ 标签分析：")
     top_tags = stats.get("top_tags", {})
@@ -1432,30 +1554,33 @@ def cmd_import_md(args):
         return 1
 
     try:
-        content = input_path.read_text(encoding='utf-8')
+        content = input_path.read_text(encoding="utf-8")
     except (OSError, IOError) as e:
         print(c(f"❌ 读取文件失败：{e}", "red"))
         return 1
 
     import re
+
     entries = []
     current_category = "default"
     current_tags = []
 
-    sections = re.split(r'(#{1,2}\s+.+)', content)
+    sections = re.split(r"(#{1,2}\s+.+)", content)
     for i in range(0, len(sections), 2):
         text = sections[i].strip()
         if text:
-            entries.append({
-                'content': text,
-                'category': current_category,
-                'tags': current_tags,
-            })
+            entries.append(
+                {
+                    "content": text,
+                    "category": current_category,
+                    "tags": current_tags,
+                }
+            )
         if i + 1 < len(sections):
             header = sections[i + 1].strip()
-            title = header.lstrip('#').strip()
+            title = header.lstrip("#").strip()
             current_category = title
-            current_tags = re.findall(r'(?:^|\s)#([a-zA-Z]\w*)', title)
+            current_tags = re.findall(r"(?:^|\s)#([a-zA-Z]\w*)", title)
 
     if not entries:
         print(c("⚠️  未找到可导入的内容", "yellow"))
@@ -1475,10 +1600,12 @@ def cmd_import_md(args):
     for entry in entries:
         try:
             cm.add(
-                content=entry['content'],
-                category=entry['category'],
-                tags=entry['tags'],
-                layer=MemoryLayer.from_string(args.layer) if args.layer else MemoryLayer.short_term,
+                content=entry["content"],
+                category=entry["category"],
+                tags=entry["tags"],
+                layer=MemoryLayer.from_string(args.layer)
+                if args.layer
+                else MemoryLayer.short_term,
             )
             imported += 1
         except (ValueError, TypeError):
@@ -1509,7 +1636,9 @@ def cmd_migrate(args):
         return 0
 
     if not args.force:
-        print(c(f"\n⚠️  将执行从 v{current_version} 到 v{latest_version} 的迁移", "yellow"))
+        print(
+            c(f"\n⚠️  将执行从 v{current_version} 到 v{latest_version} 的迁移", "yellow")
+        )
         print(c("确认迁移？加 --force 执行", "yellow"))
         return 1
 
@@ -1577,7 +1706,13 @@ def cmd_export_html(args):
 
     cards_html = ""
     for entry in entries:
-        tags_html = "".join(f'<span class="tag">#{html.escape(str(t))}</span>' for t in entry.tags) if entry.tags else ""
+        tags_html = (
+            "".join(
+                f'<span class="tag">#{html.escape(str(t))}</span>' for t in entry.tags
+            )
+            if entry.tags
+            else ""
+        )
         cards_html += f"""
 <div class="memory-card">
     <div class="card-header">
@@ -1592,7 +1727,12 @@ def cmd_export_html(args):
 </div>"""
 
     export_time = html.escape(str(format_time(time.time())))
-    html_content = html_template.format(count=len(entries), export_time=export_time, cards=cards_html, __version__=__version__)
+    html_content = html_template.format(
+        count=len(entries),
+        export_time=export_time,
+        cards=cards_html,
+        __version__=__version__,
+    )
 
     try:
         output_path = _safe_export_path(args.output, "memory_export.html", ".html")
@@ -1600,7 +1740,7 @@ def cmd_export_html(args):
         print(c(f"❌ 路径校验失败: {e}", "red"))
         cm.close()
         return 1
-    output_path.write_text(html_content, encoding='utf-8')
+    output_path.write_text(html_content, encoding="utf-8")
 
     print(c("✅ HTML 导出完成！", "green"))
     print(f"   文件：{output_path}")
@@ -1665,7 +1805,7 @@ def cmd_graph(args):
 
     if args.graph_action == "stats":
         stats = kg.get_entity_stats()
-        if getattr(args, 'json_output', False):
+        if getattr(args, "json_output", False):
             _json_out(stats)
             cm.close()
             return 0
@@ -1673,10 +1813,10 @@ def cmd_graph(args):
         print(f"  实体总数: {stats['total_entities']}")
         print(f"  关系总数: {stats['total_relations']}")
         print("\n  实体类型:")
-        for etype, count in stats['entity_types'].items():
+        for etype, count in stats["entity_types"].items():
             print(f"    {etype}: {count}")
         print("\n  关系类型:")
-        for rtype, count in stats['relation_types'].items():
+        for rtype, count in stats["relation_types"].items():
             print(f"    {rtype}: {count}")
 
     elif args.graph_action == "related":
@@ -1777,7 +1917,9 @@ def cmd_export(args):
 def cmd_import(args):
     """导入记忆"""
     cm = _get_memory(args)
-    target_layer = MemoryLayer.from_string(args.target_layer) if args.target_layer else None
+    target_layer = (
+        MemoryLayer.from_string(args.target_layer) if args.target_layer else None
+    )
 
     try:
         input_path = _safe_import_path(args.input)
@@ -1814,7 +1956,9 @@ def cmd_compliance(args):
     print(f"私密记忆：{report['private_memories']}")
     print(f"严格隔离：{report['strict_memories']}")
     print(f"活跃授权：{report['active_grants']}")
-    print(f"合规状态：{c(report['compliance_status'], 'green' if report['compliance_status'] == 'PASS' else 'yellow')}")
+    print(
+        f"合规状态：{c(report['compliance_status'], 'green' if report['compliance_status'] == 'PASS' else 'yellow')}"
+    )
     print("\n按隐私分级统计：")
     for level, count in report["by_privacy"].items():
         print(f"  {level}: {count}")
@@ -1825,15 +1969,20 @@ def cmd_compliance(args):
 
 def cmd_serve(args):
     """启动 Web UI 或 REST API"""
-    if getattr(args, 'api', False):
+    if getattr(args, "api", False):
         # v5.4.6 REST API 模式
         print(c("启动 MindForge REST API...", "cyan"))
         cm = _get_memory(args)
         try:
             from api.server import start_api_server
-            start_api_server(cm, host=args.host, port=args.port,
-                             ssl_certfile=args.ssl_cert,
-                             ssl_keyfile=args.ssl_key)
+
+            start_api_server(
+                cm,
+                host=args.host,
+                port=args.port,
+                ssl_certfile=args.ssl_cert,
+                ssl_keyfile=args.ssl_key,
+            )
         except KeyboardInterrupt:
             print("\n服务已停止")
         except (OSError, ValueError) as e:
@@ -1850,12 +1999,18 @@ def cmd_serve(args):
 
     # P1 #13 安全修复：Web UI 安全加固
     import os as _os
+
     api_key = _os.environ.get("MINDFORGE_API_KEY", "")
     allow_noauth = _os.environ.get("MINDFORGE_ALLOW_NOAUTH", "0").strip().lower()
 
     # fail-closed 启动检查：非 localhost 绑定必须设 API Key
     if args.host not in ("127.0.0.1", "localhost") and not api_key:
-        print(c("错误：非本地绑定（host=%s）时必须设置 MINDFORGE_API_KEY" % args.host, "red"))
+        print(
+            c(
+                "错误：非本地绑定（host=%s）时必须设置 MINDFORGE_API_KEY" % args.host,
+                "red",
+            )
+        )
         print(c("  或绑定到 127.0.0.1 并设 MINDFORGE_ALLOW_NOAUTH=1", "yellow"))
         return 1
 
@@ -1890,7 +2045,9 @@ def cmd_serve(args):
                     _rate_window["_last_purge"] = now
                 if client_ip not in _rate_window:
                     _rate_window[client_ip] = []
-                _rate_window[client_ip] = [t for t in _rate_window[client_ip] if now - t < 60]
+                _rate_window[client_ip] = [
+                    t for t in _rate_window[client_ip] if now - t < 60
+                ]
                 if len(_rate_window[client_ip]) >= _RATE_LIMIT:
                     return False
                 _rate_window[client_ip].append(now)
@@ -1974,8 +2131,7 @@ def cmd_serve(args):
         # v5.6.5 P3 #21：使用多线程服务器（daemon_threads=True），Ctrl+C 后
         # serve_forever 退出，with 退出时 server_close 关闭监听 socket；工作线程为
         # 守护线程，不会拖住进程，也无需在服务线程自身调用会自锁的 shutdown()。
-        class _ThreadingWebServer(socketserver.ThreadingMixIn,
-                                http.server.HTTPServer):
+        class _ThreadingWebServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
             daemon_threads = True
             allow_reuse_address = True
 
@@ -1992,6 +2148,7 @@ def cmd_serve(args):
 
 
 # ===== 记忆关联命令（v5.2.5 新增）=====
+
 
 def cmd_link(args):
     """创建记忆关联（双向）"""
@@ -2048,8 +2205,9 @@ def cmd_links(args):
         if len(link.get("linked_content") or "") > 60:
             content_preview += "..."
 
-        print(f"{i}. {c('[' + link['link_type'] + ']', type_color)} "
-              f"→ {link['linked_id']}")
+        print(
+            f"{i}. {c('[' + link['link_type'] + ']', type_color)} → {link['linked_id']}"
+        )
         print(f"   内容: {content_preview}")
         print(f"   分类: {link.get('linked_category', '-')}")
         if link.get("note"):
@@ -2076,6 +2234,7 @@ def cmd_unlink(args):
 
 
 # ===== 置顶命令（v5.2.5 新增）=====
+
 
 def cmd_pin(args):
     """置顶记忆"""
@@ -2129,7 +2288,9 @@ def cmd_pinned(args):
         tags_str = ", ".join(entry.tags) if entry.tags else "-"
         print(f"{i}. {c(entry.id, 'cyan')}  [{entry.category}]")
         print(f"   {content_preview}")
-        print(f"   标签: {tags_str} | 重要度: {entry.importance.value} | 层级: {entry.layer.value}")
+        print(
+            f"   标签: {tags_str} | 重要度: {entry.importance.value} | 层级: {entry.layer.value}"
+        )
         print()
 
     cm.close()
@@ -2137,6 +2298,7 @@ def cmd_pinned(args):
 
 
 # ===== 记忆版本历史命令（v5.2.7 新增）=====
+
 
 def cmd_history(args):
     """查看记忆的修改历史"""
@@ -2148,18 +2310,23 @@ def cmd_history(args):
         cm.close()
         return 0
 
-    print(c(f"\n📜 记忆 {args.memory_id} 的修改历史（共 {len(versions)} 个版本）", "cyan"))
+    print(
+        c(f"\n📜 记忆 {args.memory_id} 的修改历史（共 {len(versions)} 个版本）", "cyan")
+    )
     print("=" * 70)
 
     for i, v in enumerate(versions, 1):
         print(f"{i}. 版本 v{v['version_number']}  {c(v['version_id'], 'cyan')}")
         print(f"   内容: {v['content_preview']}")
         print(f"   分类: {v.get('category', '-')} | 重要度: {v.get('importance', '-')}")
-        print(f"   修改者: {v.get('actor', '-')} | 时间: {format_time(v['changed_at'])}")
+        print(
+            f"   修改者: {v.get('actor', '-')} | 时间: {format_time(v['changed_at'])}"
+        )
         print()
 
     cm.close()
     return 0
+
 
 def cmd_rollback(args):
     """回滚记忆到指定历史版本"""
@@ -2190,6 +2357,7 @@ def cmd_rollback(args):
 
 
 # ===== v5.2.8 新增命令 =====
+
 
 def cmd_export_csv(args):
     """导出记忆为 CSV（v5.2.8 新增）"""
@@ -2290,10 +2458,16 @@ def cmd_diff(args):
 
 # ===== 多 Agent 记忆空间命令（v5.2.8 实验性 — v6.0.0 全量推送预览）=====
 
+
 def _print_experimental_banner():
     if _json_mode:
         return
-    print(c("🧪 实验性功能：多 Agent 记忆空间（v6.0.0 全量推送预览，API 可能变化）", "yellow"))
+    print(
+        c(
+            "🧪 实验性功能：多 Agent 记忆空间（v6.0.0 全量推送预览，API 可能变化）",
+            "yellow",
+        )
+    )
 
 
 def cmd_space_create(args):
@@ -2334,8 +2508,10 @@ def cmd_space_list(args):
     for s in spaces:
         role_info = f" | 我的角色: {s['my_role']}" if s.get("my_role") else ""
         print(f"📦 {c(s['name'], 'bold')} [{s['space_id']}]")
-        print(f"   Owner: {s['owner_agent']} | 策略: {s['policy']} | "
-              f"成员: {s['member_count']} | 共享记忆: {s['item_count']}{role_info}")
+        print(
+            f"   Owner: {s['owner_agent']} | 策略: {s['policy']} | "
+            f"成员: {s['member_count']} | 共享记忆: {s['item_count']}{role_info}"
+        )
         if s.get("description"):
             print(f"   描述: {s['description']}")
         print(f"   创建: {format_time(s['created_at'])}")
@@ -2398,7 +2574,12 @@ def cmd_space_share(args):
         print(f"   记忆 ID: {result['memory_id']}")
         print(f"   条目版本: v{result['version']}")
         if result.get("conflict_resolved"):
-            print(c(f"   冲突解决: {result['conflict_resolved']}（版本号已递增）", "yellow"))
+            print(
+                c(
+                    f"   冲突解决: {result['conflict_resolved']}（版本号已递增）",
+                    "yellow",
+                )
+            )
     else:
         print(c(f"\n❌ 共享失败: {result.get('error')}", "red"))
     cm.close()
@@ -2425,14 +2606,23 @@ def cmd_space_memories(args):
         cm.close()
         return 0
 
-    print(c(f"\n🌐 空间 [{result['space_name']}] 的共享记忆（{result['count']} 条）", "cyan"))
+    print(
+        c(
+            f"\n🌐 空间 [{result['space_name']}] 的共享记忆（{result['count']} 条）",
+            "cyan",
+        )
+    )
     print("=" * 70)
     for i, item in enumerate(items, 1):
         print(f"{i}. [{item['category']}] {item['content_preview']}")
-        print(f"   ID: {item['memory_id']} | 版本: v{item['version']} | "
-              f"来源: {item['source_agent'] or '-'} | 共享者: {item['added_by']}")
-        print(f"   标签: {', '.join(item['tags']) if item['tags'] else '无'} | "
-              f"隐私: {item['privacy']} | 时间: {format_time(item['added_at'])}")
+        print(
+            f"   ID: {item['memory_id']} | 版本: v{item['version']} | "
+            f"来源: {item['source_agent'] or '-'} | 共享者: {item['added_by']}"
+        )
+        print(
+            f"   标签: {', '.join(item['tags']) if item['tags'] else '无'} | "
+            f"隐私: {item['privacy']} | 时间: {format_time(item['added_at'])}"
+        )
         print()
     cm.close()
     return 0
@@ -2454,8 +2644,12 @@ def cmd_space_stats(args):
         print("=" * 50)
         print(f"   成员数: {space['member_count']} | 共享记忆: {space['item_count']}")
         print(f"   策略: {space['policy']} | Owner: {space['owner_agent']}")
-        print("   角色分布: " + ", ".join(
-            f"{role}×{cnt}" for role, cnt in result["members_by_role"].items()))
+        print(
+            "   角色分布: "
+            + ", ".join(
+                f"{role}×{cnt}" for role, cnt in result["members_by_role"].items()
+            )
+        )
         if result["top_contributors"]:
             print("   贡献榜:")
             for t in result["top_contributors"]:
@@ -2479,44 +2673,134 @@ def _install_shell_completion(shell: str):
     """
     # 收集所有子命令名称
     commands = [
-        "init", "add", "search", "list", "get", "update", "delete",
-        "stats", "star", "unstar", "batch-delete", "tag-search",
-        "deduplicate", "export-md", "health", "summarize", "vacuum",
-        "purge-trash", "analyze", "import-md", "migrate",
-        "export-html", "export-xml", "import-xml",
-        "export-json", "import-json", "import-csv",
-        "merge", "remind", "tags", "cats", "timeline", "top",
-        "random", "rename-tag", "rename-cat", "config", "doctor",
-        "find", "audit", "recent", "trash", "restore",
-        "consolidate", "graph", "personality",
-        "agent-stats", "agent-list", "evolve",
-        "agent-transfer", "agent-clean", "agent-list-memories",
-        "agent-rank", "agent-forget", "agent-profile",
-        "agent-merge", "agent-export", "agent-search", "agent-compare",
-        "drama-search", "char-ranking", "agent-diff", "agent-purge",
-        "drama-progress-update", "drama-rec2",
-        "agent-timeline", "agent-heatmap", "drama-binge",
-        "char-network", "agent-sentiment", "memory-decay",
-        "drama-compare", "char-arc", "memory-cluster",
-        "agent-insight", "drama-summary", "scene-tension",
-        "memory-link", "memory-recall", "drama-pacing",
-        "char-interaction", "quality", "similar",
-        "backup", "export", "import", "compliance", "serve",
-        "cleanup", "archive", "archived-list", "archived-restore",
+        "init",
+        "add",
+        "search",
+        "list",
+        "get",
+        "update",
+        "delete",
+        "stats",
+        "star",
+        "unstar",
+        "batch-delete",
+        "tag-search",
+        "deduplicate",
+        "export-md",
+        "health",
+        "summarize",
+        "vacuum",
+        "purge-trash",
+        "analyze",
+        "import-md",
+        "migrate",
+        "export-html",
+        "export-xml",
+        "import-xml",
+        "export-json",
+        "import-json",
+        "import-csv",
+        "merge",
+        "remind",
+        "tags",
+        "cats",
+        "timeline",
+        "top",
+        "random",
+        "rename-tag",
+        "rename-cat",
+        "config",
+        "doctor",
+        "find",
+        "audit",
+        "recent",
+        "trash",
+        "restore",
+        "consolidate",
+        "graph",
+        "personality",
+        "agent-stats",
+        "agent-list",
+        "evolve",
+        "agent-transfer",
+        "agent-clean",
+        "agent-list-memories",
+        "agent-rank",
+        "agent-forget",
+        "agent-profile",
+        "agent-merge",
+        "agent-export",
+        "agent-search",
+        "agent-compare",
+        "drama-search",
+        "char-ranking",
+        "agent-diff",
+        "agent-purge",
+        "drama-progress-update",
+        "drama-rec2",
+        "agent-timeline",
+        "agent-heatmap",
+        "drama-binge",
+        "char-network",
+        "agent-sentiment",
+        "memory-decay",
+        "drama-compare",
+        "char-arc",
+        "memory-cluster",
+        "agent-insight",
+        "drama-summary",
+        "scene-tension",
+        "memory-link",
+        "memory-recall",
+        "drama-pacing",
+        "char-interaction",
+        "quality",
+        "similar",
+        "backup",
+        "export",
+        "import",
+        "compliance",
+        "serve",
+        "cleanup",
+        "archive",
+        "archived-list",
+        "archived-restore",
         "archived-purge",
-        "batch-add", "import-url",
-        "export-excel", "import-excel", "copy", "move",
-        "fuzzy-search", "search-history",
-        "batch-add-tags", "batch-remove-tags", "merge-tags",
-        "db-backup", "db-backups", "db-restore", "db-clean-backups",
-        "drama-add", "drama-list", "drama-get",
-        "memory-reflection", "rebuild-embeddings", "embedding-status",
-        "memory-lineage", "memory-reinforce",
-        "drama-plot-thread", "drama-episode-curve", "drama-screen-time",
-        "fed-acl-add", "fed-acl-remove", "fed-acl-list",
-        "fed-acl-check", "fed-acl-stats",
-        "share-conflicts", "share-conflict-resolve",
-        "share-conflict-dismiss", "share-conflict-stats",
+        "batch-add",
+        "import-url",
+        "export-excel",
+        "import-excel",
+        "copy",
+        "move",
+        "fuzzy-search",
+        "search-history",
+        "batch-add-tags",
+        "batch-remove-tags",
+        "merge-tags",
+        "db-backup",
+        "db-backups",
+        "db-restore",
+        "db-clean-backups",
+        "drama-add",
+        "drama-list",
+        "drama-get",
+        "memory-reflection",
+        "rebuild-embeddings",
+        "embedding-status",
+        "memory-lineage",
+        "memory-reinforce",
+        "drama-plot-thread",
+        "drama-episode-curve",
+        "drama-screen-time",
+        "fed-acl-add",
+        "fed-acl-remove",
+        "fed-acl-list",
+        "fed-acl-check",
+        "fed-acl-stats",
+        "share-conflicts",
+        "share-conflict-resolve",
+        "share-conflict-dismiss",
+        "share-conflict-stats",
         "export-obsidian",
     ]
 
@@ -2552,7 +2836,7 @@ complete -F _mindforge_completions MindForge
 # MindForge CLI auto-completion (zsh)
 _mindforge() {{
     local -a commands
-    commands=({' '.join(repr(c) for c in commands)})
+    commands=({" ".join(repr(c) for c in commands)})
     _describe 'command' commands
 }}
 compdef _mindforge mindforge MindForge
@@ -2583,7 +2867,9 @@ complete -c MindForge -f -a '{cmds_str}'
         print(c(f"✅ Fish 补全已安装到 {target}", "green"))
         print(c("   重新打开终端生效", "yellow"))
 
+
 import json as _json
+
 
 def _json_out(data, indent=2):
     """JSON 格式输出（--json 模式）"""
@@ -2596,17 +2882,27 @@ def main(argv=None):
         description=f"MindForge v{__version__} - AI Agent 终身记忆系统",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--version", "-v", action="version", version=f"MindForge v{__version__}")
-    parser.add_argument("--install-completion", dest="install_completion",
-                        choices=["bash", "zsh", "fish"],
-                        help="安装 Shell 自动补全（v5.4.6 新增，支持 bash/zsh/fish）")
+    parser.add_argument(
+        "--version", "-v", action="version", version=f"MindForge v{__version__}"
+    )
+    parser.add_argument(
+        "--install-completion",
+        dest="install_completion",
+        choices=["bash", "zsh", "fish"],
+        help="安装 Shell 自动补全（v5.4.6 新增，支持 bash/zsh/fish）",
+    )
 
     # v5.6.5 P2 #18：默认 None，解析后由 core.paths 统一为跨 cwd 稳定的
     # 用户级路径（~/.MindForge/data/store/memory.db），与 MCP 入口一致；
     # 仍可用 --db-path 或 MINDFORGE_DB_PATH 覆盖。
     parser.add_argument("--db-path", default=None, help="数据库路径")
     parser.add_argument("--key-file", default="./data/.key", help="密钥文件路径")
-    parser.add_argument("--json", action="store_true", dest="json_output", help="JSON 格式输出（供插件/脚本集成使用）")
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="JSON 格式输出（供插件/脚本集成使用）",
+    )
 
     sub = parser.add_subparsers(dest="command", required=False)
 
@@ -2614,31 +2910,61 @@ def main(argv=None):
     # default=SUPPRESS：子 parser 未显式指定 --json 时不覆盖主 parser 已解析的值
     # （Python 3.13+ subparser 解析会重置 namespace，必须用 SUPPRESS 才能保留前置值）
     json_parser = argparse.ArgumentParser(add_help=False)
-    json_parser.add_argument("--json", action="store_true", dest="json_output",
-                             default=argparse.SUPPRESS,
-                             help="JSON 格式输出（供插件/脚本集成使用）")
+    json_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        default=argparse.SUPPRESS,
+        help="JSON 格式输出（供插件/脚本集成使用）",
+    )
 
     p_init = sub.add_parser("init", help="初始化 MindForge")
-    p_init.add_argument("--no-encrypt", action="store_true", help="不启用加密（CI/自动化场景）")
-    p_init.add_argument("--password", default=None, help="直接指定密码（非交互式，CI/脚本场景）")
-
+    p_init.add_argument(
+        "--no-encrypt", action="store_true", help="不启用加密（CI/自动化场景）"
+    )
+    p_init.add_argument(
+        "--password", default=None, help="直接指定密码（非交互式，CI/脚本场景）"
+    )
 
     p_add = sub.add_parser("add", help="添加记忆", parents=[json_parser])
     p_add.add_argument("content", help="记忆内容")
     p_add.add_argument("--category", "-c", help="分类")
     p_add.add_argument("--tags", "-t", nargs="+", help="标签")
-    p_add.add_argument("--privacy", "-p", default="INTERNAL",
-                       choices=["PUBLIC", "INTERNAL", "PRIVATE", "STRICT"], help="隐私等级")
-    p_add.add_argument("--importance", "-i", default="MEDIUM",
-                       choices=["LOW", "MEDIUM", "HIGH", "CRITICAL"], help="重要性")
-    p_add.add_argument("--layer", "-l", default="short_term",
-                       choices=["sensory", "short_term", "long_term", "permanent"], help="记忆层级")
-    p_add.add_argument("--type", default="text",
-                       choices=["text", "image", "audio", "code", "structured"], help="记忆类型")
+    p_add.add_argument(
+        "--privacy",
+        "-p",
+        default="INTERNAL",
+        choices=["PUBLIC", "INTERNAL", "PRIVATE", "STRICT"],
+        help="隐私等级",
+    )
+    p_add.add_argument(
+        "--importance",
+        "-i",
+        default="MEDIUM",
+        choices=["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+        help="重要性",
+    )
+    p_add.add_argument(
+        "--layer",
+        "-l",
+        default="short_term",
+        choices=["sensory", "short_term", "long_term", "permanent"],
+        help="记忆层级",
+    )
+    p_add.add_argument(
+        "--type",
+        default="text",
+        choices=["text", "image", "audio", "code", "structured"],
+        help="记忆类型",
+    )
     # v5.7.x fix: --session 默认空串，与 p_search / Python API 默认身份一致。
     # 此前默认 "cli"，而 search 默认 session_id=""，INTERNAL 隐私校验
     # (source_session == session_id) 不通过，CLI add 后 search 返回 0。
-    p_add.add_argument("--session", default="", help="会话 ID（默认空，与 search/Python API 默认身份一致）")
+    p_add.add_argument(
+        "--session",
+        default="",
+        help="会话 ID（默认空，与 search/Python API 默认身份一致）",
+    )
     p_add.add_argument("--agent", default="cli", help="Agent ID")
     p_add.add_argument("--star", action="store_true", help="添加后直接收藏")
 
@@ -2648,26 +2974,46 @@ def main(argv=None):
     p_search.add_argument("--category", "-c", help="分类筛选")
     p_search.add_argument("--agent", default="", help="Agent ID")
     p_search.add_argument("--session", default="", help="会话 ID")
-    p_search.add_argument("--no-embedding", action="store_true",
-                           help="禁用向量检索，降级为 TF-IDF + Fuzzy 搜索（v5.4.5）")
+    p_search.add_argument(
+        "--no-embedding",
+        action="store_true",
+        help="禁用向量检索，降级为 TF-IDF + Fuzzy 搜索（v5.4.5）",
+    )
 
     p_list = sub.add_parser("list", help="列出记忆")
     p_list.add_argument("--category", "-c", help="分类筛选")
     p_list.add_argument("--layer", "-l", help="层级筛选")
-    p_list.add_argument("--starred", action="store_true", default=None,
-                        help="只显示已收藏")
-    p_list.add_argument("--unstarred", action="store_true", default=None,
-                        help="只显示未收藏")
+    p_list.add_argument(
+        "--starred", action="store_true", default=None, help="只显示已收藏"
+    )
+    p_list.add_argument(
+        "--unstarred", action="store_true", default=None, help="只显示未收藏"
+    )
     p_list.add_argument("--after", help="创建时间之后 (YYYY-MM-DD 或 ISO 格式)")
     p_list.add_argument("--before", help="创建时间之前 (YYYY-MM-DD 或 ISO 格式)")
     p_list.add_argument("--limit", type=int, default=50, help="数量限制")
     p_list.add_argument("--offset", type=int, default=0, help="偏移量")
-    p_list.add_argument("--sort", "-s", default="created_at",
-                        choices=["created_at", "updated_at", "last_accessed_at", "access_count", "strength", "forgetting_score"],
-                        help="排序字段（v5.1.4 新增）")
-    p_list.add_argument("--order", "-o", default="desc",
-                        choices=["asc", "desc"],
-                        help="排序顺序（v5.1.4 新增）")
+    p_list.add_argument(
+        "--sort",
+        "-s",
+        default="created_at",
+        choices=[
+            "created_at",
+            "updated_at",
+            "last_accessed_at",
+            "access_count",
+            "strength",
+            "forgetting_score",
+        ],
+        help="排序字段（v5.1.4 新增）",
+    )
+    p_list.add_argument(
+        "--order",
+        "-o",
+        default="desc",
+        choices=["asc", "desc"],
+        help="排序顺序（v5.1.4 新增）",
+    )
 
     p_get = sub.add_parser("get", help="获取单条记忆（v5.1.1 补全）")
     p_get.add_argument("id", help="记忆 ID")
@@ -2679,19 +3025,32 @@ def main(argv=None):
     p_update.add_argument("--content", help="新的记忆内容")
     p_update.add_argument("--category", "-c", help="新的分类")
     p_update.add_argument("--tags", "-t", nargs="+", help="新的标签")
-    p_update.add_argument("--privacy", "-p",
-                          choices=["PUBLIC", "INTERNAL", "PRIVATE", "STRICT"], help="隐私等级")
-    p_update.add_argument("--importance", "-i",
-                          choices=["LOW", "MEDIUM", "HIGH", "CRITICAL"], help="重要性")
-    p_update.add_argument("--layer", "-l",
-                          choices=["sensory", "short_term", "long_term", "permanent"],
-                          help="记忆层级")
+    p_update.add_argument(
+        "--privacy",
+        "-p",
+        choices=["PUBLIC", "INTERNAL", "PRIVATE", "STRICT"],
+        help="隐私等级",
+    )
+    p_update.add_argument(
+        "--importance",
+        "-i",
+        choices=["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+        help="重要性",
+    )
+    p_update.add_argument(
+        "--layer",
+        "-l",
+        choices=["sensory", "short_term", "long_term", "permanent"],
+        help="记忆层级",
+    )
     p_update.add_argument("--star", action="store_true", help="设为收藏")
     p_update.add_argument("--unstar", action="store_true", help="取消收藏")
     p_update.add_argument("--agent", default="cli", help="Agent ID")
     p_update.add_argument("--session", default="cli", help="会话 ID")
 
-    p_delete = sub.add_parser("delete", help="删除记忆（v5.1.1 补全）", parents=[json_parser])
+    p_delete = sub.add_parser(
+        "delete", help="删除记忆（v5.1.1 补全）", parents=[json_parser]
+    )
     p_delete.add_argument("id", help="记忆 ID")
     p_delete.add_argument("--hard", action="store_true", help="彻底删除（不可恢复）")
     p_delete.add_argument("--force", action="store_true", help="确认删除")
@@ -2718,7 +3077,9 @@ def main(argv=None):
     p_restore.add_argument("--session", default="cli", help="会话 ID")
 
     p_stats = sub.add_parser("stats", help="统计信息", parents=[json_parser])
-    p_stats.add_argument("--detailed", action="store_true", help="显示详细统计（v5.1.4 新增）")
+    p_stats.add_argument(
+        "--detailed", action="store_true", help="显示详细统计（v5.1.4 新增）"
+    )
 
     p_star = sub.add_parser("star", help="收藏记忆")
     p_star.add_argument("id", help="记忆 ID")
@@ -2733,14 +3094,20 @@ def main(argv=None):
     p_batch_delete = sub.add_parser("batch-delete", help="批量删除记忆")
     p_batch_delete.add_argument("--category", "-c", help="按分类删除")
     p_batch_delete.add_argument("--layer", "-l", help="按层级删除")
-    p_batch_delete.add_argument("--starred", action="store_true", default=None,
-                                help="只删除已收藏的")
-    p_batch_delete.add_argument("--unstarred", action="store_true", default=None,
-                                help="只删除未收藏的")
+    p_batch_delete.add_argument(
+        "--starred", action="store_true", default=None, help="只删除已收藏的"
+    )
+    p_batch_delete.add_argument(
+        "--unstarred", action="store_true", default=None, help="只删除未收藏的"
+    )
     p_batch_delete.add_argument("--after", help="删除此时间之后的")
     p_batch_delete.add_argument("--before", help="删除此时间之前的")
-    p_batch_delete.add_argument("--hard", action="store_true", help="彻底删除（不可恢复）")
-    p_batch_delete.add_argument("--force", action="store_true", help="确认删除（不加则只预览）")
+    p_batch_delete.add_argument(
+        "--hard", action="store_true", help="彻底删除（不可恢复）"
+    )
+    p_batch_delete.add_argument(
+        "--force", action="store_true", help="确认删除（不加则只预览）"
+    )
     p_batch_delete.add_argument("--agent", default="cli", help="Agent ID")
     p_batch_delete.add_argument("--session", default="cli", help="会话 ID")
 
@@ -2753,36 +3120,51 @@ def main(argv=None):
 
     p_dedup = sub.add_parser("deduplicate", help="记忆去重（v5.0.4 新增）")
     p_dedup.add_argument("--category", "-c", help="限定分类")
-    p_dedup.add_argument("--threshold", type=float, default=0.95,
-                         help="相似度阈值 (0-1)，默认 0.95")
-    p_dedup.add_argument("--execute", action="store_true",
-                         help="实际执行删除（不加则默认试运行）")
-    p_dedup.add_argument("--verbose", "-v", action="store_true",
-                         help="显示详细信息")
+    p_dedup.add_argument(
+        "--threshold", type=float, default=0.95, help="相似度阈值 (0-1)，默认 0.95"
+    )
+    p_dedup.add_argument(
+        "--execute", action="store_true", help="实际执行删除（不加则默认试运行）"
+    )
+    p_dedup.add_argument("--verbose", "-v", action="store_true", help="显示详细信息")
     p_dedup.add_argument("--agent", default="cli", help="Agent ID")
     p_dedup.add_argument("--session", default="cli", help="会话 ID")
 
     p_export_md = sub.add_parser("export-md", help="导出为 Markdown（v5.0.4 新增）")
-    p_export_md.add_argument("--output", "-o", default="./data/memory.md",
-                             help="输出文件路径")
+    p_export_md.add_argument(
+        "--output", "-o", default="./data/memory.md", help="输出文件路径"
+    )
     p_export_md.add_argument("--category", "-c", help="按分类筛选")
     p_export_md.add_argument("--layer", "-l", help="按层级筛选")
-    p_export_md.add_argument("--starred", action="store_true",
-                             help="仅导出收藏的记忆")
+    p_export_md.add_argument("--starred", action="store_true", help="仅导出收藏的记忆")
 
-    p_health = sub.add_parser("health", help="数据库健康检查（v5.0.5 新增）", parents=[json_parser])
-    p_health.add_argument("--dashboard", action="store_true",
-                           help="输出记忆健康仪表盘 JSON 报告（v5.4.6 新增）")
-    p_health.add_argument("--html", action="store_true",
-                           help="仪表盘输出为 HTML 格式（配合 --dashboard 使用）")
+    p_health = sub.add_parser(
+        "health", help="数据库健康检查（v5.0.5 新增）", parents=[json_parser]
+    )
+    p_health.add_argument(
+        "--dashboard",
+        action="store_true",
+        help="输出记忆健康仪表盘 JSON 报告（v5.4.6 新增）",
+    )
+    p_health.add_argument(
+        "--html",
+        action="store_true",
+        help="仪表盘输出为 HTML 格式（配合 --dashboard 使用）",
+    )
 
     p_summarize = sub.add_parser("summarize", help="记忆摘要（v5.0.5 新增）")
     p_summarize.add_argument("--category", "-c", help="限定分类")
-    p_summarize.add_argument("--group-by", "-g", default="category",
-                             choices=["category", "layer", "importance", "privacy"],
-                             help="分组维度（默认 category）")
+    p_summarize.add_argument(
+        "--group-by",
+        "-g",
+        default="category",
+        choices=["category", "layer", "importance", "privacy"],
+        help="分组维度（默认 category）",
+    )
 
-    p_vacuum = sub.add_parser("vacuum", help="重建 FTS 索引 + 数据库优化（v5.0.6 新增）")
+    p_vacuum = sub.add_parser(
+        "vacuum", help="重建 FTS 索引 + 数据库优化（v5.0.6 新增）"
+    )
 
     p_rekey = sub.add_parser(
         "rekey",
@@ -2791,12 +3173,20 @@ def main(argv=None):
     )
     p_rekey.add_argument("--old-password", help="旧密码（不传则交互输入）")
     p_rekey.add_argument("--new-password", help="新密码（不传则交互输入）")
-    p_rekey.add_argument("--iterations", type=int, default=None,
-                         help="新的 PBKDF2 迭代次数（默认使用当前推荐值 600,000）")
-    p_rekey.add_argument("--upgrade-only", action="store_true",
-                         help="仅升级 KDF 参数，密码不变（new-password 可省略）")
-    p_rekey.add_argument("--yes", action="store_true",
-                         help="跳过确认提示（脚本模式用）")
+    p_rekey.add_argument(
+        "--iterations",
+        type=int,
+        default=None,
+        help="新的 PBKDF2 迭代次数（默认使用当前推荐值 600,000）",
+    )
+    p_rekey.add_argument(
+        "--upgrade-only",
+        action="store_true",
+        help="仅升级 KDF 参数，密码不变（new-password 可省略）",
+    )
+    p_rekey.add_argument(
+        "--yes", action="store_true", help="跳过确认提示（脚本模式用）"
+    )
 
     p_backup = sub.add_parser(
         "backup",
@@ -2804,7 +3194,9 @@ def main(argv=None):
         description="打包数据库、密钥文件和配置为单个 ZIP 归档，用于灾备恢复或跨机器迁移。与 export-md 不同，备份是二进制级完整快照。",
         parents=[json_parser],
     )
-    p_backup.add_argument("--output", "-o", help="输出 ZIP 路径（默认在 data/ 目录生成带时间戳的文件名）")
+    p_backup.add_argument(
+        "--output", "-o", help="输出 ZIP 路径（默认在 data/ 目录生成带时间戳的文件名）"
+    )
 
     p_backup_restore = sub.add_parser(
         "backup-restore",
@@ -2813,16 +3205,23 @@ def main(argv=None):
         parents=[json_parser],
     )
     p_backup_restore.add_argument("backup_file", help="备份 ZIP 文件路径")
-    p_backup_restore.add_argument("--db-path", help="恢复后的数据库路径（默认使用当前配置）")
-    p_backup_restore.add_argument("--key-file", help="恢复后的密钥文件路径（加密模式必需）")
-    p_backup_restore.add_argument("--force", "-f", action="store_true",
-                                  help="覆盖已存在的文件（危险操作）")
-    p_backup_restore.add_argument("--yes", action="store_true",
-                                  help="跳过确认提示（脚本模式用）")
+    p_backup_restore.add_argument(
+        "--db-path", help="恢复后的数据库路径（默认使用当前配置）"
+    )
+    p_backup_restore.add_argument(
+        "--key-file", help="恢复后的密钥文件路径（加密模式必需）"
+    )
+    p_backup_restore.add_argument(
+        "--force", "-f", action="store_true", help="覆盖已存在的文件（危险操作）"
+    )
+    p_backup_restore.add_argument(
+        "--yes", action="store_true", help="跳过确认提示（脚本模式用）"
+    )
 
     p_purge_trash = sub.add_parser("purge-trash", help="清空回收站（v5.0.6 新增）")
-    p_purge_trash.add_argument("--force", action="store_true",
-                               help="确认永久删除（不加则只预览）")
+    p_purge_trash.add_argument(
+        "--force", action="store_true", help="确认永久删除（不加则只预览）"
+    )
     p_purge_trash.add_argument("--agent", default="cli", help="Agent ID")
     p_purge_trash.add_argument("--session", default="cli", help="会话 ID")
 
@@ -2830,67 +3229,126 @@ def main(argv=None):
         "gc",
         help="记忆衰减/垃圾回收（v5.6.0 新增）",
         description="执行记忆生命周期管理：计算衰减分数 → 归档低强度记忆 → 清除过期归档。"
-                    "真实记忆系统会忘——长期不召回的记忆降权/归档，防止旧上下文污染新决策。",
+        "真实记忆系统会忘——长期不召回的记忆降权/归档，防止旧上下文污染新决策。",
         parents=[json_parser],
     )
-    p_gc.add_argument("--dry-run", action="store_true",
-                      help="只预览不执行（显示将被归档/删除的记忆数）")
-    p_gc.add_argument("--status", action="store_true",
-                      help="仅查看当前衰减统计，不执行 GC")
-    p_gc.add_argument("--skip-purge", action="store_true",
-                      help="跳过永久删除步骤（保守模式，只归档不删除）")
-    p_gc.add_argument("--policy", choices=["conservative", "balanced", "aggressive"],
-                      default="balanced", help="衰减策略（默认 balanced）")
-    p_gc.add_argument("--archive-threshold", type=float,
-                      help="归档强度阈值（覆盖策略默认值，0.0-1.0）")
-    p_gc.add_argument("--purge-after-days", type=int,
-                      help="归档保留天数（覆盖策略默认值）")
+    p_gc.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="只预览不执行（显示将被归档/删除的记忆数）",
+    )
+    p_gc.add_argument(
+        "--status", action="store_true", help="仅查看当前衰减统计，不执行 GC"
+    )
+    p_gc.add_argument(
+        "--skip-purge",
+        action="store_true",
+        help="跳过永久删除步骤（保守模式，只归档不删除）",
+    )
+    p_gc.add_argument(
+        "--policy",
+        choices=["conservative", "balanced", "aggressive"],
+        default="balanced",
+        help="衰减策略（默认 balanced）",
+    )
+    p_gc.add_argument(
+        "--archive-threshold",
+        type=float,
+        help="归档强度阈值（覆盖策略默认值，0.0-1.0）",
+    )
+    p_gc.add_argument(
+        "--purge-after-days", type=int, help="归档保留天数（覆盖策略默认值）"
+    )
 
     p_analyze = sub.add_parser("analyze", help="记忆深度分析（v5.0.8 新增）")
 
-    p_import_md = sub.add_parser("import-md", help="从 Markdown 导入记忆（v5.0.8 新增）")
+    p_import_md = sub.add_parser(
+        "import-md", help="从 Markdown 导入记忆（v5.0.8 新增）"
+    )
     p_import_md.add_argument("input", help="Markdown 文件路径")
-    p_import_md.add_argument("--layer", "-l", default="short_term",
-                             choices=["sensory", "short_term", "long_term", "permanent"],
-                             help="目标记忆层级")
-    p_import_md.add_argument("--force", action="store_true",
-                             help="确认导入（不加则只预览）")
+    p_import_md.add_argument(
+        "--layer",
+        "-l",
+        default="short_term",
+        choices=["sensory", "short_term", "long_term", "permanent"],
+        help="目标记忆层级",
+    )
+    p_import_md.add_argument(
+        "--force", action="store_true", help="确认导入（不加则只预览）"
+    )
 
     p_migrate = sub.add_parser("migrate", help="数据库迁移（v5.0.8 新增）")
-    p_migrate.add_argument("--force", action="store_true",
-                           help="确认迁移（不加则只预览）")
+    p_migrate.add_argument(
+        "--force", action="store_true", help="确认迁移（不加则只预览）"
+    )
 
     p_export_html = sub.add_parser("export-html", help="导出记忆为 HTML（v5.0.9 新增）")
-    p_export_html.add_argument("--output", "-o", default="memory_export.html",
-                               help="输出文件路径")
+    p_export_html.add_argument(
+        "--output", "-o", default="memory_export.html", help="输出文件路径"
+    )
 
     p_export_xml = sub.add_parser("export-xml", help="导出记忆为 XML（v5.1.4 新增）")
-    p_export_xml.add_argument("--output", "-o", default="./data/memory_export.xml",
-                              help="输出文件路径")
+    p_export_xml.add_argument(
+        "--output", "-o", default="./data/memory_export.xml", help="输出文件路径"
+    )
 
     p_import_xml = sub.add_parser("import-xml", help="从 XML 导入记忆（v5.1.4 新增）")
     p_import_xml.add_argument("input", help="XML 文件路径")
-    p_import_xml.add_argument("--force", action="store_true", help="强制导入（覆盖重复）")
+    p_import_xml.add_argument(
+        "--force", action="store_true", help="强制导入（覆盖重复）"
+    )
 
-    p_export_json = sub.add_parser("export-json", help="导出记忆为 JSON（v5.1.5 新增）")
-    p_export_json.add_argument("--output", "-o", default="./data/memory_export.json",
-                               help="输出文件路径")
+    p_export_json = sub.add_parser(
+        "export-json", help="导出记忆为 JSON（v5.1.5 新增，v5.7.3 支持加密导出）"
+    )
+    p_export_json.add_argument(
+        "--output", "-o", default="./data/memory_export.json", help="输出文件路径"
+    )
     p_export_json.add_argument("--pretty", action="store_true", help="格式化输出")
+    p_export_json.add_argument(
+        "--password",
+        "-p",
+        default=None,
+        help="使用密码加密导出（AES-256-GCM + PBKDF2，v5.7.3 新增）",
+    )
 
-    p_import_json = sub.add_parser("import-json", help="从 JSON 导入记忆（v5.1.5 新增）")
+    p_import_json = sub.add_parser(
+        "import-json", help="从 JSON 导入记忆（v5.1.5 新增，v5.7.3 支持加密导入）"
+    )
     p_import_json.add_argument("input", help="JSON 文件路径")
-    p_import_json.add_argument("--force", action="store_true", help="强制导入（覆盖重复）")
-    p_import_json.add_argument("--dedup-threshold", type=float, default=0.0,
-                               help="智能去重阈值 0-1（v5.4.6，0=禁用，0.85=推荐）")
+    p_import_json.add_argument(
+        "--force", action="store_true", help="强制导入（覆盖重复）"
+    )
+    p_import_json.add_argument(
+        "--dedup-threshold",
+        type=float,
+        default=0.0,
+        help="智能去重阈值 0-1（v5.4.6，0=禁用，0.85=推荐）",
+    )
+    p_import_json.add_argument(
+        "--password",
+        "-p",
+        default=None,
+        help="解密导入：加密导出时使用的密码（v5.7.3 新增）",
+    )
 
     # v5.4.6 新增
     p_import_csv = sub.add_parser("import-csv", help="从 CSV 导入记忆（v5.4.6 新增）")
     p_import_csv.add_argument("input", help="CSV 文件路径")
-    p_import_csv.add_argument("--force", action="store_true", help="强制导入（覆盖重复）")
-    p_import_csv.add_argument("--dedup-threshold", type=float, default=0.0,
-                               help="智能去重阈值 0-1（0=禁用，0.85=推荐）")
-    p_import_csv.add_argument("--layer", choices=["sensory", "short_term", "long_term", "permanent"],
-                               help="导入到指定层级")
+    p_import_csv.add_argument(
+        "--force", action="store_true", help="强制导入（覆盖重复）"
+    )
+    p_import_csv.add_argument(
+        "--dedup-threshold",
+        type=float,
+        default=0.0,
+        help="智能去重阈值 0-1（0=禁用，0.85=推荐）",
+    )
+    p_import_csv.add_argument(
+        "--layer",
+        choices=["sensory", "short_term", "long_term", "permanent"],
+        help="导入到指定层级",
+    )
 
     p_merge = sub.add_parser("merge", help="合并重复记忆（v5.1.5 新增）")
     p_merge.add_argument("--threshold", type=float, default=0.8, help="相似度阈值")
@@ -2913,8 +3371,12 @@ def main(argv=None):
 
     p_top = sub.add_parser("top", help="热门记忆（v5.1.6 新增）")
     p_top.add_argument("--count", type=int, default=10, help="显示数量")
-    p_top.add_argument("--by", default="access_count", choices=["access_count", "strength", "created_at"],
-                       help="排序依据")
+    p_top.add_argument(
+        "--by",
+        default="access_count",
+        choices=["access_count", "strength", "created_at"],
+        help="排序依据",
+    )
 
     p_random = sub.add_parser("random", help="随机闪卡复习（v5.1.7 新增）")
     p_random.add_argument("--count", "-n", type=int, default=1, help="随机记忆数量")
@@ -2945,20 +3407,33 @@ def main(argv=None):
     p_find.add_argument("--before", type=float, help="截止时间戳")
     p_find.add_argument("--limit", "-n", type=int, help="结果数量限制")
 
-    p_export_excel = sub.add_parser("export-excel", help="导出记忆为 Excel（v5.1.9 新增）")
-    p_export_excel.add_argument("--output", "-o", default="./data/memory_export.xlsx",
-                                help="输出文件路径")
+    p_export_excel = sub.add_parser(
+        "export-excel", help="导出记忆为 Excel（v5.1.9 新增）"
+    )
+    p_export_excel.add_argument(
+        "--output", "-o", default="./data/memory_export.xlsx", help="输出文件路径"
+    )
     p_export_excel.add_argument("--category", "-c", help="按分类筛选")
     p_export_excel.add_argument("--layer", "-l", help="按层级筛选")
-    p_export_excel.add_argument("--starred", action="store_true", help="仅导出收藏的记忆")
+    p_export_excel.add_argument(
+        "--starred", action="store_true", help="仅导出收藏的记忆"
+    )
 
-    p_import_excel = sub.add_parser("import-excel", help="从 Excel 导入记忆（v5.1.9 新增）")
+    p_import_excel = sub.add_parser(
+        "import-excel", help="从 Excel 导入记忆（v5.1.9 新增）"
+    )
     p_import_excel.add_argument("input", help="Excel 文件路径")
     p_import_excel.add_argument("--category", "-c", help="目标分类（覆盖文件中的分类）")
-    p_import_excel.add_argument("--layer", "-l", default="short_term",
-                                choices=["sensory", "short_term", "long_term", "permanent"],
-                                help="目标记忆层级")
-    p_import_excel.add_argument("--force", action="store_true", help="强制导入（覆盖重复）")
+    p_import_excel.add_argument(
+        "--layer",
+        "-l",
+        default="short_term",
+        choices=["sensory", "short_term", "long_term", "permanent"],
+        help="目标记忆层级",
+    )
+    p_import_excel.add_argument(
+        "--force", action="store_true", help="强制导入（覆盖重复）"
+    )
 
     p_copy = sub.add_parser("copy", help="复制记忆到新分类（v5.1.9 新增）")
     p_copy.add_argument("id", help="记忆 ID")
@@ -2978,21 +3453,37 @@ def main(argv=None):
     p_fuzzy_search.add_argument("query", help="搜索关键词")
     p_fuzzy_search.add_argument("--category", "-c", help="按分类筛选")
     p_fuzzy_search.add_argument("--layer", "-l", help="按层级筛选")
-    p_fuzzy_search.add_argument("--limit", "-n", type=int, default=20, help="结果数量限制")
-    p_fuzzy_search.add_argument("--threshold", "-t", type=float, default=0.3, help="相似度阈值")
-    p_fuzzy_search.add_argument("--highlight", action="store_true", help="高亮显示匹配词")
+    p_fuzzy_search.add_argument(
+        "--limit", "-n", type=int, default=20, help="结果数量限制"
+    )
+    p_fuzzy_search.add_argument(
+        "--threshold", "-t", type=float, default=0.3, help="相似度阈值"
+    )
+    p_fuzzy_search.add_argument(
+        "--highlight", action="store_true", help="高亮显示匹配词"
+    )
 
-    p_search_history = sub.add_parser("search-history", help="查看搜索历史（v5.2.0 新增）")
-    p_search_history.add_argument("--limit", "-n", type=int, default=20, help="显示数量")
+    p_search_history = sub.add_parser(
+        "search-history", help="查看搜索历史（v5.2.0 新增）"
+    )
+    p_search_history.add_argument(
+        "--limit", "-n", type=int, default=20, help="显示数量"
+    )
 
-    p_batch_add_tags = sub.add_parser("batch-add-tags", help="批量添加标签（v5.2.0 新增）")
+    p_batch_add_tags = sub.add_parser(
+        "batch-add-tags", help="批量添加标签（v5.2.0 新增）"
+    )
     p_batch_add_tags.add_argument("--ids", help="记忆 ID 列表，逗号分隔")
     p_batch_add_tags.add_argument("--tags", required=True, help="标签列表，逗号分隔")
-    p_batch_add_tags.add_argument("--category", "-c", help="按分类批量添加（替代 --ids）")
+    p_batch_add_tags.add_argument(
+        "--category", "-c", help="按分类批量添加（替代 --ids）"
+    )
     p_batch_add_tags.add_argument("--agent", default="cli", help="Agent ID")
     p_batch_add_tags.add_argument("--session", default="cli", help="会话 ID")
 
-    p_batch_remove_tags = sub.add_parser("batch-remove-tags", help="批量移除标签（v5.2.0 新增）")
+    p_batch_remove_tags = sub.add_parser(
+        "batch-remove-tags", help="批量移除标签（v5.2.0 新增）"
+    )
     p_batch_remove_tags.add_argument("--ids", help="记忆 ID 列表，逗号分隔")
     p_batch_remove_tags.add_argument("--tags", required=True, help="标签列表，逗号分隔")
     p_batch_remove_tags.add_argument("--agent", default="cli", help="Agent ID")
@@ -3013,10 +3504,14 @@ def main(argv=None):
 
     p_db_restore = sub.add_parser("db-restore", help="从备份恢复（v5.2.0 新增）")
     p_db_restore.add_argument("backup", help="备份文件路径")
-    p_db_restore.add_argument("--no-pre-backup", action="store_true", help="恢复前不先备份当前数据")
+    p_db_restore.add_argument(
+        "--no-pre-backup", action="store_true", help="恢复前不先备份当前数据"
+    )
     p_db_restore.add_argument("--force", action="store_true", help="跳过确认")
 
-    p_db_clean_backups = sub.add_parser("db-clean-backups", help="清理旧备份（v5.2.0 新增）")
+    p_db_clean_backups = sub.add_parser(
+        "db-clean-backups", help="清理旧备份（v5.2.0 新增）"
+    )
     p_db_clean_backups.add_argument("--dir", default="./data/backups", help="备份目录")
     p_db_clean_backups.add_argument("--keep", type=int, default=10, help="保留数量")
     p_db_clean_backups.add_argument("--force", action="store_true", help="跳过确认")
@@ -3025,13 +3520,31 @@ def main(argv=None):
 
     p_drama_add = sub.add_parser("drama-add", help="添加短剧（v5.2.1 新增）")
     p_drama_add.add_argument("title", help="短剧标题")
-    p_drama_add.add_argument("--genre", "-g", default="other",
-                             choices=["romance", "suspense", "comedy", "action", "horror", "scifi", "fantasy", "drama", "other"],
-                             help="短剧类型")
+    p_drama_add.add_argument(
+        "--genre",
+        "-g",
+        default="other",
+        choices=[
+            "romance",
+            "suspense",
+            "comedy",
+            "action",
+            "horror",
+            "scifi",
+            "fantasy",
+            "drama",
+            "other",
+        ],
+        help="短剧类型",
+    )
     p_drama_add.add_argument("--episodes", "-e", type=int, default=0, help="总集数")
-    p_drama_add.add_argument("--status", "-s", default="planned",
-                             choices=["watching", "completed", "planned", "dropped"],
-                             help="观看状态")
+    p_drama_add.add_argument(
+        "--status",
+        "-s",
+        default="planned",
+        choices=["watching", "completed", "planned", "dropped"],
+        help="观看状态",
+    )
     p_drama_add.add_argument("--platform", default="", help="播放平台")
     p_drama_add.add_argument("--rating", type=float, default=0.0, help="评分 (0-10)")
     p_drama_add.add_argument("--description", "-d", default="", help="简介")
@@ -3045,10 +3558,15 @@ def main(argv=None):
     p_drama_list.add_argument("--min-rating", type=float, default=0.0, help="最低评分")
     p_drama_list.add_argument("--limit", type=int, default=50, help="数量限制")
     p_drama_list.add_argument("--offset", type=int, default=0, help="偏移量")
-    p_drama_list.add_argument("--sort", default="updated_at",
-                              choices=["created_at", "updated_at", "rating", "last_watched_at", "title"],
-                              help="排序字段")
-    p_drama_list.add_argument("--order", default="desc", choices=["asc", "desc"], help="排序顺序")
+    p_drama_list.add_argument(
+        "--sort",
+        default="updated_at",
+        choices=["created_at", "updated_at", "rating", "last_watched_at", "title"],
+        help="排序字段",
+    )
+    p_drama_list.add_argument(
+        "--order", default="desc", choices=["asc", "desc"], help="排序顺序"
+    )
 
     p_drama_get = sub.add_parser("drama-get", help="获取短剧详情（v5.2.1 新增）")
     p_drama_get.add_argument("id", help="短剧 ID")
@@ -3056,20 +3574,38 @@ def main(argv=None):
     p_drama_update = sub.add_parser("drama-update", help="更新短剧（v5.2.1 新增）")
     p_drama_update.add_argument("id", help="短剧 ID")
     p_drama_update.add_argument("--title", help="新标题")
-    p_drama_update.add_argument("--genre", "-g",
-                                choices=["romance", "suspense", "comedy", "action", "horror", "scifi", "fantasy", "drama", "other"],
-                                help="新类型")
+    p_drama_update.add_argument(
+        "--genre",
+        "-g",
+        choices=[
+            "romance",
+            "suspense",
+            "comedy",
+            "action",
+            "horror",
+            "scifi",
+            "fantasy",
+            "drama",
+            "other",
+        ],
+        help="新类型",
+    )
     p_drama_update.add_argument("--episodes", "-e", type=int, help="总集数")
     p_drama_update.add_argument("--current", type=int, help="当前看到第几集")
-    p_drama_update.add_argument("--status", "-s",
-                                choices=["watching", "completed", "planned", "dropped"],
-                                help="观看状态")
+    p_drama_update.add_argument(
+        "--status",
+        "-s",
+        choices=["watching", "completed", "planned", "dropped"],
+        help="观看状态",
+    )
     p_drama_update.add_argument("--platform", help="播放平台")
     p_drama_update.add_argument("--rating", type=float, help="评分")
     p_drama_update.add_argument("--description", "-d", help="简介")
     p_drama_update.add_argument("--tags", "-t", nargs="+", help="标签")
     p_drama_update.add_argument("--cover", help="封面 URL")
-    p_drama_update.add_argument("--watched", action="store_true", help="标记为刚看过（更新观看时间）")
+    p_drama_update.add_argument(
+        "--watched", action="store_true", help="标记为刚看过（更新观看时间）"
+    )
 
     p_drama_delete = sub.add_parser("drama-delete", help="删除短剧（v5.2.1 新增）")
     p_drama_delete.add_argument("id", help="短剧 ID")
@@ -3078,42 +3614,91 @@ def main(argv=None):
     p_drama_stats = sub.add_parser("drama-stats", help="短剧统计（v5.2.1 新增）")
 
     # v5.2.2 新增命令
-    p_drama_recommend = sub.add_parser("drama-recommend", help="AI 智能推荐短剧（v5.2.2 新增）")
-    p_drama_recommend.add_argument("--genre", "-g",
-                                    choices=["romance", "suspense", "comedy", "action", "horror", "scifi", "fantasy", "drama", "other"],
-                                    help="按类型筛选")
-    p_drama_recommend.add_argument("--min-rating", type=float, default=7.0, help="最低评分")
-    p_drama_recommend.add_argument("--limit", "-n", type=int, default=5, help="推荐数量")
+    p_drama_recommend = sub.add_parser(
+        "drama-recommend", help="AI 智能推荐短剧（v5.2.2 新增）"
+    )
+    p_drama_recommend.add_argument(
+        "--genre",
+        "-g",
+        choices=[
+            "romance",
+            "suspense",
+            "comedy",
+            "action",
+            "horror",
+            "scifi",
+            "fantasy",
+            "drama",
+            "other",
+        ],
+        help="按类型筛选",
+    )
+    p_drama_recommend.add_argument(
+        "--min-rating", type=float, default=7.0, help="最低评分"
+    )
+    p_drama_recommend.add_argument(
+        "--limit", "-n", type=int, default=5, help="推荐数量"
+    )
     p_drama_recommend.add_argument("--exclude", nargs="+", help="排除的短剧 ID")
 
-    p_drama_progress = sub.add_parser("drama-progress", help="观看进度统计（v5.2.2 新增）")
+    p_drama_progress = sub.add_parser(
+        "drama-progress", help="观看进度统计（v5.2.2 新增）"
+    )
 
     p_drama_export = sub.add_parser("drama-export", help="导出短剧数据（v5.2.2 新增）")
-    p_drama_export.add_argument("--output", "-o", default="./data/drama_export.json", help="输出文件")
-    p_drama_export.add_argument("--ids", nargs="+", help="指定导出的短剧 ID 列表（默认全部）")
+    p_drama_export.add_argument(
+        "--output", "-o", default="./data/drama_export.json", help="输出文件"
+    )
+    p_drama_export.add_argument(
+        "--ids", nargs="+", help="指定导出的短剧 ID 列表（默认全部）"
+    )
 
     # ===== v5.2.9 AI 短剧增强 =====
 
-    p_drama_import = sub.add_parser("drama-import", help="从 JSON 批量导入短剧（v5.2.9 新增）")
-    p_drama_import.add_argument("input", help="JSON 文件路径（与 drama-export 导出结构相同）")
-    p_drama_import.add_argument("--overwrite", action="store_true",
-                                 help="不跳过已存在的短剧（按 title 匹配，默认跳过）")
+    p_drama_import = sub.add_parser(
+        "drama-import", help="从 JSON 批量导入短剧（v5.2.9 新增）"
+    )
+    p_drama_import.add_argument(
+        "input", help="JSON 文件路径（与 drama-export 导出结构相同）"
+    )
+    p_drama_import.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="不跳过已存在的短剧（按 title 匹配，默认跳过）",
+    )
 
     p_drama_stars = sub.add_parser("drama-stars", help="高分短剧排行榜（v5.2.9 新增）")
-    p_drama_stars.add_argument("--genre", "-g", default=None, help="类型过滤（ROMANCE/ACTION/...）")
-    p_drama_stars.add_argument("--min-rating", "-r", type=float, default=0.0,
-                                help="最低评分（0-10，默认 0）")
-    p_drama_stars.add_argument("--limit", "-n", type=int, default=50, help="返回数量（默认 50）")
+    p_drama_stars.add_argument(
+        "--genre", "-g", default=None, help="类型过滤（ROMANCE/ACTION/...）"
+    )
+    p_drama_stars.add_argument(
+        "--min-rating", "-r", type=float, default=0.0, help="最低评分（0-10，默认 0）"
+    )
+    p_drama_stars.add_argument(
+        "--limit", "-n", type=int, default=50, help="返回数量（默认 50）"
+    )
 
-    p_scene_list_lines = sub.add_parser("scene-list-lines", help="按场次列出台词（v5.2.9 新增）")
+    p_scene_list_lines = sub.add_parser(
+        "scene-list-lines", help="按场次列出台词（v5.2.9 新增）"
+    )
     p_scene_list_lines.add_argument("scene_id", help="场次 ID")
-    p_scene_list_lines.add_argument("--limit", "-n", type=int, default=500, help="数量限制（默认 500）")
-    p_scene_list_lines.add_argument("--offset", "-o", type=int, default=0, help="偏移量")
+    p_scene_list_lines.add_argument(
+        "--limit", "-n", type=int, default=500, help="数量限制（默认 500）"
+    )
+    p_scene_list_lines.add_argument(
+        "--offset", "-o", type=int, default=0, help="偏移量"
+    )
 
-    p_char_list_lines = sub.add_parser("char-list-lines", help="按角色列出台词（v5.2.9 新增）")
+    p_char_list_lines = sub.add_parser(
+        "char-list-lines", help="按角色列出台词（v5.2.9 新增）"
+    )
     p_char_list_lines.add_argument("char_id", help="角色 ID")
-    p_char_list_lines.add_argument("--drama-id", default=None, help="可选：仅列出此短剧下的台词")
-    p_char_list_lines.add_argument("--limit", "-n", type=int, default=500, help="数量限制（默认 500）")
+    p_char_list_lines.add_argument(
+        "--drama-id", default=None, help="可选：仅列出此短剧下的台词"
+    )
+    p_char_list_lines.add_argument(
+        "--limit", "-n", type=int, default=500, help="数量限制（默认 500）"
+    )
     p_char_list_lines.add_argument("--offset", "-o", type=int, default=0, help="偏移量")
 
     # ===== v5.3.0 AI 短剧增强 =====
@@ -3125,7 +3710,9 @@ def main(argv=None):
     p_line_random.add_argument("--drama-id", "-d", default=None, help="限定短剧 ID")
     p_line_random.add_argument("--char-id", "-c", default=None, help="限定角色 ID")
     p_line_random.add_argument("--classic", action="store_true", help="仅经典台词")
-    p_line_random.add_argument("--count", "-n", type=int, default=1, help="抽取数量（默认 1，上限 100）")
+    p_line_random.add_argument(
+        "--count", "-n", type=int, default=1, help="抽取数量（默认 1，上限 100）"
+    )
 
     p_char_profile = sub.add_parser("char-profile", help="角色画像分析（v5.3.0 新增）")
     p_char_profile.add_argument("char_id", help="角色 ID")
@@ -3148,7 +3735,9 @@ def main(argv=None):
     p_line_list.add_argument("--drama-id", help="短剧 ID")
     p_line_list.add_argument("--scene-id", help="场次 ID")
     p_line_list.add_argument("--char-id", help="角色 ID")
-    p_line_list.add_argument("--classic", action="store_true", default=None, help="仅经典台词")
+    p_line_list.add_argument(
+        "--classic", action="store_true", default=None, help="仅经典台词"
+    )
     p_line_list.add_argument("--episode", type=int, help="集数")
     p_line_list.add_argument("--limit", type=int, default=100, help="数量限制")
     p_line_list.add_argument("--offset", type=int, default=0, help="偏移量")
@@ -3156,7 +3745,9 @@ def main(argv=None):
     p_line_search = sub.add_parser("line-search", help="搜索台词（v5.2.1 新增）")
     p_line_search.add_argument("query", help="搜索关键词")
     p_line_search.add_argument("--drama-id", help="限定短剧 ID")
-    p_line_search.add_argument("--classic-only", action="store_true", help="仅搜索经典台词")
+    p_line_search.add_argument(
+        "--classic-only", action="store_true", help="仅搜索经典台词"
+    )
     p_line_search.add_argument("--limit", type=int, default=20, help="数量限制")
 
     p_line_classic = sub.add_parser("line-classic", help="经典台词（v5.2.1 新增）")
@@ -3168,7 +3759,9 @@ def main(argv=None):
     p_line_update.add_argument("--line", help="新台词内容")
     p_line_update.add_argument("--character", help="新角色名")
     p_line_update.add_argument("--context", help="新上下文")
-    p_line_update.add_argument("--classic", action="store_true", default=None, help="标记为经典")
+    p_line_update.add_argument(
+        "--classic", action="store_true", default=None, help="标记为经典"
+    )
     p_line_update.add_argument("--tags", "-t", nargs="+", help="新标签")
 
     p_line_delete = sub.add_parser("line-delete", help="删除台词（v5.2.1 新增）")
@@ -3179,9 +3772,12 @@ def main(argv=None):
     p_char_add = sub.add_parser("char-add", help="添加短剧角色（v5.2.1 新增）")
     p_char_add.add_argument("drama_id", help="短剧 ID")
     p_char_add.add_argument("name", help="角色名")
-    p_char_add.add_argument("--role", default="supporting",
-                            choices=["lead", "supporting", "guest", "villain", "mentor"],
-                            help="角色定位")
+    p_char_add.add_argument(
+        "--role",
+        default="supporting",
+        choices=["lead", "supporting", "guest", "villain", "mentor"],
+        help="角色定位",
+    )
     p_char_add.add_argument("--actor", default="", help="演员名")
     p_char_add.add_argument("--description", "-d", default="", help="角色描述")
     p_char_add.add_argument("--personality", "-p", default="", help="性格特点")
@@ -3200,9 +3796,11 @@ def main(argv=None):
     p_char_update = sub.add_parser("char-update", help="更新角色（v5.2.1 新增）")
     p_char_update.add_argument("id", help="角色 ID")
     p_char_update.add_argument("--name", help="新角色名")
-    p_char_update.add_argument("--role",
-                               choices=["lead", "supporting", "guest", "villain", "mentor"],
-                               help="新角色定位")
+    p_char_update.add_argument(
+        "--role",
+        choices=["lead", "supporting", "guest", "villain", "mentor"],
+        help="新角色定位",
+    )
     p_char_update.add_argument("--actor", help="新演员名")
     p_char_update.add_argument("--description", "-d", help="新描述")
     p_char_update.add_argument("--personality", "-p", help="新性格")
@@ -3250,13 +3848,17 @@ def main(argv=None):
     p_consolidate.add_argument("--session", default="cli", help="会话 ID")
 
     p_graph = sub.add_parser("graph", help="知识图谱", parents=[json_parser])
-    p_graph.add_argument("graph_action", choices=["stats", "related", "extract"], help="操作")
+    p_graph.add_argument(
+        "graph_action", choices=["stats", "related", "extract"], help="操作"
+    )
     p_graph.add_argument("--entity", help="实体名称")
     p_graph.add_argument("--depth", type=int, default=2, help="深度")
     p_graph.add_argument("--text", help="要提取的文本")
 
     p_personality = sub.add_parser("personality", help="人格化")
-    p_personality.add_argument("personality_action", choices=["profile", "interests"], help="操作")
+    p_personality.add_argument(
+        "personality_action", choices=["profile", "interests"], help="操作"
+    )
     p_personality.add_argument("--user-id", default="default", help="用户 ID")
     p_personality.add_argument("--limit", type=int, default=10, help="数量限制")
 
@@ -3272,117 +3874,226 @@ def main(argv=None):
     p_evolve = sub.add_parser("evolve", help="记忆演化（v5.2.2 新增）")
     p_evolve.add_argument("--dry-run", action="store_true", help="仅统计不执行")
 
-    p_agent_transfer = sub.add_parser("agent-transfer", help="迁移 Agent 记忆（v5.2.2 新增）")
+    p_agent_transfer = sub.add_parser(
+        "agent-transfer", help="迁移 Agent 记忆（v5.2.2 新增）"
+    )
     p_agent_transfer.add_argument("from_agent", help="源 Agent ID")
     p_agent_transfer.add_argument("to_agent", help="目标 Agent ID")
     p_agent_transfer.add_argument("--category", "-c", help="仅迁移指定分类")
 
-    p_agent_clean = sub.add_parser("agent-clean", help="清理 Agent 旧记忆（v5.2.2 新增）")
+    p_agent_clean = sub.add_parser(
+        "agent-clean", help="清理 Agent 旧记忆（v5.2.2 新增）"
+    )
     p_agent_clean.add_argument("agent", help="Agent ID")
-    p_agent_clean.add_argument("--days", "-d", type=int, default=90, help="清理超过多少天的记忆（默认 90 天）")
-    p_agent_clean.add_argument("--max-importance", "-m", default=None, help="最高清理的重要级别（LOW/MEDIUM/HIGH/CRITICAL）")
+    p_agent_clean.add_argument(
+        "--days", "-d", type=int, default=90, help="清理超过多少天的记忆（默认 90 天）"
+    )
+    p_agent_clean.add_argument(
+        "--max-importance",
+        "-m",
+        default=None,
+        help="最高清理的重要级别（LOW/MEDIUM/HIGH/CRITICAL）",
+    )
     p_agent_clean.add_argument("--dry-run", action="store_true", help="仅统计不执行")
 
     # ===== v5.2.9 Agent 记忆增强 =====
 
-    p_agent_memories = sub.add_parser("agent-list-memories", help="列出 Agent 记忆（v5.2.9 新增）")
+    p_agent_memories = sub.add_parser(
+        "agent-list-memories", help="列出 Agent 记忆（v5.2.9 新增）"
+    )
     p_agent_memories.add_argument("agent", help="Agent ID")
-    p_agent_memories.add_argument("--limit", "-n", type=int, default=50, help="返回数量（默认 50）")
+    p_agent_memories.add_argument(
+        "--limit", "-n", type=int, default=50, help="返回数量（默认 50）"
+    )
     p_agent_memories.add_argument("--offset", "-o", type=int, default=0, help="偏移量")
-    p_agent_memories.add_argument("--format", "-f", choices=["table", "json"], default="table", help="输出格式")
+    p_agent_memories.add_argument(
+        "--format", "-f", choices=["table", "json"], default="table", help="输出格式"
+    )
 
     p_agent_rank = sub.add_parser("agent-rank", help="Agent 记忆排行榜（v5.2.9 新增）")
-    p_agent_rank.add_argument("--by", "-b", choices=["count", "last_active", "avg_importance", "starred"],
-                               default="count", help="排序维度（默认 count）")
-    p_agent_rank.add_argument("--limit", "-n", type=int, default=20, help="返回数量（默认 20）")
+    p_agent_rank.add_argument(
+        "--by",
+        "-b",
+        choices=["count", "last_active", "avg_importance", "starred"],
+        default="count",
+        help="排序维度（默认 count）",
+    )
+    p_agent_rank.add_argument(
+        "--limit", "-n", type=int, default=20, help="返回数量（默认 20）"
+    )
 
-    p_agent_forget = sub.add_parser("agent-forget", help="遗忘 Agent 低质量旧记忆（v5.2.9 新增）")
+    p_agent_forget = sub.add_parser(
+        "agent-forget", help="遗忘 Agent 低质量旧记忆（v5.2.9 新增）"
+    )
     p_agent_forget.add_argument("agent", help="Agent ID")
-    p_agent_forget.add_argument("--min-score", "-s", type=int, default=30,
-                                 help="质量分数阈值，低于此分数会被遗忘（默认 30，范围 0-100）")
-    p_agent_forget.add_argument("--days", "-d", type=int, default=30,
-                                 help="只遗忘超过多少天未更新的记忆（默认 30 天）")
+    p_agent_forget.add_argument(
+        "--min-score",
+        "-s",
+        type=int,
+        default=30,
+        help="质量分数阈值，低于此分数会被遗忘（默认 30，范围 0-100）",
+    )
+    p_agent_forget.add_argument(
+        "--days",
+        "-d",
+        type=int,
+        default=30,
+        help="只遗忘超过多少天未更新的记忆（默认 30 天）",
+    )
     p_agent_forget.add_argument("--dry-run", action="store_true", help="仅预览不执行")
 
     # ===== v5.3.0 Agent 记忆增强 =====
 
-    p_agent_profile = sub.add_parser("agent-profile", help="Agent 记忆画像（v5.3.0 新增）")
+    p_agent_profile = sub.add_parser(
+        "agent-profile", help="Agent 记忆画像（v5.3.0 新增）"
+    )
     p_agent_profile.add_argument("agent", help="Agent ID")
 
-    p_agent_merge = sub.add_parser("agent-merge", help="合并两个 Agent 的记忆（v5.3.0 新增）")
+    p_agent_merge = sub.add_parser(
+        "agent-merge", help="合并两个 Agent 的记忆（v5.3.0 新增）"
+    )
     p_agent_merge.add_argument("from_agent", help="源 Agent ID")
     p_agent_merge.add_argument("to_agent", help="目标 Agent ID")
-    p_agent_merge.add_argument("--dedup", "-d", choices=["exact", "none"], default="exact",
-                                help="去重模式（exact=内容完全相同则跳过，none=不去重，默认 exact）")
+    p_agent_merge.add_argument(
+        "--dedup",
+        "-d",
+        choices=["exact", "none"],
+        default="exact",
+        help="去重模式（exact=内容完全相同则跳过，none=不去重，默认 exact）",
+    )
     p_agent_merge.add_argument("--dry-run", action="store_true", help="仅预览不执行")
 
-    p_agent_export = sub.add_parser("agent-export", help="导出 Agent 记忆为 JSON 包（v5.3.0 新增）")
+    p_agent_export = sub.add_parser(
+        "agent-export", help="导出 Agent 记忆为 JSON 包（v5.3.0 新增）"
+    )
     p_agent_export.add_argument("agent", help="Agent ID")
-    p_agent_export.add_argument("--output", "-o", default="./data/agent_export.json", help="输出文件路径")
-    p_agent_export.add_argument("--include-audit", action="store_true", help="包含审计日志")
+    p_agent_export.add_argument(
+        "--output", "-o", default="./data/agent_export.json", help="输出文件路径"
+    )
+    p_agent_export.add_argument(
+        "--include-audit", action="store_true", help="包含审计日志"
+    )
 
     # ===== v5.3.1 新增 Agent 记忆命令 =====
-    p_agent_search = sub.add_parser("agent-search", help="在指定 Agent 的记忆中搜索关键词（v5.3.1 新增）")
+    p_agent_search = sub.add_parser(
+        "agent-search", help="在指定 Agent 的记忆中搜索关键词（v5.3.1 新增）"
+    )
     p_agent_search.add_argument("agent", help="Agent ID")
     p_agent_search.add_argument("keyword", help="搜索关键词")
-    p_agent_search.add_argument("--limit", "-n", type=int, default=50, help="数量限制（1-500）")
+    p_agent_search.add_argument(
+        "--limit", "-n", type=int, default=50, help="数量限制（1-500）"
+    )
     p_agent_search.add_argument("--offset", type=int, default=0, help="偏移量")
-    p_agent_search.add_argument("--format", "-f", choices=["table", "json"], default="table", help="输出格式")
+    p_agent_search.add_argument(
+        "--format", "-f", choices=["table", "json"], default="table", help="输出格式"
+    )
 
-    p_agent_compare = sub.add_parser("agent-compare", help="对比两个 Agent 的记忆差异（v5.3.1 新增）")
+    p_agent_compare = sub.add_parser(
+        "agent-compare", help="对比两个 Agent 的记忆差异（v5.3.1 新增）"
+    )
     p_agent_compare.add_argument("agent_a", help="Agent A ID")
     p_agent_compare.add_argument("agent_b", help="Agent B ID")
 
     # ===== v5.3.1 新增 AI 短剧命令 =====
-    p_drama_search = sub.add_parser("drama-search", help="按关键词搜索短剧（v5.3.1 新增）")
+    p_drama_search = sub.add_parser(
+        "drama-search", help="按关键词搜索短剧（v5.3.1 新增）"
+    )
     p_drama_search.add_argument("keyword", help="搜索关键词")
-    p_drama_search.add_argument("--genre", "-g", help="类型过滤（ROMANCE/ACTION/COMEDY/THRILLER/SCIFI 等）")
-    p_drama_search.add_argument("--min-rating", "-r", type=float, default=0.0, help="最低评分（0-10）")
-    p_drama_search.add_argument("--limit", "-n", type=int, default=50, help="数量限制（1-500）")
+    p_drama_search.add_argument(
+        "--genre", "-g", help="类型过滤（ROMANCE/ACTION/COMEDY/THRILLER/SCIFI 等）"
+    )
+    p_drama_search.add_argument(
+        "--min-rating", "-r", type=float, default=0.0, help="最低评分（0-10）"
+    )
+    p_drama_search.add_argument(
+        "--limit", "-n", type=int, default=50, help="数量限制（1-500）"
+    )
     p_drama_search.add_argument("--offset", type=int, default=0, help="偏移量")
 
-    p_char_ranking = sub.add_parser("char-ranking", help="角色台词排行榜（v5.3.1 新增）")
+    p_char_ranking = sub.add_parser(
+        "char-ranking", help="角色台词排行榜（v5.3.1 新增）"
+    )
     p_char_ranking.add_argument("--drama-id", help="限定短剧 ID（不指定则全局排行）")
-    p_char_ranking.add_argument("--sort-by", "-s", default="lines",
-                                choices=["lines", "classic", "scenes"], help="排序维度（lines=总台词数/classic=经典台词数/scenes=出场场次数）")
-    p_char_ranking.add_argument("--limit", "-n", type=int, default=20, help="数量限制（1-100）")
+    p_char_ranking.add_argument(
+        "--sort-by",
+        "-s",
+        default="lines",
+        choices=["lines", "classic", "scenes"],
+        help="排序维度（lines=总台词数/classic=经典台词数/scenes=出场场次数）",
+    )
+    p_char_ranking.add_argument(
+        "--limit", "-n", type=int, default=20, help="数量限制（1-100）"
+    )
 
     # ===== v5.3.2 新增 Agent 记忆命令 =====
-    p_agent_diff = sub.add_parser("agent-diff", help="对比同一 Agent 在不同时间段的记忆差异（v5.3.2 新增）")
+    p_agent_diff = sub.add_parser(
+        "agent-diff", help="对比同一 Agent 在不同时间段的记忆差异（v5.3.2 新增）"
+    )
     p_agent_diff.add_argument("agent", help="Agent ID")
-    p_agent_diff.add_argument("--days-a", "-a", type=int, default=7, help="时间段 A 回溯天数（较早）")
-    p_agent_diff.add_argument("--days-b", "-b", type=int, default=1, help="时间段 B 回溯天数（较近）")
+    p_agent_diff.add_argument(
+        "--days-a", "-a", type=int, default=7, help="时间段 A 回溯天数（较早）"
+    )
+    p_agent_diff.add_argument(
+        "--days-b", "-b", type=int, default=1, help="时间段 B 回溯天数（较近）"
+    )
 
-    p_agent_purge = sub.add_parser("agent-purge", help="清空指定 Agent 的全部记忆（v5.3.2 新增，高危）")
+    p_agent_purge = sub.add_parser(
+        "agent-purge", help="清空指定 Agent 的全部记忆（v5.3.2 新增，高危）"
+    )
     p_agent_purge.add_argument("agent", help="目标 Agent ID")
-    p_agent_purge.add_argument("--force", "-f", action="store_true", help="实际执行（不加为 dry-run 预览）")
+    p_agent_purge.add_argument(
+        "--force", "-f", action="store_true", help="实际执行（不加为 dry-run 预览）"
+    )
 
     # ===== v5.3.2 新增 AI 短剧命令 =====
-    p_drama_progress_upd = sub.add_parser("drama-progress-update", help="更新短剧观看进度（v5.3.2 新增）")
+    p_drama_progress_upd = sub.add_parser(
+        "drama-progress-update", help="更新短剧观看进度（v5.3.2 新增）"
+    )
     p_drama_progress_upd.add_argument("drama", help="短剧 ID")
     p_drama_progress_upd.add_argument("episode", type=int, help="当前集数（≥1）")
-    p_drama_progress_upd.add_argument("--status", "-s",
-                                      choices=["WATCHING", "COMPLETED", "DROPPED", "PLANNING"],
-                                      help="观看状态")
-    p_drama_progress_upd.add_argument("--rating", "-r", type=float, help="用户评分（0-10）")
+    p_drama_progress_upd.add_argument(
+        "--status",
+        "-s",
+        choices=["WATCHING", "COMPLETED", "DROPPED", "PLANNING"],
+        help="观看状态",
+    )
+    p_drama_progress_upd.add_argument(
+        "--rating", "-r", type=float, help="用户评分（0-10）"
+    )
 
     p_drama_rec2 = sub.add_parser("drama-rec2", help="短剧智能推荐 v2（v5.3.2 新增）")
     p_drama_rec2.add_argument("--genre", "-g", help="类型过滤（ROMANCE/ACTION 等）")
-    p_drama_rec2.add_argument("--min-rating", "-r", type=float, default=0.0, help="最低评分（0-10）")
-    p_drama_rec2.add_argument("--mode", "-m", default="unwatched",
-                              choices=["unwatched", "watching", "dropped", "all"],
-                              help="推荐模式（默认 unwatched=优先未看）")
-    p_drama_rec2.add_argument("--limit", "-n", type=int, default=20, help="数量限制（1-200）")
+    p_drama_rec2.add_argument(
+        "--min-rating", "-r", type=float, default=0.0, help="最低评分（0-10）"
+    )
+    p_drama_rec2.add_argument(
+        "--mode",
+        "-m",
+        default="unwatched",
+        choices=["unwatched", "watching", "dropped", "all"],
+        help="推荐模式（默认 unwatched=优先未看）",
+    )
+    p_drama_rec2.add_argument(
+        "--limit", "-n", type=int, default=20, help="数量限制（1-200）"
+    )
 
     # ===== v5.3.3 新增命令 =====
 
-    p_agent_timeline = sub.add_parser("agent-timeline", help="Agent 记忆时间线分析（v5.3.3 新增）")
+    p_agent_timeline = sub.add_parser(
+        "agent-timeline", help="Agent 记忆时间线分析（v5.3.3 新增）"
+    )
     p_agent_timeline.add_argument("agent_id", help="Agent ID")
-    p_agent_timeline.add_argument("--days", "-d", type=int, default=30, help="回溯天数（1-365）")
+    p_agent_timeline.add_argument(
+        "--days", "-d", type=int, default=30, help="回溯天数（1-365）"
+    )
 
-    p_agent_heatmap = sub.add_parser("agent-heatmap", help="Agent 记忆热力图（v5.3.3 新增）")
+    p_agent_heatmap = sub.add_parser(
+        "agent-heatmap", help="Agent 记忆热力图（v5.3.3 新增）"
+    )
     p_agent_heatmap.add_argument("agent_id", help="Agent ID")
-    p_agent_heatmap.add_argument("--days", "-d", type=int, default=30, help="回溯天数（1-365）")
+    p_agent_heatmap.add_argument(
+        "--days", "-d", type=int, default=30, help="回溯天数（1-365）"
+    )
 
     p_drama_binge = sub.add_parser("drama-binge", help="追剧统计（v5.3.3 新增）")
     p_drama_binge.add_argument("--drama-id", help="指定短剧 ID（不指定则统计全部）")
@@ -3391,16 +4102,24 @@ def main(argv=None):
     p_char_network.add_argument("drama_id", help="短剧 ID")
 
     # ===== v5.3.4 新增 Agent 记忆命令 =====
-    p_agent_sentiment = sub.add_parser("agent-sentiment", help="Agent 记忆情感分析（v5.3.4 新增）")
+    p_agent_sentiment = sub.add_parser(
+        "agent-sentiment", help="Agent 记忆情感分析（v5.3.4 新增）"
+    )
     p_agent_sentiment.add_argument("agent", help="Agent ID")
-    p_agent_sentiment.add_argument("--days", "-d", type=int, default=30, help="回溯天数（1-365）")
+    p_agent_sentiment.add_argument(
+        "--days", "-d", type=int, default=30, help="回溯天数（1-365）"
+    )
 
     p_memory_decay = sub.add_parser("memory-decay", help="记忆衰减评分（v5.3.4 新增）")
     p_memory_decay.add_argument("agent", help="Agent ID")
-    p_memory_decay.add_argument("--days", "-d", type=int, default=30, help="回溯天数（1-365）")
+    p_memory_decay.add_argument(
+        "--days", "-d", type=int, default=30, help="回溯天数（1-365）"
+    )
 
     # ===== v5.3.4 新增 AI 短剧命令 =====
-    p_drama_compare = sub.add_parser("drama-compare", help="短剧对比分析（v5.3.4 新增）")
+    p_drama_compare = sub.add_parser(
+        "drama-compare", help="短剧对比分析（v5.3.4 新增）"
+    )
     p_drama_compare.add_argument("dramas", nargs="+", help="短剧 ID 列表（2-5 部）")
 
     p_char_arc = sub.add_parser("char-arc", help="角色成长弧线分析（v5.3.4 新增）")
@@ -3410,53 +4129,87 @@ def main(argv=None):
     # ===== v5.3.5 新增 Agent 记忆命令 =====
     p_mem_cluster = sub.add_parser("memory-cluster", help="记忆主题聚类（v5.3.5 新增）")
     p_mem_cluster.add_argument("agent", help="Agent ID")
-    p_mem_cluster.add_argument("--days", "-d", type=int, default=30, help="回溯天数（1-365）")
-    p_mem_cluster.add_argument("--max-clusters", "-k", type=int, default=10, help="最大聚类数（1-50）")
+    p_mem_cluster.add_argument(
+        "--days", "-d", type=int, default=30, help="回溯天数（1-365）"
+    )
+    p_mem_cluster.add_argument(
+        "--max-clusters", "-k", type=int, default=10, help="最大聚类数（1-50）"
+    )
 
     p_agent_insight = sub.add_parser("agent-insight", help="Agent 行为洞察（v5.3.5 新增）", parents=[json_parser])
     p_agent_insight.add_argument("agent", help="Agent ID")
-    p_agent_insight.add_argument("--days", "-d", type=int, default=30, help="回溯天数（1-365）")
+    p_agent_insight.add_argument(
+        "--days", "-d", type=int, default=30, help="回溯天数（1-365）"
+    )
 
     # ===== v5.3.5 新增 AI 短剧命令 =====
-    p_drama_summary = sub.add_parser("drama-summary", help="短剧剧情摘要（v5.3.5 新增）")
+    p_drama_summary = sub.add_parser(
+        "drama-summary", help="短剧剧情摘要（v5.3.5 新增）"
+    )
     p_drama_summary.add_argument("drama_id", help="短剧 ID")
-    p_drama_summary.add_argument("--max-length", "-l", type=int, default=500, help="摘要最大字符数（100-2000）")
+    p_drama_summary.add_argument(
+        "--max-length", "-l", type=int, default=500, help="摘要最大字符数（100-2000）"
+    )
 
-    p_scene_tension = sub.add_parser("scene-tension", help="场景张力分析（v5.3.5 新增）")
+    p_scene_tension = sub.add_parser(
+        "scene-tension", help="场景张力分析（v5.3.5 新增）"
+    )
     p_scene_tension.add_argument("drama_id", help="短剧 ID")
-    p_scene_tension.add_argument("--top-k", "-k", type=int, default=10, help="返回 Top-K 高张力场景（1-50）")
+    p_scene_tension.add_argument(
+        "--top-k", "-k", type=int, default=10, help="返回 Top-K 高张力场景（1-50）"
+    )
 
     # ===== v5.3.6 新增 Agent 记忆命令 =====
     p_mem_link = sub.add_parser("memory-link", help="记忆关联推理（v5.3.6 新增）")
     p_mem_link.add_argument("agent", help="Agent ID")
     p_mem_link.add_argument("memory_id", help="目标记忆 ID")
-    p_mem_link.add_argument("--top-k", "-k", type=int, default=10, help="返回 Top-K 关联记忆（1-50）")
-    p_mem_link.add_argument("--days", "-d", type=int, default=90, help="回溯窗口天数（1-365）")
+    p_mem_link.add_argument(
+        "--top-k", "-k", type=int, default=10, help="返回 Top-K 关联记忆（1-50）"
+    )
+    p_mem_link.add_argument(
+        "--days", "-d", type=int, default=90, help="回溯窗口天数（1-365）"
+    )
 
-    p_mem_recall = sub.add_parser("memory-recall", help="智能记忆召回（v5.3.6 新增）", parents=[json_parser])
+    p_mem_recall = sub.add_parser(
+        "memory-recall", help="智能记忆召回（v5.3.6 新增）", parents=[json_parser]
+    )
     p_mem_recall.add_argument("agent", help="Agent ID")
     p_mem_recall.add_argument("query", help="查询文本")
-    p_mem_recall.add_argument("--top-k", "-k", type=int, default=10, help="返回 Top-K 召回记忆（1-50）")
-    p_mem_recall.add_argument("--days", "-d", type=int, default=180, help="回溯窗口天数（1-365）")
+    p_mem_recall.add_argument(
+        "--top-k", "-k", type=int, default=10, help="返回 Top-K 召回记忆（1-50）"
+    )
+    p_mem_recall.add_argument(
+        "--days", "-d", type=int, default=180, help="回溯窗口天数（1-365）"
+    )
 
     # ===== v5.3.6 新增 AI 短剧命令 =====
     p_drama_pacing = sub.add_parser("drama-pacing", help="剧集节奏分析（v5.3.6 新增）")
     p_drama_pacing.add_argument("drama_id", help="短剧 ID")
-    p_drama_pacing.add_argument("--window", "-w", type=int, default=3, help="滑动窗口大小（场景数 1-10）")
+    p_drama_pacing.add_argument(
+        "--window", "-w", type=int, default=3, help="滑动窗口大小（场景数 1-10）"
+    )
 
-    p_char_inter = sub.add_parser("char-interaction", help="角色互动分析（v5.3.6 新增）")
+    p_char_inter = sub.add_parser(
+        "char-interaction", help="角色互动分析（v5.3.6 新增）"
+    )
     p_char_inter.add_argument("drama_id", help="短剧 ID")
-    p_char_inter.add_argument("--top-k", "-k", type=int, default=15, help="返回 Top-K 互动关系（1-50）")
+    p_char_inter.add_argument(
+        "--top-k", "-k", type=int, default=15, help="返回 Top-K 互动关系（1-50）"
+    )
 
     p_quality = sub.add_parser("quality", help="记忆质量评分（v5.2.2 新增）")
     p_quality.add_argument("memory_id", nargs="?", help="记忆 ID（不指定则批量评分）")
     p_quality.add_argument("--category", "-c", help="批量评分时按分类过滤")
-    p_quality.add_argument("--limit", "-n", type=int, default=100, help="批量评分数量限制")
+    p_quality.add_argument(
+        "--limit", "-n", type=int, default=100, help="批量评分数量限制"
+    )
 
     p_similar = sub.add_parser("similar", help="相似度分析（v5.2.2 新增）")
     p_similar.add_argument("memory_id", help="目标记忆 ID")
     p_similar.add_argument("--limit", "-n", type=int, default=10, help="返回数量")
-    p_similar.add_argument("--min-similarity", "-m", type=float, default=0.3, help="最低相似度阈值（0-1）")
+    p_similar.add_argument(
+        "--min-similarity", "-m", type=float, default=0.3, help="最低相似度阈值（0-1）"
+    )
 
     # ===== v5.2.4 新增命令 =====
 
@@ -3479,23 +4232,39 @@ def main(argv=None):
     p_template_add.add_argument("content", help="模板内容（支持 {变量} 占位符）")
     p_template_add.add_argument("--category", "-c", default="general", help="默认分类")
     p_template_add.add_argument("--tags", "-t", nargs="+", help="默认标签")
-    p_template_add.add_argument("--importance", "-i", default="MEDIUM",
-                                choices=["LOW", "MEDIUM", "HIGH", "CRITICAL"], help="默认重要性")
-    p_template_add.add_argument("--layer", "-l", default="short_term",
-                                choices=["sensory", "short_term", "long_term", "permanent"], help="默认层级")
+    p_template_add.add_argument(
+        "--importance",
+        "-i",
+        default="MEDIUM",
+        choices=["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+        help="默认重要性",
+    )
+    p_template_add.add_argument(
+        "--layer",
+        "-l",
+        default="short_term",
+        choices=["sensory", "short_term", "long_term", "permanent"],
+        help="默认层级",
+    )
     p_template_add.add_argument("--description", "-d", default="", help="模板描述")
 
-    p_template_list = sub.add_parser("template-list", help="列出记忆模板（v5.2.4 新增）")
+    p_template_list = sub.add_parser(
+        "template-list", help="列出记忆模板（v5.2.4 新增）"
+    )
     p_template_list.add_argument("--category", "-c", help="按分类筛选")
     p_template_list.add_argument("--limit", "-n", type=int, default=50, help="数量限制")
 
-    p_template_use = sub.add_parser("template-use", help="使用模板创建记忆（v5.2.4 新增）")
+    p_template_use = sub.add_parser(
+        "template-use", help="使用模板创建记忆（v5.2.4 新增）"
+    )
     p_template_use.add_argument("template_id", help="模板 ID")
     p_template_use.add_argument("--var", nargs="+", help="变量替换（格式：key=value）")
     p_template_use.add_argument("--agent", default="cli", help="Agent ID")
     p_template_use.add_argument("--session", default="cli", help="会话 ID")
 
-    p_template_delete = sub.add_parser("template-delete", help="删除模板（v5.2.4 新增）")
+    p_template_delete = sub.add_parser(
+        "template-delete", help="删除模板（v5.2.4 新增）"
+    )
     p_template_delete.add_argument("template_id", help="模板 ID")
     p_template_delete.add_argument("--force", action="store_true", help="确认删除")
 
@@ -3503,27 +4272,48 @@ def main(argv=None):
     p_batch_update.add_argument("--ids", required=True, help="记忆 ID 列表，逗号分隔")
     p_batch_update.add_argument("--category", "-c", help="新分类")
     p_batch_update.add_argument("--tags", "-t", nargs="+", help="新标签")
-    p_batch_update.add_argument("--importance", "-i",
-                                choices=["LOW", "MEDIUM", "HIGH", "CRITICAL"], help="新重要性")
-    p_batch_update.add_argument("--layer", "-l",
-                                choices=["sensory", "short_term", "long_term", "permanent"], help="新层级")
-    p_batch_update.add_argument("--star", action="store_true", default=None, help="设为收藏")
-    p_batch_update.add_argument("--unstar", action="store_true", default=None, help="取消收藏")
+    p_batch_update.add_argument(
+        "--importance",
+        "-i",
+        choices=["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+        help="新重要性",
+    )
+    p_batch_update.add_argument(
+        "--layer",
+        "-l",
+        choices=["sensory", "short_term", "long_term", "permanent"],
+        help="新层级",
+    )
+    p_batch_update.add_argument(
+        "--star", action="store_true", default=None, help="设为收藏"
+    )
+    p_batch_update.add_argument(
+        "--unstar", action="store_true", default=None, help="取消收藏"
+    )
     p_batch_update.add_argument("--force", action="store_true", help="跳过确认")
     p_batch_update.add_argument("--agent", default="cli", help="Agent ID")
     p_batch_update.add_argument("--session", default="cli", help="会话 ID")
 
     p_schedule = sub.add_parser("schedule", help="复习计划管理（v5.2.4 新增）")
-    p_schedule.add_argument("schedule_action", choices=["create", "list", "review", "stats"],
-                            help="操作：create=创建计划, list=到期列表, review=完成复习, stats=统计")
+    p_schedule.add_argument(
+        "schedule_action",
+        choices=["create", "list", "review", "stats"],
+        help="操作：create=创建计划, list=到期列表, review=完成复习, stats=统计",
+    )
     p_schedule.add_argument("--memory-id", "-m", help="记忆 ID（create 时必填）")
     p_schedule.add_argument("--schedule-id", "-s", help="复习计划 ID（review 时必填）")
-    p_schedule.add_argument("--interval", type=float, default=1.0, help="复习间隔天数（create 时使用）")
+    p_schedule.add_argument(
+        "--interval", type=float, default=1.0, help="复习间隔天数（create 时使用）"
+    )
     p_schedule.add_argument("--limit", "-n", type=int, default=20, help="数量限制")
 
     p_export = sub.add_parser("export", help="导出记忆")
-    p_export.add_argument("--output", "-o", default="./data/export.json", help="输出文件")
-    p_export.add_argument("--format", "-f", default="json", choices=["json", "csv"], help="导出格式")
+    p_export.add_argument(
+        "--output", "-o", default="./data/export.json", help="输出文件"
+    )
+    p_export.add_argument(
+        "--format", "-f", default="json", choices=["json", "csv"], help="导出格式"
+    )
     p_export.add_argument("--category", "-c", help="按分类筛选")
     p_export.add_argument("--layer", "-l", help="按层级筛选")
     p_export.add_argument("--include-private", action="store_true", help="包含私密记忆")
@@ -3537,68 +4327,112 @@ def main(argv=None):
 
     p_serve = sub.add_parser("serve", help="启动 Web UI 或 REST API")
     p_serve.add_argument("--port", type=int, default=8080, help="端口")
-    p_serve.add_argument("--api", action="store_true",
-                          help="启动 REST API 模式（v5.4.6 新增）")
-    p_serve.add_argument("--host", default="127.0.0.1",
-                          help="绑定地址（默认 127.0.0.1，0.0.0.0 允许外部访问）")
+    p_serve.add_argument(
+        "--api", action="store_true", help="启动 REST API 模式（v5.4.6 新增）"
+    )
+    p_serve.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="绑定地址（默认 127.0.0.1，0.0.0.0 允许外部访问）",
+    )
     # v5.6.1: TLS 参数
-    p_serve.add_argument("--ssl-cert", default="",
-                          help="TLS 证书文件路径（启用 HTTPS，API 模式）")
-    p_serve.add_argument("--ssl-key", default="",
-                          help="TLS 私钥文件路径（默认与证书同文件）")
+    p_serve.add_argument(
+        "--ssl-cert", default="", help="TLS 证书文件路径（启用 HTTPS，API 模式）"
+    )
+    p_serve.add_argument(
+        "--ssl-key", default="", help="TLS 私钥文件路径（默认与证书同文件）"
+    )
 
     p_cleanup = sub.add_parser("cleanup", help="清理过期记忆（v5.1.3 新增）")
-    p_cleanup.add_argument("--hours", type=int, default=24, help="超过 N 小时的记忆将被清理，默认 24")
-    p_cleanup.add_argument("--layer", "-l", default="sensory",
-                           choices=["sensory", "short_term", "long_term", "permanent"],
-                           help="要清理的记忆层级，默认 sensory")
+    p_cleanup.add_argument(
+        "--hours", type=int, default=24, help="超过 N 小时的记忆将被清理，默认 24"
+    )
+    p_cleanup.add_argument(
+        "--layer",
+        "-l",
+        default="sensory",
+        choices=["sensory", "short_term", "long_term", "permanent"],
+        help="要清理的记忆层级，默认 sensory",
+    )
 
     # v5.4.6 新增：归档命令
     p_archive = sub.add_parser("archive", help="自动归档过期记忆（v5.4.6 新增）")
-    p_archive.add_argument("--hours", type=int, default=24, help="超过 N 小时的记忆将被归档")
-    p_archive.add_argument("--layer", "-l", default="sensory",
-                           choices=["sensory", "short_term"],
-                           help="要归档的记忆层级")
+    p_archive.add_argument(
+        "--hours", type=int, default=24, help="超过 N 小时的记忆将被归档"
+    )
+    p_archive.add_argument(
+        "--layer",
+        "-l",
+        default="sensory",
+        choices=["sensory", "short_term"],
+        help="要归档的记忆层级",
+    )
 
-    p_archived_list = sub.add_parser("archived-list", help="列出归档记忆（v5.4.6 新增）")
+    p_archived_list = sub.add_parser(
+        "archived-list", help="列出归档记忆（v5.4.6 新增）"
+    )
     p_archived_list.add_argument("--layer", "-l", help="按层级过滤")
     p_archived_list.add_argument("--category", "-c", help="按分类过滤")
     p_archived_list.add_argument("--limit", "-n", type=int, default=20, help="返回数量")
 
-    p_archived_restore = sub.add_parser("archived-restore", help="从归档恢复记忆（v5.4.6 新增）")
+    p_archived_restore = sub.add_parser(
+        "archived-restore", help="从归档恢复记忆（v5.4.6 新增）"
+    )
     p_archived_restore.add_argument("archive_id", help="归档记录 ID")
 
-    p_archived_purge = sub.add_parser("archived-purge", help="永久删除过期归档记忆（v5.4.6 新增）")
-    p_archived_purge.add_argument("--older-than-days", type=int, default=90, help="归档超过 N 天的永久删除")
+    p_archived_purge = sub.add_parser(
+        "archived-purge", help="永久删除过期归档记忆（v5.4.6 新增）"
+    )
+    p_archived_purge.add_argument(
+        "--older-than-days", type=int, default=90, help="归档超过 N 天的永久删除"
+    )
 
     # v5.4.6 新增：Obsidian 导出
-    p_export_obsidian = sub.add_parser("export-obsidian",
-                                        help="导出为 Obsidian Vault 格式（v5.4.6 新增）")
-    p_export_obsidian.add_argument("output_dir", help="输出目录（Obsidian vault 根目录）")
+    p_export_obsidian = sub.add_parser(
+        "export-obsidian", help="导出为 Obsidian Vault 格式（v5.4.6 新增）"
+    )
+    p_export_obsidian.add_argument(
+        "output_dir", help="输出目录（Obsidian vault 根目录）"
+    )
     p_export_obsidian.add_argument("--category", "-c", help="按分类筛选")
-    p_export_obsidian.add_argument("--layer", "-l",
-                                    choices=["sensory", "short_term", "long_term", "permanent"],
-                                    help="按层级筛选")
-    p_export_obsidian.add_argument("--starred", action="store_true", help="仅导出收藏记忆")
+    p_export_obsidian.add_argument(
+        "--layer",
+        "-l",
+        choices=["sensory", "short_term", "long_term", "permanent"],
+        help="按层级筛选",
+    )
+    p_export_obsidian.add_argument(
+        "--starred", action="store_true", help="仅导出收藏记忆"
+    )
 
     p_batch_add = sub.add_parser("batch-add", help="从文件批量添加记忆（v5.1.3 新增）")
     p_batch_add.add_argument("input", help="输入 JSON 文件路径")
 
-    p_import_url = sub.add_parser("import-url", help="从 URL 导入网页内容（v5.1.3 新增）")
+    p_import_url = sub.add_parser(
+        "import-url", help="从 URL 导入网页内容（v5.1.3 新增）"
+    )
     p_import_url.add_argument("url", help="要导入的网页 URL")
     p_import_url.add_argument("--category", "-c", default="web", help="分类")
     p_import_url.add_argument("--tags", "-t", nargs="+", help="标签")
-    p_import_url.add_argument("--layer", "-l", default="short_term",
-                              choices=["sensory", "short_term", "long_term", "permanent"],
-                              help="记忆层级")
+    p_import_url.add_argument(
+        "--layer",
+        "-l",
+        default="short_term",
+        choices=["sensory", "short_term", "long_term", "permanent"],
+        help="记忆层级",
+    )
 
     # ===== 记忆关联命令（v5.2.5 新增）=====
     p_link = sub.add_parser("link", help="创建记忆关联（双向，v5.2.5 新增）")
     p_link.add_argument("source_id", help="源记忆 ID")
     p_link.add_argument("target_id", help="目标记忆 ID")
-    p_link.add_argument("--type", "-t", default="related",
-                        choices=["related", "depends_on", "extends", "contradicts"],
-                        help="关联类型（related/depends_on/extends/contradicts，默认 related）")
+    p_link.add_argument(
+        "--type",
+        "-t",
+        default="related",
+        choices=["related", "depends_on", "extends", "contradicts"],
+        help="关联类型（related/depends_on/extends/contradicts，默认 related）",
+    )
     p_link.add_argument("--note", "-n", default="", help="关联备注（最多 500 字）")
 
     p_links = sub.add_parser("links", help="列出记忆的所有关联（v5.2.5 新增）")
@@ -3615,205 +4449,355 @@ def main(argv=None):
     p_unpin.add_argument("memory_id", help="记忆 ID")
 
     p_pinned = sub.add_parser("pinned", help="列出所有置顶记忆（v5.2.5 新增）")
-    p_pinned.add_argument("--limit", "-l", type=int, default=50,
-                          help="数量限制（默认 50）")
+    p_pinned.add_argument(
+        "--limit", "-l", type=int, default=50, help="数量限制（默认 50）"
+    )
 
     # ===== 记忆版本历史命令（v5.2.7 新增）=====
     p_history = sub.add_parser("history", help="查看记忆的修改历史（v5.2.7 新增）")
     p_history.add_argument("memory_id", help="记忆 ID")
-    p_history.add_argument("--limit", "-l", type=int, default=50, help="返回版本数量上限")
+    p_history.add_argument(
+        "--limit", "-l", type=int, default=50, help="返回版本数量上限"
+    )
 
-    p_rollback = sub.add_parser("rollback", help="回滚记忆到指定历史版本（v5.2.7 新增）")
+    p_rollback = sub.add_parser(
+        "rollback", help="回滚记忆到指定历史版本（v5.2.7 新增）"
+    )
     p_rollback.add_argument("version_id", help="目标版本 ID")
 
     # ===== v5.2.8 新增命令 =====
     p_export_csv = sub.add_parser("export-csv", help="导出记忆为 CSV（v5.2.8 新增）")
-    p_export_csv.add_argument("--output", "-o", default="./data/memory_export.csv",
-                              help="输出文件路径")
+    p_export_csv.add_argument(
+        "--output", "-o", default="./data/memory_export.csv", help="输出文件路径"
+    )
     p_export_csv.add_argument("--category", "-c", help="限定分类")
-    p_export_csv.add_argument("--include-private", action="store_true",
-                              help="包含 PRIVATE/STRICT 记忆（默认排除）")
+    p_export_csv.add_argument(
+        "--include-private",
+        action="store_true",
+        help="包含 PRIVATE/STRICT 记忆（默认排除）",
+    )
 
     p_diff = sub.add_parser("diff", help="对比记忆版本差异（v5.2.8 新增）")
     p_diff.add_argument("memory_id", help="记忆 ID")
-    p_diff.add_argument("--version-id", "-v", dest="version_id", default="",
-                        help="历史版本 ID（默认：最新历史版本 vs 当前内容）")
-    p_diff.add_argument("--against", default="",
-                        help="第二个版本 ID（两个历史版本互相比较）")
+    p_diff.add_argument(
+        "--version-id",
+        "-v",
+        dest="version_id",
+        default="",
+        help="历史版本 ID（默认：最新历史版本 vs 当前内容）",
+    )
+    p_diff.add_argument(
+        "--against", default="", help="第二个版本 ID（两个历史版本互相比较）"
+    )
 
     # ===== 多 Agent 记忆空间命令（v5.2.8 实验性 — v6.0.0 全量推送预览）=====
-    p_space_create = sub.add_parser("space-create",
-                                    help="创建多 Agent 记忆空间（实验性 v6.0.0 预览）")
+    p_space_create = sub.add_parser(
+        "space-create", help="创建多 Agent 记忆空间（实验性 v6.0.0 预览）"
+    )
     p_space_create.add_argument("name", help="空间名称（唯一）")
     p_space_create.add_argument("--desc", default="", help="空间描述")
-    p_space_create.add_argument("--policy", default="shared",
-                                choices=["shared", "broadcast"],
-                                help="空间策略：shared=成员协作 / broadcast=仅 owner 可写")
+    p_space_create.add_argument(
+        "--policy",
+        default="shared",
+        choices=["shared", "broadcast"],
+        help="空间策略：shared=成员协作 / broadcast=仅 owner 可写",
+    )
     p_space_create.add_argument("--agent", default="cli", help="Owner Agent ID")
 
-    p_space_list = sub.add_parser("space-list",
-                                  help="列出记忆空间（实验性 v6.0.0 预览）")
-    p_space_list.add_argument("--mine", action="store_true",
-                              help="仅列出我（--agent）加入的空间")
+    p_space_list = sub.add_parser(
+        "space-list", help="列出记忆空间（实验性 v6.0.0 预览）"
+    )
+    p_space_list.add_argument(
+        "--mine", action="store_true", help="仅列出我（--agent）加入的空间"
+    )
     p_space_list.add_argument("--agent", default="cli", help="Agent ID")
 
-    p_space_join = sub.add_parser("space-join",
-                                  help="以 reader 身份加入记忆空间（实验性 v6.0.0 预览）")
+    p_space_join = sub.add_parser(
+        "space-join", help="以 reader 身份加入记忆空间（实验性 v6.0.0 预览）"
+    )
     p_space_join.add_argument("space", help="空间 ID 或名称")
     p_space_join.add_argument("--agent", default="cli", help="Agent ID")
 
-    p_space_add_member = sub.add_parser("space-add-member",
-                                        help="添加空间成员（实验性 v6.0.0 预览，仅 owner）")
+    p_space_add_member = sub.add_parser(
+        "space-add-member", help="添加空间成员（实验性 v6.0.0 预览，仅 owner）"
+    )
     p_space_add_member.add_argument("space", help="空间 ID 或名称")
     p_space_add_member.add_argument("member_agent", help="要添加的 Agent ID")
-    p_space_add_member.add_argument("--role", default="reader",
-                                    choices=["editor", "reader"],
-                                    help="成员角色（owner 角色暂不支持转移）")
-    p_space_add_member.add_argument("--agent", default="cli", help="操作者 Agent ID（须为 owner）")
+    p_space_add_member.add_argument(
+        "--role",
+        default="reader",
+        choices=["editor", "reader"],
+        help="成员角色（owner 角色暂不支持转移）",
+    )
+    p_space_add_member.add_argument(
+        "--agent", default="cli", help="操作者 Agent ID（须为 owner）"
+    )
 
-    p_space_share = sub.add_parser("space-share",
-                                   help="共享记忆到空间（实验性 v6.0.0 预览）")
+    p_space_share = sub.add_parser(
+        "space-share", help="共享记忆到空间（实验性 v6.0.0 预览）"
+    )
     p_space_share.add_argument("space", help="空间 ID 或名称")
     p_space_share.add_argument("memory_id", help="要共享的记忆 ID")
     p_space_share.add_argument("--agent", default="cli", help="操作者 Agent ID")
 
-    p_space_memories = sub.add_parser("space-memories",
-                                      help="列出空间中的共享记忆（实验性 v6.0.0 预览）")
+    p_space_memories = sub.add_parser(
+        "space-memories", help="列出空间中的共享记忆（实验性 v6.0.0 预览）"
+    )
     p_space_memories.add_argument("space", help="空间 ID 或名称")
     p_space_memories.add_argument("--agent", default="cli", help="Agent ID")
-    p_space_memories.add_argument("--limit", "-n", type=int, default=50, help="数量限制")
+    p_space_memories.add_argument(
+        "--limit", "-n", type=int, default=50, help="数量限制"
+    )
 
-    p_space_stats = sub.add_parser("space-stats",
-                                   help="记忆空间统计（实验性 v6.0.0 预览）")
-    p_space_stats.add_argument("space", nargs="?", default="",
-                               help="空间 ID 或名称（省略则全局统计）")
+    p_space_stats = sub.add_parser(
+        "space-stats", help="记忆空间统计（实验性 v6.0.0 预览）"
+    )
+    p_space_stats.add_argument(
+        "space", nargs="?", default="", help="空间 ID 或名称（省略则全局统计）"
+    )
     p_space_stats.add_argument("--agent", default="cli", help="Agent ID")
 
     # ===== v5.3.7 新增 Agent 记忆命令 =====
-    p_mem_importance = sub.add_parser("memory-importance", help="记忆重要度分析（v5.3.7 新增）")
+    p_mem_importance = sub.add_parser(
+        "memory-importance", help="记忆重要度分析（v5.3.7 新增）"
+    )
     p_mem_importance.add_argument("agent", help="Agent ID")
-    p_mem_importance.add_argument("--days", "-d", type=int, default=30, help="回溯窗口天数（1-365）")
+    p_mem_importance.add_argument(
+        "--days", "-d", type=int, default=30, help="回溯窗口天数（1-365）"
+    )
 
-    p_mem_context = sub.add_parser("memory-context", help="上下文记忆注入（v5.3.7 新增）", parents=[json_parser])
+    p_mem_context = sub.add_parser(
+        "memory-context", help="上下文记忆注入（v5.3.7 新增）", parents=[json_parser]
+    )
     p_mem_context.add_argument("agent", help="Agent ID")
     p_mem_context.add_argument("query", help="查询文本")
-    p_mem_context.add_argument("--max-tokens", "-t", type=int, default=4000, help="token 预算上限（500-32000）")
+    p_mem_context.add_argument(
+        "--max-tokens", "-t", type=int, default=4000, help="token 预算上限（500-32000）"
+    )
 
-    p_agent_emotion = sub.add_parser("agent-emotion", help="Agent 情感追踪（v5.3.7 新增）")
+    p_agent_emotion = sub.add_parser(
+        "agent-emotion", help="Agent 情感追踪（v5.3.7 新增）"
+    )
     p_agent_emotion.add_argument("agent", help="Agent ID")
-    p_agent_emotion.add_argument("--days", "-d", type=int, default=30, help="回溯天数（1-365）")
+    p_agent_emotion.add_argument(
+        "--days", "-d", type=int, default=30, help="回溯天数（1-365）"
+    )
 
     # ===== v5.3.7 新增 AI 短剧命令 =====
-    p_genre_trend = sub.add_parser("drama-genre-trend", help="短剧类型趋势分析（v5.3.7 新增）")
-    p_genre_trend.add_argument("--days", "-d", type=int, default=90, help="回溯窗口天数（1-365）")
+    p_genre_trend = sub.add_parser(
+        "drama-genre-trend", help="短剧类型趋势分析（v5.3.7 新增）"
+    )
+    p_genre_trend.add_argument(
+        "--days", "-d", type=int, default=90, help="回溯窗口天数（1-365）"
+    )
 
-    p_binge_score = sub.add_parser("drama-binge-score", help="追剧粘性评分（v5.3.7 新增）")
+    p_binge_score = sub.add_parser(
+        "drama-binge-score", help="追剧粘性评分（v5.3.7 新增）"
+    )
     p_binge_score.add_argument("drama_id", help="短剧 ID")
 
-    p_char_rel = sub.add_parser("char-relationship", help="角色关系深度分析（v5.3.7 新增）")
+    p_char_rel = sub.add_parser(
+        "char-relationship", help="角色关系深度分析（v5.3.7 新增）"
+    )
     p_char_rel.add_argument("drama_id", help="短剧 ID")
     p_char_rel.add_argument("char1", help="角色 1 ID")
     p_char_rel.add_argument("char2", help="角色 2 ID")
 
     # ===== v5.4.1 新增 Agent 记忆命令 =====
-    p_mem_reflection = sub.add_parser("memory-reflection", help="记忆反思（v5.4.1 新增）", parents=[json_parser])
+    p_mem_reflection = sub.add_parser(
+        "memory-reflection", help="记忆反思（v5.4.1 新增）", parents=[json_parser]
+    )
     p_mem_reflection.add_argument("agent", help="Agent ID")
-    p_mem_reflection.add_argument("--days", "-d", type=int, default=30, help="回溯窗口天数（1-365）")
+    p_mem_reflection.add_argument(
+        "--days", "-d", type=int, default=30, help="回溯窗口天数（1-365）"
+    )
 
-    p_mem_lineage = sub.add_parser("memory-lineage", help="记忆血缘溯源（v5.4.1 新增）", parents=[json_parser])
+    p_mem_lineage = sub.add_parser(
+        "memory-lineage", help="记忆血缘溯源（v5.4.1 新增）", parents=[json_parser]
+    )
     p_mem_lineage.add_argument("memory_id", help="记忆 ID")
 
-    p_mem_reinforce = sub.add_parser("memory-reinforce", help="记忆强化候选（v5.4.1 新增）", parents=[json_parser])
+    p_mem_reinforce = sub.add_parser(
+        "memory-reinforce", help="记忆强化候选（v5.4.1 新增）", parents=[json_parser]
+    )
     p_mem_reinforce.add_argument("agent", help="Agent ID")
-    p_mem_reinforce.add_argument("--days", "-d", type=int, default=90, help="回溯窗口天数（1-365）")
-    p_mem_reinforce.add_argument("--limit", "-l", type=int, default=10, help="返回候选上限（1-50）")
+    p_mem_reinforce.add_argument(
+        "--days", "-d", type=int, default=90, help="回溯窗口天数（1-365）"
+    )
+    p_mem_reinforce.add_argument(
+        "--limit", "-l", type=int, default=10, help="返回候选上限（1-50）"
+    )
 
     # ===== v5.5.8 新增 memory-diff 命令 =====
-    p_mem_diff = sub.add_parser("memory-diff", help="对比两个记忆版本的差异（v5.5.8 新增）", parents=[json_parser])
+    p_mem_diff = sub.add_parser(
+        "memory-diff",
+        help="对比两个记忆版本的差异（v5.5.8 新增）",
+        parents=[json_parser],
+    )
     p_mem_diff.add_argument("version_a", help="版本 A 的 ID")
     p_mem_diff.add_argument("version_b", help="版本 B 的 ID")
 
     # ===== v5.4.1 新增 AI 短剧命令 =====
-    p_plot_thread = sub.add_parser("drama-plot-thread", help="剧情伏笔线索追踪（v5.4.1 新增）")
+    p_plot_thread = sub.add_parser(
+        "drama-plot-thread", help="剧情伏笔线索追踪（v5.4.1 新增）"
+    )
     p_plot_thread.add_argument("drama_id", help="短剧 ID")
 
-    p_episode_curve = sub.add_parser("drama-episode-curve", help="分集张力曲线（v5.4.1 新增）")
+    p_episode_curve = sub.add_parser(
+        "drama-episode-curve", help="分集张力曲线（v5.4.1 新增）"
+    )
     p_episode_curve.add_argument("drama_id", help="短剧 ID")
 
-    p_screen_time = sub.add_parser("drama-screen-time", help="角色戏份平衡分析（v5.4.1 新增）")
+    p_screen_time = sub.add_parser(
+        "drama-screen-time", help="角色戏份平衡分析（v5.4.1 新增）"
+    )
     p_screen_time.add_argument("drama_id", help="短剧 ID")
 
     # ===== v5.4.2 新增联邦 ACL 命令 =====
     p_acl_add = sub.add_parser("fed-acl-add", help="联邦 ACL：添加规则（v5.4.2 新增）")
-    p_acl_add.add_argument("--principal", "-p", required=True, help="主体（peer ID 或 * 表示任意节点）")
-    p_acl_add.add_argument("--resource", "-r", required=True,
-                           help="资源表达式：all / memory:<id> / category:<名> / tag:<名>")
-    p_acl_add.add_argument("--operations", "-o", default="read",
-                           help="操作：read/write/reshare/*（逗号分隔，默认 read）")
-    p_acl_add.add_argument("--effect", "-e", default="allow", choices=["allow", "deny"],
-                           help="效果（默认 allow）")
-    p_acl_add.add_argument("--priority", type=int, default=100, help="优先级（越大越先评估，默认 100）")
-    p_acl_add.add_argument("--trust-min", type=float, default=0.0,
-                           help="peer 信任阈值（0-1，默认 0 不校验）")
-    p_acl_add.add_argument("--expires-hours", type=float, default=None, help="规则有效时长（小时）")
+    p_acl_add.add_argument(
+        "--principal", "-p", required=True, help="主体（peer ID 或 * 表示任意节点）"
+    )
+    p_acl_add.add_argument(
+        "--resource",
+        "-r",
+        required=True,
+        help="资源表达式：all / memory:<id> / category:<名> / tag:<名>",
+    )
+    p_acl_add.add_argument(
+        "--operations",
+        "-o",
+        default="read",
+        help="操作：read/write/reshare/*（逗号分隔，默认 read）",
+    )
+    p_acl_add.add_argument(
+        "--effect",
+        "-e",
+        default="allow",
+        choices=["allow", "deny"],
+        help="效果（默认 allow）",
+    )
+    p_acl_add.add_argument(
+        "--priority", type=int, default=100, help="优先级（越大越先评估，默认 100）"
+    )
+    p_acl_add.add_argument(
+        "--trust-min",
+        type=float,
+        default=0.0,
+        help="peer 信任阈值（0-1，默认 0 不校验）",
+    )
+    p_acl_add.add_argument(
+        "--expires-hours", type=float, default=None, help="规则有效时长（小时）"
+    )
     p_acl_add.add_argument("--note", "-n", default="", help="备注")
 
-    p_acl_remove = sub.add_parser("fed-acl-remove", help="联邦 ACL：删除规则（v5.4.2 新增）")
+    p_acl_remove = sub.add_parser(
+        "fed-acl-remove", help="联邦 ACL：删除规则（v5.4.2 新增）"
+    )
     p_acl_remove.add_argument("rule_id", help="规则 ID")
 
-    p_acl_list = sub.add_parser("fed-acl-list", help="联邦 ACL：规则列表（v5.4.2 新增）")
-    p_acl_list.add_argument("--principal", "-p", default=None, help="按主体过滤（含通配规则）")
-    p_acl_list.add_argument("--effect", "-e", default=None, choices=["allow", "deny"], help="按效果过滤")
-    p_acl_list.add_argument("--limit", "-l", type=int, default=200, help="返回上限（默认 200）")
+    p_acl_list = sub.add_parser(
+        "fed-acl-list", help="联邦 ACL：规则列表（v5.4.2 新增）"
+    )
+    p_acl_list.add_argument(
+        "--principal", "-p", default=None, help="按主体过滤（含通配规则）"
+    )
+    p_acl_list.add_argument(
+        "--effect", "-e", default=None, choices=["allow", "deny"], help="按效果过滤"
+    )
+    p_acl_list.add_argument(
+        "--limit", "-l", type=int, default=200, help="返回上限（默认 200）"
+    )
 
-    p_acl_check = sub.add_parser("fed-acl-check", help="联邦 ACL：访问评估（v5.4.2 新增）")
+    p_acl_check = sub.add_parser(
+        "fed-acl-check", help="联邦 ACL：访问评估（v5.4.2 新增）"
+    )
     p_acl_check.add_argument("peer", help="Peer ID")
     p_acl_check.add_argument("memory_id", help="记忆 ID")
-    p_acl_check.add_argument("--operation", "-o", default="read",
-                             choices=["read", "write", "reshare"], help="操作（默认 read）")
-    p_acl_check.add_argument("--trust", type=float, default=None, help="peer 信任度（0-1）")
-    p_acl_check.add_argument("--category", default=None, help="记忆分类（参与 category 规则匹配）")
-    p_acl_check.add_argument("--tags", nargs="+", default=None, help="记忆标签（参与 tag 规则匹配）")
+    p_acl_check.add_argument(
+        "--operation",
+        "-o",
+        default="read",
+        choices=["read", "write", "reshare"],
+        help="操作（默认 read）",
+    )
+    p_acl_check.add_argument(
+        "--trust", type=float, default=None, help="peer 信任度（0-1）"
+    )
+    p_acl_check.add_argument(
+        "--category", default=None, help="记忆分类（参与 category 规则匹配）"
+    )
+    p_acl_check.add_argument(
+        "--tags", nargs="+", default=None, help="记忆标签（参与 tag 规则匹配）"
+    )
 
     p_acl_stats = sub.add_parser("fed-acl-stats", help="联邦 ACL：统计（v5.4.2 新增）")
 
     # ===== v5.4.2 新增共享冲突命令 =====
     p_cfl_list = sub.add_parser("share-conflicts", help="共享冲突：列表（v5.4.2 新增）")
-    p_cfl_list.add_argument("--status", "-s", default=None,
-                            choices=["open", "resolved", "dismissed"], help="按状态过滤")
-    p_cfl_list.add_argument("--limit", "-l", type=int, default=50, help="返回上限（默认 50）")
+    p_cfl_list.add_argument(
+        "--status",
+        "-s",
+        default=None,
+        choices=["open", "resolved", "dismissed"],
+        help="按状态过滤",
+    )
+    p_cfl_list.add_argument(
+        "--limit", "-l", type=int, default=50, help="返回上限（默认 50）"
+    )
 
-    p_cfl_resolve = sub.add_parser("share-conflict-resolve", help="共享冲突：解决（v5.4.2 新增）")
+    p_cfl_resolve = sub.add_parser(
+        "share-conflict-resolve", help="共享冲突：解决（v5.4.2 新增）"
+    )
     p_cfl_resolve.add_argument("conflict_id", help="冲突 ID")
-    p_cfl_resolve.add_argument("--strategy", "-s", required=True,
-                               choices=["lww", "keep_both"], help="解决策略")
+    p_cfl_resolve.add_argument(
+        "--strategy", "-s", required=True, choices=["lww", "keep_both"], help="解决策略"
+    )
     p_cfl_resolve.add_argument("--actor", "-a", default="", help="操作者")
 
-    p_cfl_dismiss = sub.add_parser("share-conflict-dismiss", help="共享冲突：关闭（v5.4.2 新增）")
+    p_cfl_dismiss = sub.add_parser(
+        "share-conflict-dismiss", help="共享冲突：关闭（v5.4.2 新增）"
+    )
     p_cfl_dismiss.add_argument("conflict_id", help="冲突 ID")
     p_cfl_dismiss.add_argument("--actor", "-a", default="", help="操作者")
 
-    p_cfl_stats = sub.add_parser("share-conflict-stats", help="共享冲突：统计（v5.4.2 新增）")
+    p_cfl_stats = sub.add_parser(
+        "share-conflict-stats", help="共享冲突：统计（v5.4.2 新增）"
+    )
 
     # ===== v5.4.3 新增 Agent 记忆命令 =====
-    p_influence_map = sub.add_parser("agent-influence", help="Agent 记忆影响力图谱（v5.4.3 新增）")
+    p_influence_map = sub.add_parser(
+        "agent-influence", help="Agent 记忆影响力图谱（v5.4.3 新增）"
+    )
     p_influence_map.add_argument("agent", help="Agent ID")
-    p_influence_map.add_argument("--days", "-d", type=int, default=30, help="回溯天数（1-365）")
+    p_influence_map.add_argument(
+        "--days", "-d", type=int, default=30, help="回溯天数（1-365）"
+    )
 
-    p_memory_overlap = sub.add_parser("memory-overlap", help="记忆重叠分析（v5.4.3 新增）")
+    p_memory_overlap = sub.add_parser(
+        "memory-overlap", help="记忆重叠分析（v5.4.3 新增）"
+    )
     p_memory_overlap.add_argument("agent_a", help="Agent A ID")
     p_memory_overlap.add_argument("agent_b", help="Agent B ID")
-    p_memory_overlap.add_argument("--days", "-d", type=int, default=30, help="回溯天数（1-365）")
+    p_memory_overlap.add_argument(
+        "--days", "-d", type=int, default=30, help="回溯天数（1-365）"
+    )
 
-    p_conflict_graph = sub.add_parser("conflict-graph", help="记忆冲突检测图（v5.4.3 新增）")
+    p_conflict_graph = sub.add_parser(
+        "conflict-graph", help="记忆冲突检测图（v5.4.3 新增）"
+    )
     p_conflict_graph.add_argument("agent", help="Agent ID")
-    p_conflict_graph.add_argument("--days", "-d", type=int, default=30, help="回溯天数（1-365）")
+    p_conflict_graph.add_argument(
+        "--days", "-d", type=int, default=30, help="回溯天数（1-365）"
+    )
 
     # ===== v5.4.3 新增 AI 短剧命令 =====
     p_quote_map = sub.add_parser("drama-quote-map", help="经典台词地图（v5.4.3 新增）")
     p_quote_map.add_argument("drama_id", help="短剧 ID")
 
-    p_char_growth = sub.add_parser("char-growth", help="角色成长深度分析（v5.4.3 新增）")
+    p_char_growth = sub.add_parser(
+        "char-growth", help="角色成长深度分析（v5.4.3 新增）"
+    )
     p_char_growth.add_argument("drama_id", help="短剧 ID")
     p_char_growth.add_argument("character_id", help="角色 ID")
 
@@ -3821,56 +4805,104 @@ def main(argv=None):
     p_scene_rhythm.add_argument("drama_id", help="短剧 ID")
 
     # ===== v5.3.9 新增五大能力 CLI =====
-    p_intent_router = sub.add_parser("intent-router", help="意图分类路由（v5.3.9 新增）", parents=[json_parser])
+    p_intent_router = sub.add_parser(
+        "intent-router", help="意图分类路由（v5.3.9 新增）", parents=[json_parser]
+    )
     p_intent_router.add_argument("text", help="要分类的文本（用引号包裹）")
     p_intent_router.add_argument("--force", help="强制指定意图 ID 用于 debug")
 
-    p_conflict_scan = sub.add_parser("conflict-scan", help="矛盾扫描 + 自动衰减（v5.3.9 新增）", parents=[json_parser])
+    p_conflict_scan = sub.add_parser(
+        "conflict-scan",
+        help="矛盾扫描 + 自动衰减（v5.3.9 新增）",
+        parents=[json_parser],
+    )
     p_conflict_scan.add_argument("--category", help="只扫描指定类别")
-    p_conflict_scan.add_argument("--limit", type=int, default=500, help="扫描最多多少条记忆")
-    p_conflict_scan.add_argument("--apply-decay", action="store_true",
-                                 help="应用衰减动作（降低重要性 + 打 conflict 标签）")
+    p_conflict_scan.add_argument(
+        "--limit", type=int, default=500, help="扫描最多多少条记忆"
+    )
+    p_conflict_scan.add_argument(
+        "--apply-decay",
+        action="store_true",
+        help="应用衰减动作（降低重要性 + 打 conflict 标签）",
+    )
 
-    p_skill_extract = sub.add_parser("skill-extract", help="从记忆抽取可复用技能模板（v5.3.9 新增）", parents=[json_parser])
+    p_skill_extract = sub.add_parser(
+        "skill-extract",
+        help="从记忆抽取可复用技能模板（v5.3.9 新增）",
+        parents=[json_parser],
+    )
     p_skill_extract.add_argument("--category", help="只抽取指定类别")
-    p_skill_extract.add_argument("--limit", type=int, default=2000, help="处理最多多少条记忆")
-    p_skill_extract.add_argument("--min-cluster", type=int, default=2, help="最小聚类规模（2+）")
+    p_skill_extract.add_argument(
+        "--limit", type=int, default=2000, help="处理最多多少条记忆"
+    )
+    p_skill_extract.add_argument(
+        "--min-cluster", type=int, default=2, help="最小聚类规模（2+）"
+    )
 
-    p_rerank_search = sub.add_parser("rerank-search", help="混合检索（查询扩展 + Cross-Encoder 重排）（v5.3.9 新增）", parents=[json_parser])
+    p_rerank_search = sub.add_parser(
+        "rerank-search",
+        help="混合检索（查询扩展 + Cross-Encoder 重排）（v5.3.9 新增）",
+        parents=[json_parser],
+    )
     p_rerank_search.add_argument("query", help="查询文本")
-    p_rerank_search.add_argument("--top", type=int, default=10, help="返回 Top N 条（默认 10）")
-    p_rerank_search.add_argument("--no-expand", action="store_true", help="关闭查询扩展")
-    p_rerank_search.add_argument("--no-rerank", action="store_true", help="关闭 Cross-Encoder 重排")
+    p_rerank_search.add_argument(
+        "--top", type=int, default=10, help="返回 Top N 条（默认 10）"
+    )
+    p_rerank_search.add_argument(
+        "--no-expand", action="store_true", help="关闭查询扩展"
+    )
+    p_rerank_search.add_argument(
+        "--no-rerank", action="store_true", help="关闭 Cross-Encoder 重排"
+    )
 
-    p_session_focus = sub.add_parser("session-focus", help="会话焦点聚类 + 漂移检测（v5.3.9 新增）", parents=[json_parser])
-    p_session_focus.add_argument("--messages", "-m", action="append", required=True,
-                                  help='消息条目 "role:内容"，可多次传入')
-    p_session_focus.add_argument("--window", type=int, default=40, help="滑动窗口大小（默认 40）")
-    p_session_focus.add_argument("--augment", help="若指定，输出针对该 query 的增强查询")
+    p_session_focus = sub.add_parser(
+        "session-focus",
+        help="会话焦点聚类 + 漂移检测（v5.3.9 新增）",
+        parents=[json_parser],
+    )
+    p_session_focus.add_argument(
+        "--messages",
+        "-m",
+        action="append",
+        required=True,
+        help='消息条目 "role:内容"，可多次传入',
+    )
+    p_session_focus.add_argument(
+        "--window", type=int, default=40, help="滑动窗口大小（默认 40）"
+    )
+    p_session_focus.add_argument(
+        "--augment", help="若指定，输出针对该 query 的增强查询"
+    )
 
     # ===== v5.4.5 新增向量检索命令 =====
-    p_rebuild_emb = sub.add_parser("rebuild-embeddings",
-                                   help="重建/增量构建嵌入向量（v5.4.5 新增，v5.4.6 增量模式）")
-    p_rebuild_emb.add_argument("--batch-size", "-b", type=int, default=100,
-                               help="批量编码大小（默认 100）")
-    p_rebuild_emb.add_argument("--full", action="store_true",
-                               help="全量重建（默认仅处理缺失项）")
+    p_rebuild_emb = sub.add_parser(
+        "rebuild-embeddings",
+        help="重建/增量构建嵌入向量（v5.4.5 新增，v5.4.6 增量模式）",
+    )
+    p_rebuild_emb.add_argument(
+        "--batch-size", "-b", type=int, default=100, help="批量编码大小（默认 100）"
+    )
+    p_rebuild_emb.add_argument(
+        "--full", action="store_true", help="全量重建（默认仅处理缺失项）"
+    )
 
-    p_emb_status = sub.add_parser("embedding-status",
-                                  help="查看嵌入向量状态（v5.4.5 新增）")
+    p_emb_status = sub.add_parser(
+        "embedding-status", help="查看嵌入向量状态（v5.4.5 新增）"
+    )
 
     args = parser.parse_args(argv)
 
     # v5.6.5 P2 #18：统一入口默认数据库路径（CLI/MCP 一致）
     if not getattr(args, "db_path", None):
         from core.paths import get_default_db_path
+
         args.db_path = get_default_db_path()
 
     global _json_mode
-    _json_mode = getattr(args, 'json_output', False)
+    _json_mode = getattr(args, "json_output", False)
 
     # v5.4.6 Shell 自动补全安装
-    if getattr(args, 'install_completion', None):
+    if getattr(args, "install_completion", None):
         _install_shell_completion(args.install_completion)
         return
 
@@ -3922,7 +4954,9 @@ def cmd_memory_importance(args):
         cnt = dist.get(imp, 0)
         pct = cnt / total * 100 if total > 0 else 0
         bar = "█" * int(pct / 5)
-        print(f"  {imp:<10} {cnt:>5}  ({pct:>5.1f}%)  {c(bar, imp_colors.get(imp, 'cyan'))}")
+        print(
+            f"  {imp:<10} {cnt:>5}  ({pct:>5.1f}%)  {c(bar, imp_colors.get(imp, 'cyan'))}"
+        )
 
     # 漂移分析
     drift = result.get("drift_analysis", {})
@@ -3930,25 +4964,35 @@ def cmd_memory_importance(args):
         print(c("\n📉 重要度漂移分析", "cyan"))
         for imp in ("LOW", "MEDIUM", "HIGH", "CRITICAL"):
             d = drift.get(imp, {})
-            dir_label = {"increasing": "↑ 上升", "decreasing": "↓ 下降", "stable": "→ 稳定"}
-            print(f"  {imp:<10} {dir_label.get(d.get('direction', 'stable'), '?'):<10} "
-                  f"前半段 {d.get('first_half_ratio', 0):.1%} → 后半段 {d.get('second_half_ratio', 0):.1%}")
+            dir_label = {
+                "increasing": "↑ 上升",
+                "decreasing": "↓ 下降",
+                "stable": "→ 稳定",
+            }
+            print(
+                f"  {imp:<10} {dir_label.get(d.get('direction', 'stable'), '?'):<10} "
+                f"前半段 {d.get('first_half_ratio', 0):.1%} → 后半段 {d.get('second_half_ratio', 0):.1%}"
+            )
 
     # 低估记忆
     underrated = result.get("underrated", [])
     if underrated:
         print(c(f"\n⬇️ 被低估的记忆（高访问低重要度）共 {len(underrated)} 条", "yellow"))
         for u in underrated[:5]:
-            print(f"  [{u['importance']}] 访问 {u['access_count']}x → 建议 {u['suggested_importance']}  "
-                  f"{(u.get('content_preview') or '')[:40]}")
+            print(
+                f"  [{u['importance']}] 访问 {u['access_count']}x → 建议 {u['suggested_importance']}  "
+                f"{(u.get('content_preview') or '')[:40]}"
+            )
 
     # 高估记忆
     overrated = result.get("overrated", [])
     if overrated:
         print(c(f"\n⬆️ 被高估的记忆（高重要度低访问）共 {len(overrated)} 条", "red"))
         for o in overrated[:5]:
-            print(f"  [{o['importance']}] 访问 {o['access_count']}x → 建议 {o['suggested_importance']}  "
-                  f"{(o.get('content_preview') or '')[:40]}")
+            print(
+                f"  [{o['importance']}] 访问 {o['access_count']}x → 建议 {o['suggested_importance']}  "
+                f"{(o.get('content_preview') or '')[:40]}"
+            )
 
     # 建议
     suggestions = result.get("re-evaluation_suggestions", [])
@@ -3976,7 +5020,7 @@ def cmd_memory_context(args):
         cm.close()
         return 1
 
-    if getattr(args, 'json_output', False):
+    if getattr(args, "json_output", False):
         _json_out(result)
         cm.close()
         return 0
@@ -3993,8 +5037,6 @@ def cmd_memory_context(args):
     print(f"  Agent ID:    {args.agent}")
     print(f"  查询:        {args.query}")
     print(f"  Token 上限:  {args.max_tokens}")
-
-    
 
     context = result.get("context", "")
     if not context:
@@ -4048,7 +5090,9 @@ def cmd_agent_emotion(args):
         cnt = dist.get(e, 0)
         p = pct.get(e, 0)
         bar = "█" * int(p * 20)
-        print(f"  {emo_label.get(e, e):<10} {cnt:>5}  ({p:>5.1%})  {c(bar, emo_color.get(e, 'cyan'))}")
+        print(
+            f"  {emo_label.get(e, e):<10} {cnt:>5}  ({p:>5.1%})  {c(bar, emo_color.get(e, 'cyan'))}"
+        )
 
     # 主导情感
     dominant = result.get("dominant_emotion", "no_data")
@@ -4066,7 +5110,9 @@ def cmd_agent_emotion(args):
         for t in timeline:
             dom = t["dominant"]
             bar = "█" * (t.get("total", 1))
-            print(f"  {t['date']}  {emo_label.get(dom, dom):<8} {c(bar, emo_color.get(dom, 'cyan'))}")
+            print(
+                f"  {t['date']}  {emo_label.get(dom, dom):<8} {c(bar, emo_color.get(dom, 'cyan'))}"
+            )
 
     # 转换
     transitions = result.get("transitions", [])
@@ -4120,12 +5166,19 @@ def cmd_drama_genre_trend(args):
         direction = trend.get("trend", "stable")
         avg_r = trend.get("avg_rating", 0)
         dir_label = {"rising": "↑ 上升", "declining": "↓ 下降", "stable": "→ 稳定"}
-        print(f"{genre:<16}{cnt:>6}{share:>7.1%}{dir_label.get(direction, '?'):>10}{avg_r:>10.1f}")
+        print(
+            f"{genre:<16}{cnt:>6}{share:>7.1%}{dir_label.get(direction, '?'):>10}{avg_r:>10.1f}"
+        )
 
     # 热门类型
     top_genre = result.get("top_genre")
     if top_genre:
-        print(c(f"\n🏆 热门类型: {top_genre}（{result.get('top_genre_count', 0)} 部）", "green"))
+        print(
+            c(
+                f"\n🏆 热门类型: {top_genre}（{result.get('top_genre_count', 0)} 部）",
+                "green",
+            )
+        )
 
     cm.close()
     return 0
@@ -4154,7 +5207,11 @@ def cmd_drama_binge_score(args):
 
     score = result["binge_score"]
     rating = result["rating"]
-    s_color = "red" if score >= 80 else ("green" if score >= 60 else ("yellow" if score >= 40 else "red"))
+    s_color = (
+        "red"
+        if score >= 80
+        else ("green" if score >= 60 else ("yellow" if score >= 40 else "red"))
+    )
     print(f"  追剧粘性:   {c(f'{score:.1f} / 100', s_color)}")
     r_label = {"extreme": "极高", "high": "高", "medium": "中", "low": "低"}
     print(f"  评级:       {c(r_label.get(rating, rating), s_color)}")
@@ -4174,10 +5231,17 @@ def cmd_drama_binge_score(args):
                 "classic_ratio": "经典台词比",
                 "completion_rate": "完成率",
             }
-            print(f"{label_map.get(fname, fname):<20}{fdata['score']:>8.1f}{fdata['weight']:>8.0%}{fdata['contribution']:>8.1f}")
+            print(
+                f"{label_map.get(fname, fname):<20}{fdata['score']:>8.1f}{fdata['weight']:>8.0%}{fdata['contribution']:>8.1f}"
+            )
 
-    print(c(f"\n总计: 场景 {result.get('total_scenes', 0)} | 角色 {result.get('total_characters', 0)} | "
-          f"台词 {result.get('total_lines', 0)} | 经典 {result.get('classic_lines', 0)}", "cyan"))
+    print(
+        c(
+            f"\n总计: 场景 {result.get('total_scenes', 0)} | 角色 {result.get('total_characters', 0)} | "
+            f"台词 {result.get('total_lines', 0)} | 经典 {result.get('classic_lines', 0)}",
+            "cyan",
+        )
+    )
 
     cm.close()
     return 0
@@ -4209,8 +5273,12 @@ def cmd_char_relationship(args):
 
     rel_type = result.get("relationship_type", "stranger")
     rel_label = {
-        "ally": "盟友", "rival": "对手", "romance": "恋情",
-        "family": "家人", "mentor": "导师", "stranger": "陌生人",
+        "ally": "盟友",
+        "rival": "对手",
+        "romance": "恋情",
+        "family": "家人",
+        "mentor": "导师",
+        "stranger": "陌生人",
     }
     print(c(f"\n🤝 关系类型: {rel_label.get(rel_type, rel_type)}", "bold"))
     print(f"  互动场景数: {result.get('interaction_count', 0)}")
@@ -4226,8 +5294,10 @@ def cmd_char_relationship(args):
         print(f"{'集':>4}{'场景':>6}{'交替':>6}{'冲突':>6}{'情感':>8}")
         print("-" * 40)
         for ks in key_scenes[:10]:
-            print(f"{ks['episode']:>4}{ks['scene_number']:>6}{ks['alternations']:>6}"
-                  f"{ks['conflict_hits']:>6}{ks['emotion']:>8}")
+            print(
+                f"{ks['episode']:>4}{ks['scene_number']:>6}{ks['alternations']:>6}"
+                f"{ks['conflict_hits']:>6}{ks['emotion']:>8}"
+            )
         if len(key_scenes) > 10:
             print(f"  ... 还有 {len(key_scenes) - 10} 个关键场景")
 
@@ -4245,6 +5315,7 @@ def cmd_char_relationship(args):
 
 # ===== v5.4.1 新增能力 CLI 命令实现 =====
 
+
 def cmd_memory_reflection(args):
     """记忆反思（v5.4.1 新增）"""
     cm = _get_memory(args)
@@ -4261,7 +5332,7 @@ def cmd_memory_reflection(args):
         return 1
 
     # v5.5.6 fix: 新增 --json 输出分支
-    if getattr(args, 'json_output', False):
+    if getattr(args, "json_output", False):
         _json_out(result)
         cm.close()
         return 0
@@ -4270,8 +5341,6 @@ def cmd_memory_reflection(args):
     print("=" * 60)
     print(f"  Agent ID:    {args.agent}")
     print(f"  回溯天数:    {args.days}")
-
-    
 
     if result["total_memories"] == 0:
         print(c("\n窗口内暂无记忆可供反思。", "yellow"))
@@ -4287,7 +5356,7 @@ def cmd_memory_reflection(args):
     if top_cats:
         print(c("\n📂 Top 分类", "cyan"))
         for t in top_cats:
-            print(f"  {t['category']:<16} {t['count']:>4} 条 ({t['share']*100:.1f}%)")
+            print(f"  {t['category']:<16} {t['count']:>4} 条 ({t['share'] * 100:.1f}%)")
 
     themes = result.get("recurring_themes", [])
     if themes:
@@ -4322,7 +5391,7 @@ def cmd_memory_lineage(args):
         return 1
 
     # v5.5.6 fix: 新增 --json 输出分支
-    if getattr(args, 'json_output', False):
+    if getattr(args, "json_output", False):
         _json_out(result)
         cm.close()
         return 0
@@ -4331,15 +5400,19 @@ def cmd_memory_lineage(args):
     print("=" * 60)
     print(f"  记忆 ID:    {args.memory_id}")
 
-    
-
     basic = result.get("basic", {})
     stats = result.get("stats", {})
     print(f"  内容预览:   {basic.get('content_preview', '')}")
-    print(f"  分类:       {basic.get('category')}  |  重要度: {basic.get('importance')}")
-    print(f"  层级:       {basic.get('layer')}  |  来源 Agent: {basic.get('source_agent') or '-'}")
+    print(
+        f"  分类:       {basic.get('category')}  |  重要度: {basic.get('importance')}"
+    )
+    print(
+        f"  层级:       {basic.get('layer')}  |  来源 Agent: {basic.get('source_agent') or '-'}"
+    )
     print(f"  存在天数:   {stats.get('age_days')} 天")
-    print(f"  版本数:     {stats.get('version_count')}  |  出链: {stats.get('link_count_out')}  |  入链: {stats.get('link_count_in')}")
+    print(
+        f"  版本数:     {stats.get('version_count')}  |  出链: {stats.get('link_count_out')}  |  入链: {stats.get('link_count_in')}"
+    )
     print(f"  审计事件:   {stats.get('audit_event_count')} 条")
 
     timeline = result.get("lifecycle_timeline", [])
@@ -4375,7 +5448,7 @@ def cmd_memory_diff(args):
         cm.close()
         return 1
 
-    if getattr(args, 'json_output', False):
+    if getattr(args, "json_output", False):
         _json_out(result)
         cm.close()
         return 0
@@ -4444,7 +5517,7 @@ def cmd_memory_reinforce(args):
         return 1
 
     # v5.5.6 fix: 新增 --json 输出分支
-    if getattr(args, 'json_output', False):
+    if getattr(args, "json_output", False):
         _json_out(result)
         cm.close()
         return 0
@@ -4453,8 +5526,6 @@ def cmd_memory_reinforce(args):
     print("=" * 60)
     print(f"  Agent ID:    {args.agent}")
     print(f"  回溯天数:    {args.days}  |  候选上限: {args.limit}")
-
-    
 
     if result["total_scanned"] == 0:
         print(c("\n窗口内暂无记忆。", "yellow"))
@@ -4469,8 +5540,10 @@ def cmd_memory_reinforce(args):
         print(f"{'分数':>6}{'重要度':>10}{'闲置天':>8}  动作")
         print("-" * 60)
         for cd in candidates:
-            print(f"{cd['reinforce_score']:>6}{cd['importance']:>10}"
-                  f"{cd['days_idle']:>8}  {cd['recommended_action']}")
+            print(
+                f"{cd['reinforce_score']:>6}{cd['importance']:>10}"
+                f"{cd['days_idle']:>8}  {cd['recommended_action']}"
+            )
             print(f"      {cd['content_preview']}")
             if cd.get("reasons"):
                 print(c(f"      ↳ {'; '.join(cd['reasons'])}", "cyan"))
@@ -4501,7 +5574,9 @@ def cmd_drama_plot_thread(args):
     print(f"  剧名:       {result['title']}")
     print(f"  场景总数:   {result['total_scenes']}")
     print(f"  线索总数:   {len(result.get('threads', []))}")
-    print(f"  已回收:     {result.get('resolved_count', 0)}  |  未回收: {result.get('open_count', 0)}")
+    print(
+        f"  已回收:     {result.get('resolved_count', 0)}  |  未回收: {result.get('open_count', 0)}"
+    )
     print(f"  回收率:     {result.get('resolution_rate', 0)}%")
 
     threads = result.get("threads", [])
@@ -4509,7 +5584,9 @@ def cmd_drama_plot_thread(args):
         print(c("\n🔗 线索明细", "cyan"))
         for t in threads[:20]:
             status = "✅已回收" if t["status"] == "resolved" else "⏳未回收"
-            print(f"  {t['thread_id']:<4} EP{t['setup_episode']}  {status}  {t['name']}")
+            print(
+                f"  {t['thread_id']:<4} EP{t['setup_episode']}  {status}  {t['name']}"
+            )
             if t["status"] == "resolved" and t.get("payoff_episode") is not None:
                 print(c(f"        ↳ 回收于 EP{t['payoff_episode']}", "cyan"))
 
@@ -4541,8 +5618,12 @@ def cmd_drama_episode_curve(args):
 
     print(f"  剧名:       {result['title']}")
     print(f"  总集数:     {result.get('total_episodes', 0)}")
-    print(f"  高潮集:     EP{result.get('climax_episode')} (张力 {result.get('climax_tension', 0)})")
-    print(f"  平均张力:   {result.get('avg_tension', 0)}  |  波动率: {result.get('volatility', 0)}")
+    print(
+        f"  高潮集:     EP{result.get('climax_episode')} (张力 {result.get('climax_tension', 0)})"
+    )
+    print(
+        f"  平均张力:   {result.get('avg_tension', 0)}  |  波动率: {result.get('volatility', 0)}"
+    )
     print(f"  曲线形态:   {result.get('shape', 'steady')}")
 
     curve = result.get("curve", [])
@@ -4585,18 +5666,24 @@ def cmd_drama_screen_time(args):
     balance = result.get("balance", {})
     if balance:
         print(f"  结构判定:   {balance.get('structure_label', '-')}")
-        print(f"  Top 角色:   {balance.get('top_character', '-')} ({balance.get('top_share_pct', 0)}%)")
+        print(
+            f"  Top 角色:   {balance.get('top_character', '-')} ({balance.get('top_share_pct', 0)}%)"
+        )
         print(f"  基尼系数:   {balance.get('gini_coefficient', 0)}")
 
     chars = result.get("characters", [])
     if chars:
         print(c("\n👤 角色戏份排行", "cyan"))
-        print(f"{'#':>3}{'角色':<12}{'台词':>8}{'字数':>8}{'场景':>6}{'集数':>6}{'占比':>8}")
+        print(
+            f"{'#':>3}{'角色':<12}{'台词':>8}{'字数':>8}{'场景':>6}{'集数':>6}{'占比':>8}"
+        )
         print("-" * 60)
         for cs in chars[:20]:
-            print(f"{cs['rank']:>3}{cs['name']:<12}{cs['line_count']:>8}"
-                  f"{cs['word_count']:>8}{cs['scene_count']:>6}"
-                  f"{cs['episode_count']:>6}{cs['share_pct']:>7}%")
+            print(
+                f"{cs['rank']:>3}{cs['name']:<12}{cs['line_count']:>8}"
+                f"{cs['word_count']:>8}{cs['scene_count']:>6}"
+                f"{cs['episode_count']:>6}{cs['share_pct']:>7}%"
+            )
 
     for s in result.get("suggestions", []):
         print(c(f"  ✦ {s}", "yellow"))
@@ -4607,14 +5694,20 @@ def cmd_drama_screen_time(args):
 
 # ===== v5.4.2 新增能力 CLI 命令实现 =====
 
+
 def cmd_fed_acl_add(args):
     """联邦 ACL：添加规则（v5.4.2 新增）"""
     cm = _get_memory(args)
     result = cm.federated_acl.add_rule(
-        principal=args.principal, resource=args.resource,
-        operations=args.operations, effect=args.effect,
-        priority=args.priority, trust_min=args.trust_min,
-        expires_hours=args.expires_hours, note=args.note)
+        principal=args.principal,
+        resource=args.resource,
+        operations=args.operations,
+        effect=args.effect,
+        priority=args.priority,
+        trust_min=args.trust_min,
+        expires_hours=args.expires_hours,
+        note=args.note,
+    )
     if result.get("success"):
         print(c("\n✅ ACL 规则已添加", "green"))
         print(f"   规则 ID:   {result['rule_id']}")
@@ -4643,8 +5736,9 @@ def cmd_fed_acl_remove(args):
 def cmd_fed_acl_list(args):
     """联邦 ACL：规则列表（v5.4.2 新增）"""
     cm = _get_memory(args)
-    rules = cm.federated_acl.list_rules(principal=args.principal,
-                                        effect=args.effect, limit=args.limit)
+    rules = cm.federated_acl.list_rules(
+        principal=args.principal, effect=args.effect, limit=args.limit
+    )
     print(c(f"\n🛡️  联邦 ACL 规则（共 {len(rules)} 条）", "bold"))
     print("=" * 70)
     if not rules:
@@ -4655,14 +5749,22 @@ def cmd_fed_acl_list(args):
     for r in rules:
         expired = bool(r["expires_at"] and r["expires_at"] < now)
         effect_str = c(r["effect"], "green" if r["effect"] == "allow" else "red")
-        res = "all" if r["resource_type"] == "all" else f"{r['resource_type']}:{r['resource_value']}"
+        res = (
+            "all"
+            if r["resource_type"] == "all"
+            else f"{r['resource_type']}:{r['resource_value']}"
+        )
         extra = ""
         if r["trust_min"] > 0:
             extra += f" trust>={r['trust_min']}"
         if r["expires_at"]:
-            extra += "（已过期）" if expired else f"（至 {format_time(r['expires_at'])}）"
-        print(f"  {c(r['rule_id'][:12], 'cyan')} [{effect_str}] {r['principal']:<12} "
-              f"{res:<28} ops={r['operations']} prio={r['priority']}{extra}")
+            extra += (
+                "（已过期）" if expired else f"（至 {format_time(r['expires_at'])}）"
+            )
+        print(
+            f"  {c(r['rule_id'][:12], 'cyan')} [{effect_str}] {r['principal']:<12} "
+            f"{res:<28} ops={r['operations']} prio={r['priority']}{extra}"
+        )
         if r.get("note"):
             print(f"      ↳ {r['note']}")
     cm.close()
@@ -4673,9 +5775,13 @@ def cmd_fed_acl_check(args):
     """联邦 ACL：访问评估（v5.4.2 新增）"""
     cm = _get_memory(args)
     result = cm.federated_acl.check_access(
-        peer_id=args.peer, memory_id=args.memory_id,
-        operation=args.operation, peer_trust=args.trust,
-        memory_category=args.category, memory_tags=args.tags)
+        peer_id=args.peer,
+        memory_id=args.memory_id,
+        operation=args.operation,
+        peer_trust=args.trust,
+        memory_category=args.category,
+        memory_tags=args.tags,
+    )
     if result["allowed"]:
         print(c("\n✅ 允许访问", "green"))
     else:
@@ -4701,8 +5807,12 @@ def cmd_fed_acl_stats(args):
     for rt, cnt in s.get("by_resource_type", {}).items():
         print(f"   资源[{rt}]:  {cnt}")
     print(f"   已过期规则:   {s['expired_rules']}")
-    print(c(f"   拒绝审计事件: {s['deny_audit_events']}",
-            "yellow" if s["deny_audit_events"] else "green"))
+    print(
+        c(
+            f"   拒绝审计事件: {s['deny_audit_events']}",
+            "yellow" if s["deny_audit_events"] else "green",
+        )
+    )
     cm.close()
     return 0
 
@@ -4719,15 +5829,22 @@ def cmd_share_conflicts(args):
         return 0
     status_color = {"open": "red", "resolved": "green", "dismissed": "yellow"}
     for cf in conflicts:
-        print(f"  {c(cf['conflict_id'][:12], 'cyan')} [{c(cf['status'], status_color.get(cf['status'], 'yellow'))}] "
-              f"{cf['conflict_type']:<10} 本地记忆: {cf['local_memory_id'][:12]}…")
+        print(
+            f"  {c(cf['conflict_id'][:12], 'cyan')} [{c(cf['status'], status_color.get(cf['status'], 'yellow'))}] "
+            f"{cf['conflict_type']:<10} 本地记忆: {cf['local_memory_id'][:12]}…"
+        )
         local_prev = cf["local_snapshot"].get("content_preview", "")
         incoming_prev = cf["incoming_snapshot"].get("content_preview", "")
         peer = cf.get("incoming_peer") or "-"
         print(f"      本地:   {local_prev[:50]}")
         print(f"      传入:   {incoming_prev[:50]}  (from: {peer})")
         if cf["status"] == "resolved":
-            print(c(f"      ↳ 已按 {cf['resolution']} 解决 → {cf['resolved_memory_id'] or '-'}", "green"))
+            print(
+                c(
+                    f"      ↳ 已按 {cf['resolution']} 解决 → {cf['resolved_memory_id'] or '-'}",
+                    "green",
+                )
+            )
     cm.close()
     return 0
 
@@ -4735,7 +5852,9 @@ def cmd_share_conflicts(args):
 def cmd_share_conflict_resolve(args):
     """共享冲突：解决（v5.4.2 新增）"""
     cm = _get_memory(args)
-    result = cm.share_conflict.resolve(args.conflict_id, args.strategy, actor=args.actor)
+    result = cm.share_conflict.resolve(
+        args.conflict_id, args.strategy, actor=args.actor
+    )
     if result.get("success"):
         print(c("\n✅ 冲突已解决", "green"))
         print(f"   冲突 ID:   {args.conflict_id}")
@@ -4783,6 +5902,7 @@ def cmd_share_conflict_stats(args):
 
 # ===== v5.3.9 新增五大能力 CLI 命令实现 =====
 
+
 def cmd_intent_router(args):
     """意图分类路由 CLI 入口"""
     cm = _get_memory(args)
@@ -4813,7 +5933,9 @@ def cmd_intent_router(args):
             top_keywords = [(k, kw_hits[k]) for k in list(kw_hits)[:5]]
     if top_keywords:
         print(f"  关键词命中:  {', '.join([f'{k}({w})' for k, w in top_keywords[:5]])}")
-    print(f"  层级:        {'规则' if result['level'] == 0 else ('关键词' if result['level'] == 1 else 'LLM 兜底')}")
+    print(
+        f"  层级:        {'规则' if result['level'] == 0 else ('关键词' if result['level'] == 1 else 'LLM 兜底')}"
+    )
     cm.close()
     return 0
 
@@ -4837,9 +5959,15 @@ def cmd_conflict_scan(args):
         print(json.dumps(result, ensure_ascii=False, indent=2))
         cm.close()
         return 0
-    print(f"  扫描范围:    {getattr(args, 'category', '全部')}  (limit={getattr(args, 'limit', 500)})")
-    print(f"  模式:        {'只读扫描' if not getattr(args, 'apply_decay', False) else c('已应用衰减！', 'red')}")
-    print(f"  矛盾总数:    {c(str(result['conflicts_found']), 'red' if result['conflicts_found'] else 'green')}")
+    print(
+        f"  扫描范围:    {getattr(args, 'category', '全部')}  (limit={getattr(args, 'limit', 500)})"
+    )
+    print(
+        f"  模式:        {'只读扫描' if not getattr(args, 'apply_decay', False) else c('已应用衰减！', 'red')}"
+    )
+    print(
+        f"  矛盾总数:    {c(str(result['conflicts_found']), 'red' if result['conflicts_found'] else 'green')}"
+    )
     if result["conflicts_found"] == 0:
         print(c("\n✅ 未发现明显矛盾", "green"))
         cm.close()
@@ -4852,15 +5980,19 @@ def cmd_conflict_scan(args):
     print(c("\n📋 前 8 条矛盾：", "cyan"))
     for i, p in enumerate(result.get("conflicts", [])[:8], 1):
         ids = (p.get("id_a") or "")[:6] + " ↔ " + (p.get("id_b") or "")[:6]
-        print(f"  [{i}] {c(p['conflict_type'], 'yellow')}  sev={p['severity']:.2f}  ids={ids}")
+        print(
+            f"  [{i}] {c(p['conflict_type'], 'yellow')}  sev={p['severity']:.2f}  ids={ids}"
+        )
         print(f"       {p.get('suggestion', '')[:80]}")
     plan = result.get("decay_plan") or result.get("decay_planned") or []
     if plan:
         print(c(f"\n📉 衰减计划（共 {len(plan)} 条，前 5 条）：", "cyan"))
         for a in plan[:5]:
             tags = ", ".join(a.get("added_tags") or [])
-            print(f"   • {a.get('memory_id', '')[:8]}  Δimp={a.get('delta_importance', 0):+.2f} "
-                  f"tags=[{tags}]  reason={a.get('reason', '')[:30]}")
+            print(
+                f"   • {a.get('memory_id', '')[:8]}  Δimp={a.get('delta_importance', 0):+.2f} "
+                f"tags=[{tags}]  reason={a.get('reason', '')[:30]}"
+            )
     if "decay_applied" in result:
         print(c(f"\n✅ 已应用衰减 {result['decay_applied']} 条", "green"))
     cm.close()
@@ -4887,7 +6019,9 @@ def cmd_skill_extract(args):
         cm.close()
         return 0
     print(f"  处理记忆数:  {result['memories_processed']}")
-    print(f"  抽取出技能:  {c(str(result['skills_found']), 'green' if result['skills_found'] else 'yellow')}")
+    print(
+        f"  抽取出技能:  {c(str(result['skills_found']), 'green' if result['skills_found'] else 'yellow')}"
+    )
     if not result["skills_found"]:
         print(c("\n⚠️  未抽取出可用技能（增加记忆量或降低 --min-cluster）", "yellow"))
         cm.close()
@@ -4899,7 +6033,9 @@ def cmd_skill_extract(args):
             print(f"       触发词: {', '.join(triggers[:8])}")
         slots = s.get("slots") or []
         if slots:
-            print(f"       槽位:   {', '.join([sl.get('name','?') for sl in slots[:8]])}")
+            print(
+                f"       槽位:   {', '.join([sl.get('name', '?') for sl in slots[:8]])}"
+            )
         steps = s.get("steps") or []
         if steps:
             print(f"       步骤 ({len(steps)}):")
@@ -4934,8 +6070,12 @@ def cmd_rerank_search(args):
         cm.close()
         return 0
     print(f"  查询:        {args.query[:70]}")
-    print(f"  查询扩展:    {'启用' if not getattr(args, 'no_expand', False) else '关闭'}")
-    print(f"  Cross-Enc:   {'启用' if not getattr(args, 'no_rerank', False) else '关闭'}")
+    print(
+        f"  查询扩展:    {'启用' if not getattr(args, 'no_expand', False) else '关闭'}"
+    )
+    print(
+        f"  Cross-Enc:   {'启用' if not getattr(args, 'no_rerank', False) else '关闭'}"
+    )
     exp = result.get("query_expansion") or {}
     if exp:
         print(c("\n✨ 查询扩展：", "cyan"))
@@ -4953,7 +6093,9 @@ def cmd_rerank_search(args):
         else:
             print(c(f"\n📄 召回 {len(chunks)} 条（不重排，前 8）：", "cyan"))
             for i, c_ in enumerate(chunks[:8], 1):
-                print(f"  [{i}] score={c_.get('relevance_score', 0):.3f}  id={c_['memory_id'][:8]}")
+                print(
+                    f"  [{i}] score={c_.get('relevance_score', 0):.3f}  id={c_['memory_id'][:8]}"
+                )
                 print(f"       {(c_.get('content') or '')[:90]}…")
         cm.close()
         return 0
@@ -4963,8 +6105,10 @@ def cmd_rerank_search(args):
     for i, rk in enumerate(result["reranked"][:8], 1):
         delta = rk.get("delta_rank") or 0
         mark = "↑" if delta < 0 else ("↓" if delta > 0 else "→")
-        print(f"  [{i}] fused={rk.get('fused_score', 0):.3f}  orig={rk.get('original_score', 0):.3f}  "
-              f"{mark}{abs(delta)}  id={rk['memory_id'][:8]}")
+        print(
+            f"  [{i}] fused={rk.get('fused_score', 0):.3f}  orig={rk.get('original_score', 0):.3f}  "
+            f"{mark}{abs(delta)}  id={rk['memory_id'][:8]}"
+        )
         print(f"       {(rk.get('content') or '')[:90]}…")
     cm.close()
     return 0
@@ -4982,12 +6126,14 @@ def cmd_session_focus(args):
             role, content = entry.split(":", 1)
         else:
             role, content = "user", entry
-        msgs.append({
-            "id": f"m{idx}",
-            "role": role.strip().lower() or "user",
-            "content": content.strip(),
-            "timestamp": float(idx),
-        })
+        msgs.append(
+            {
+                "id": f"m{idx}",
+                "role": role.strip().lower() or "user",
+                "content": content.strip(),
+                "timestamp": float(idx),
+            }
+        )
     window = max(5, int(getattr(args, "window", 40)))
     augment = getattr(args, "augment", None)
     try:
@@ -5005,7 +6151,9 @@ def cmd_session_focus(args):
     print(f"  聚类数:      {len(result.get('clusters', []))}")
     drift = result.get("drift_score", 0.0)
     drift_color = "green" if drift < 0.3 else ("yellow" if drift < 0.6 else "red")
-    print(f"  漂移得分:    {c(f'{drift:.3f}', drift_color)}  ({'稳定' if drift < 0.3 else ('轻微漂移' if drift < 0.6 else '严重漂移')})")
+    print(
+        f"  漂移得分:    {c(f'{drift:.3f}', drift_color)}  ({'稳定' if drift < 0.3 else ('轻微漂移' if drift < 0.6 else '严重漂移')})"
+    )
     kw = result.get("focus_keywords") or []
     if kw:
         print(f"  当前焦点:    {', '.join([f'{k}({w:.2f})' for k, w in kw[:10]])}")
@@ -5013,8 +6161,10 @@ def cmd_session_focus(args):
     if recent_shifts:
         print(c("\n🔄 最近主题切换：", "cyan"))
         for sh in recent_shifts[:4]:
-            print(f"     t={sh.get('window_index')}  top1={sh.get('top_keyword', '—')} "
-                  f"jaccard={sh.get('jaccard', 0):.2f}")
+            print(
+                f"     t={sh.get('window_index')}  top1={sh.get('top_keyword', '—')} "
+                f"jaccard={sh.get('jaccard', 0):.2f}"
+            )
     if augment:
         eq = result.get("enhanced_query")
         if eq:
@@ -5269,13 +6419,15 @@ def cmd_rebuild_embeddings(args):
     """重建/增量构建嵌入向量（v5.4.5 新增，v5.4.6 增量模式）"""
     cm = _get_memory(args)
 
-    incremental = not getattr(args, 'full', False)
+    incremental = not getattr(args, "full", False)
     mode_label = "增量构建" if incremental else "全量重建"
     print(c(f"\n🔧 {mode_label}嵌入向量（v5.4.6）", "bold"))
     print("=" * 60)
 
     try:
-        result = cm.rebuild_embeddings(batch_size=args.batch_size, incremental=incremental)
+        result = cm.rebuild_embeddings(
+            batch_size=args.batch_size, incremental=incremental
+        )
     except Exception as e:
         print(c(f"\n❌ 失败: {e}", "red"))
         cm.close()
@@ -5283,8 +6435,18 @@ def cmd_rebuild_embeddings(args):
 
     if not result.get("success"):
         print(c(f"\n❌ {result.get('error', '未知错误')}", "red"))
-        print(c("   安装 sentence-transformers: pip install sentence-transformers", "yellow"))
-        print(c("   或配置 OpenAI/Ollama 后端: MINDFORGE_EMBEDDING_BACKEND=openai", "yellow"))
+        print(
+            c(
+                "   安装 sentence-transformers: pip install sentence-transformers",
+                "yellow",
+            )
+        )
+        print(
+            c(
+                "   或配置 OpenAI/Ollama 后端: MINDFORGE_EMBEDDING_BACKEND=openai",
+                "yellow",
+            )
+        )
         cm.close()
         return 1
 
@@ -5293,7 +6455,7 @@ def cmd_rebuild_embeddings(args):
     print(f"   待处理:     {result['total']}")
     print(f"   已生成向量: {result['embedded']}")
     print(f"   跳过（空）: {result['skipped']}")
-    if result['errors']:
+    if result["errors"]:
         print(c(f"   错误:       {result['errors']}", "yellow"))
 
     cm.close()
@@ -5347,7 +6509,9 @@ def cmd_archive(args):
     cm = _get_memory(args)
     result = cm.auto_archive(max_age_hours=args.hours, layer=args.layer)
     print(c("\n✅ 归档完成（v5.4.6）", "green"))
-    print(f"   归档了 {result['archived']} 条记忆（层级: {result['layer']}, 超过 {result['max_age_hours']} 小时）")
+    print(
+        f"   归档了 {result['archived']} 条记忆（层级: {result['layer']}, 超过 {result['max_age_hours']} 小时）"
+    )
     print(c("   使用 archived-list 查看归档记录，archived-restore 恢复", "cyan"))
     cm.close()
     return 0
@@ -5356,7 +6520,9 @@ def cmd_archive(args):
 def cmd_archived_list(args):
     """列出归档记忆（v5.4.6 新增）"""
     cm = _get_memory(args)
-    entries = cm.list_archived(layer=args.layer, category=args.category, limit=args.limit)
+    entries = cm.list_archived(
+        layer=args.layer, category=args.category, limit=args.limit
+    )
     if not entries:
         print(c("⚠️  没有归档记忆", "yellow"))
         cm.close()
@@ -5365,9 +6531,13 @@ def cmd_archived_list(args):
     print("=" * 60)
     for e in entries:
         content_preview = (e.get("content") or "")[:60]
-        print(f"   [{e.get('archive_id', e.get('id', ''))[:8]}] "
-              f"[{e.get('category', '')}] {content_preview}...")
-        print(f"     层级: {e.get('layer', '')} | 归档时间: {format_time(e.get('archived_at', 0))}")
+        print(
+            f"   [{e.get('archive_id', e.get('id', ''))[:8]}] "
+            f"[{e.get('category', '')}] {content_preview}..."
+        )
+        print(
+            f"     层级: {e.get('layer', '')} | 归档时间: {format_time(e.get('archived_at', 0))}"
+        )
     cm.close()
     return 0
 
@@ -5408,7 +6578,7 @@ def cmd_export_obsidian(args):
     print(c("\n✅ Obsidian Vault 导出完成（v5.4.6）", "green"))
     print(f"   导出目录: {result['output_dir']}")
     print(f"   导出记忆: {result['exported']} 条")
-    if result['errors']:
+    if result["errors"]:
         print(c(f"   错误: {result['errors']} 条", "yellow"))
     print(c("   在 Obsidian 中打开该目录即可使用", "cyan"))
     cm.close()
@@ -5420,9 +6590,12 @@ def cmd_batch_add(args):
     cm = _get_memory(args)
     # v5.6.2 安全修复：路径校验，防路径遍历
     try:
-        input_path = _safe_path(args.input, must_exist=True,
-                                allowed_exts={".json", ".txt", ".md"},
-                                max_size=50 * 1024 * 1024)
+        input_path = _safe_path(
+            args.input,
+            must_exist=True,
+            allowed_exts={".json", ".txt", ".md"},
+            max_size=50 * 1024 * 1024,
+        )
     except (ValueError, OSError) as e:
         print(c(f"\n❌ 路径错误: {e}", "red"))
         return 1
@@ -5451,7 +6624,13 @@ def _is_private_ip(ip_str):
     """检查 IP 是否为内网/保留地址"""
     try:
         ip = ipaddress.ip_address(ip_str)
-        return ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast
+        return (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+        )
     except ValueError:
         return False
 
@@ -5521,16 +6700,23 @@ def cmd_import_url(args):
         if parsed.scheme == "https":
             ctx = ssl.create_default_context()
             conn = http.client.HTTPSConnection(
-                host=safe_ip, port=port, timeout=10,
-                context=ctx, server_hostname=parsed.hostname,
+                host=safe_ip,
+                port=port,
+                timeout=10,
+                context=ctx,
+                server_hostname=parsed.hostname,
             )
         else:
             conn = http.client.HTTPConnection(host=safe_ip, port=port, timeout=10)
 
-        conn.request("GET", path, headers={
-            "Host": parsed.hostname,
-            "User-Agent": f"MindForge/{__version__} URL Importer",
-        })
+        conn.request(
+            "GET",
+            path,
+            headers={
+                "Host": parsed.hostname,
+                "User-Agent": f"MindForge/{__version__} URL Importer",
+            },
+        )
         resp = conn.getresponse()
         content = resp.read(5 * 1024 * 1024).decode("utf-8", errors="ignore")
         conn.close()
@@ -5542,6 +6728,7 @@ def cmd_import_url(args):
         # v5.6.9 安全：过一遍标准化 XSS 清洗器（与存储层一致），
         # 额外清掉 <script> 等标签内的残留脚本文本，再折叠空白并截断
         from core.storage import _sanitize_html
+
         text_content = _sanitize_html(text_content, max_len=5000)
         text_content = re.sub(r"\s+", " ", text_content).strip()[:5000]
 
@@ -5595,7 +6782,11 @@ def cmd_export_xml(args):
 
     memories_xml = ""
     for entry in entries:
-        tags_xml = "".join(f"<tag>{xml_escape(str(t))}</tag>" for t in entry.tags) if entry.tags else ""
+        tags_xml = (
+            "".join(f"<tag>{xml_escape(str(t))}</tag>" for t in entry.tags)
+            if entry.tags
+            else ""
+        )
         memories_xml += f"""        <memory>
             <id>{xml_escape(str(entry.id))}</id>
             <content>{xml_escape(entry.content)}</content>
@@ -5608,14 +6799,19 @@ def cmd_export_xml(args):
             <access_count>{xml_escape(str(entry.access_count))}</access_count>
             <created_at>{xml_escape(str(entry.created_at))}</created_at>
             <updated_at>{xml_escape(str(entry.updated_at))}</updated_at>
-            <starred>{'true' if entry.starred else 'false'}</starred>
+            <starred>{"true" if entry.starred else "false"}</starred>
         </memory>
 """
 
     export_time = xml_escape(str(format_time(time.time())))
-    final_xml = xml_content.format(version=__version__, export_time=export_time, total=len(entries), memories=memories_xml)
+    final_xml = xml_content.format(
+        version=__version__,
+        export_time=export_time,
+        total=len(entries),
+        memories=memories_xml,
+    )
 
-    output_path.write_text(final_xml, encoding='utf-8')
+    output_path.write_text(final_xml, encoding="utf-8")
 
     print(c("\n✅ XML 导出完成！", "green"))
     print(f"   文件：{output_path}")
@@ -5640,7 +6836,7 @@ def cmd_import_xml(args):
         return 1
 
     try:
-        content = input_path.read_text(encoding='utf-8')
+        content = input_path.read_text(encoding="utf-8")
     except (OSError, IOError) as e:
         print(c(f"\n❌ 读取文件失败: {e}", "red"))
         return 1
@@ -5653,8 +6849,12 @@ def cmd_import_xml(args):
         # 直接拒绝 DOCTYPE/ENTITY 声明，防 XXE 与实体膨胀攻击（billion laughs）
         # v5.6.2 安全修复：检查全文（而非仅前 4KB），防止填充绕过；用正则匹配空白变体
         upper_content = content.upper()
-        if _re.search(r'<!\s*DOCTYPE', upper_content) or _re.search(r'<!\s*ENTITY', upper_content):
-            print(c("\n❌ XML 包含 DOCTYPE/ENTITY 声明，已阻止解析（防 XXE 攻击）", "red"))
+        if _re.search(r"<!\s*DOCTYPE", upper_content) or _re.search(
+            r"<!\s*ENTITY", upper_content
+        ):
+            print(
+                c("\n❌ XML 包含 DOCTYPE/ENTITY 声明，已阻止解析（防 XXE 攻击）", "red")
+            )
             cm.close()
             return 1
         root = ET.fromstring(content)
@@ -5662,7 +6862,7 @@ def cmd_import_xml(args):
         print(c(f"\n❌ XML 解析失败: {e}", "red"))
         return 1
 
-    memories = root.findall('memories/memory')
+    memories = root.findall("memories/memory")
     if not memories:
         print(c("⚠️  未找到可导入的记忆", "yellow"))
         cm.close()
@@ -5671,9 +6871,11 @@ def cmd_import_xml(args):
     if not args.force:
         print(c(f"\n🔍 将导入 {len(memories)} 条记忆：", "cyan"))
         for mem in memories[:5]:
-            content_elem = mem.find('content')
-            content_preview = (content_elem.text or "")[:60] if content_elem is not None else ""
-            cat_elem = mem.find('category')
+            content_elem = mem.find("content")
+            content_preview = (
+                (content_elem.text or "")[:60] if content_elem is not None else ""
+            )
+            cat_elem = mem.find("category")
             category = cat_elem.text or "general" if cat_elem is not None else "general"
             print(f"   - [{category}] {content_preview}...")
         if len(memories) > 5:
@@ -5686,20 +6888,34 @@ def cmd_import_xml(args):
     skipped = 0
     for mem in memories:
         try:
-            content_elem = mem.find('content')
+            content_elem = mem.find("content")
             content_text = (content_elem.text or "") if content_elem is not None else ""
-            cat_elem = mem.find('category')
-            category = (cat_elem.text or "general") if cat_elem is not None else "general"
+            cat_elem = mem.find("category")
+            category = (
+                (cat_elem.text or "general") if cat_elem is not None else "general"
+            )
 
             tags = []
-            tag_elements = mem.findall('tags/tag')
+            tag_elements = mem.findall("tags/tag")
             for tag_elem in tag_elements:
                 if tag_elem.text:
                     tags.append(tag_elem.text)
 
-            privacy_str = mem.find('privacy').text if mem.find('privacy') is not None else "internal"
-            importance_str = mem.find('importance').text if mem.find('importance') is not None else "medium"
-            layer_str = mem.find('layer').text if mem.find('layer') is not None else "short_term"
+            privacy_str = (
+                mem.find("privacy").text
+                if mem.find("privacy") is not None
+                else "internal"
+            )
+            importance_str = (
+                mem.find("importance").text
+                if mem.find("importance") is not None
+                else "medium"
+            )
+            layer_str = (
+                mem.find("layer").text
+                if mem.find("layer") is not None
+                else "short_term"
+            )
 
             cm.add(
                 content=content_text,
@@ -5721,7 +6937,7 @@ def cmd_import_xml(args):
 
 
 def cmd_export_json(args):
-    """导出记忆为 JSON（v5.1.5 新增）"""
+    """导出记忆为 JSON（v5.1.5 新增；v5.7.3 支持 --password 加密导出）"""
     cm = _get_memory(args)
     entries = cm.list(limit=99999)
 
@@ -5741,7 +6957,7 @@ def cmd_export_json(args):
         "version": __version__,
         "export_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "total": len(entries),
-        "memories": []
+        "memories": [],
     }
 
     for entry in entries:
@@ -5763,8 +6979,53 @@ def cmd_export_json(args):
         }
         export_data["memories"].append(mem_dict)
 
+    password = getattr(args, "password", None)
+    if password:
+        # v5.7.3 加密导出（AES-256-GCM + PBKDF2-SHA256）
+        import base64 as _b64
+        from core.encryption import (
+            EncryptionEngine,
+            KDF_ALGORITHM,
+            PBKDF2_ITERATIONS_CURRENT,
+        )
+
+        try:
+            engine, salt = EncryptionEngine.from_password(password)
+            blob = engine.encrypt(json.dumps(export_data, ensure_ascii=False))
+        except Exception as e:
+            print(c(f"❌ 加密失败: {e}", "red"))
+            cm.close()
+            return 1
+        kdf_params = engine.kdf_params
+        payload = {
+            "format": "mindforge-encrypted-export",
+            "version": 1,
+            "export_time": export_data["export_time"],
+            "total": len(entries),
+            "kdf": {
+                "algorithm": kdf_params.algorithm if kdf_params else KDF_ALGORITHM,
+                "iterations": kdf_params.iterations
+                if kdf_params
+                else PBKDF2_ITERATIONS_CURRENT,
+                "salt": _b64.b64encode(salt).decode(),
+            },
+            "cipher": blob.to_dict(),
+        }
+        output_path.write_text(
+            json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+        )
+        print(c("\n🔐 JSON 加密导出完成！", "green"))
+        print(f"   文件：{output_path}")
+        print(f"   记忆数：{len(entries)}")
+        print(c("   加密算法：AES-256-GCM（PBKDF2-SHA256 密钥派生）", "cyan"))
+        print(c("   ⚠️  请牢记密码，忘记密码将无法恢复数据", "yellow"))
+        cm.close()
+        return 0
+
     indent = 2 if args.pretty else None
-    output_path.write_text(json.dumps(export_data, ensure_ascii=False, indent=indent), encoding='utf-8')
+    output_path.write_text(
+        json.dumps(export_data, ensure_ascii=False, indent=indent), encoding="utf-8"
+    )
 
     print(c("\n✅ JSON 导出完成！", "green"))
     print(f"   文件：{output_path}")
@@ -5774,7 +7035,7 @@ def cmd_export_json(args):
 
 
 def cmd_import_json(args):
-    """从 JSON 导入记忆（v5.1.5 新增）"""
+    """从 JSON 导入记忆（v5.1.5 新增；v5.7.3 支持 --password 加密导入）"""
     cm = _get_memory(args)
 
     try:
@@ -5789,13 +7050,53 @@ def cmd_import_json(args):
         return 1
 
     try:
-        content = input_path.read_text(encoding='utf-8')
+        content = input_path.read_text(encoding="utf-8")
         # P2 #23 修复：外部文件用安全 JSON 解析
         from core.storage import _safe_json_loads
+
         data = _safe_json_loads(content)
     except (json.JSONDecodeError, ValueError, OSError, IOError) as e:
         print(c(f"\n❌ JSON 解析失败: {e}", "red"))
         return 1
+
+    # v5.7.3 加密导入：检测加密导出格式并解密
+    encrypted_mode = False
+    if isinstance(data, dict) and data.get("format") == "mindforge-encrypted-export":
+        encrypted_mode = True
+        password = getattr(args, "password", None)
+        if not password:
+            print(
+                c(
+                    "\n❌ 该文件为加密导出（AES-256-GCM），请用 --password 提供导出时的密码",
+                    "red",
+                )
+            )
+            cm.close()
+            return 1
+        try:
+            import base64 as _b64
+            from core.encryption import EncryptionEngine, EncryptedBlob, SecurityError
+
+            kdf = data.get("kdf", {})
+            salt = _b64.b64decode(kdf.get("salt", "") or "")
+            iterations = kdf.get("iterations")
+            engine, _ = EncryptionEngine.from_password(
+                password, salt=salt, iterations=iterations
+            )
+            blob = EncryptedBlob.from_dict(data["cipher"])
+            plaintext = engine.decrypt(blob)
+            data = json.loads(plaintext)
+        except (
+            KeyError,
+            ValueError,
+            TypeError,
+            SecurityError,
+            json.JSONDecodeError,
+        ) as e:
+            print(c(f"\n❌ 解密失败（密码错误或文件损坏）：{e}", "red"))
+            cm.close()
+            return 1
+        print(c("\n🔓 加密文件解密成功", "green"))
 
     memories = data.get("memories", [])
     if not memories:
@@ -5817,10 +7118,10 @@ def cmd_import_json(args):
         cm.close()
         return 1
 
-    # v5.4.6 智能去重
-    dedup_threshold = getattr(args, 'dedup_threshold', 0.0) or 0.0
+    # v5.4.6 智能去重（加密导入走逐条导入，不支持去重）
+    dedup_threshold = getattr(args, "dedup_threshold", 0.0) or 0.0
 
-    if dedup_threshold > 0:
+    if dedup_threshold > 0 and not encrypted_mode:
         stats = cm.import_json(
             str(input_path),
             skip_duplicates=not args.force,
@@ -5871,16 +7172,17 @@ def cmd_import_csv(args):
         return 1
 
     target_layer = None
-    if hasattr(args, 'layer') and args.layer:
+    if hasattr(args, "layer") and args.layer:
         target_layer = MemoryLayer.from_string(args.layer)
 
-    dedup_threshold = getattr(args, 'dedup_threshold', 0.0) or 0.0
+    dedup_threshold = getattr(args, "dedup_threshold", 0.0) or 0.0
 
     if not args.force:
         # 预览 CSV 行数
         try:
             import csv as _csv
-            with open(input_path, 'r', encoding='utf-8-sig', newline='') as f:
+
+            with open(input_path, "r", encoding="utf-8-sig", newline="") as f:
                 row_count = sum(1 for _ in _csv.DictReader(f))
         except Exception:
             row_count = 0
@@ -5900,9 +7202,9 @@ def cmd_import_csv(args):
 
     print(c("\n✅ CSV 导入完成", "green"))
     print(f"   成功导入：{c(str(stats['imported']), 'green')} 条")
-    if stats.get('deduped', 0) > 0:
+    if stats.get("deduped", 0) > 0:
         print(f"   去重跳过：{c(str(stats['deduped']), 'purple')} 条")
-    if stats.get('skipped', 0) > 0:
+    if stats.get("skipped", 0) > 0:
         print(f"   ID 重复：{c(str(stats['skipped']), 'yellow')} 条")
     print(f"   导入失败：{c(str(stats['failed']), 'red')} 条")
     cm.close()
@@ -5924,20 +7226,29 @@ def cmd_merge(args):
     duplicates = []
     for i in range(len(entries)):
         for j in range(i + 1, len(entries)):
-            ratio = SequenceMatcher(None, entries[i].content, entries[j].content).ratio()
+            ratio = SequenceMatcher(
+                None, entries[i].content, entries[j].content
+            ).ratio()
             if ratio >= args.threshold:
-                duplicates.append({
-                    "source": entries[i],
-                    "target": entries[j],
-                    "similarity": round(ratio, 2)
-                })
+                duplicates.append(
+                    {
+                        "source": entries[i],
+                        "target": entries[j],
+                        "similarity": round(ratio, 2),
+                    }
+                )
 
     if not duplicates:
         print(c("✅ 未找到重复记忆", "green"))
         cm.close()
         return 0
 
-    print(c(f"\n🔍 找到 {len(duplicates)} 组重复记忆（相似度 >= {args.threshold}）:", "cyan"))
+    print(
+        c(
+            f"\n🔍 找到 {len(duplicates)} 组重复记忆（相似度 >= {args.threshold}）:",
+            "cyan",
+        )
+    )
     for idx, dup in enumerate(duplicates, 1):
         print(f"\n{idx}. 相似度: {dup['similarity']}")
         print(f"   源记忆: {dup['source'].content[:80]}...")
@@ -5977,8 +7288,8 @@ def cmd_remind(args):
     need_remind = sorted(
         [e for e in entries if e.forgetting_score >= args.threshold],
         key=lambda x: x.forgetting_score,
-        reverse=True
-    )[:args.count]
+        reverse=True,
+    )[: args.count]
 
     if not need_remind:
         print(c("✅ 所有记忆状态良好，无需提醒", "green"))
@@ -5987,7 +7298,9 @@ def cmd_remind(args):
 
     print(c(f"\n📢 需要复习的记忆（遗忘分数 >= {args.threshold}）:", "yellow"))
     for idx, entry in enumerate(need_remind, 1):
-        print(f"\n{idx}. [{entry.category}] 遗忘分数: {c(f'{entry.forgetting_score:.2f}', 'red')}")
+        print(
+            f"\n{idx}. [{entry.category}] 遗忘分数: {c(f'{entry.forgetting_score:.2f}', 'red')}"
+        )
         print(f"   访问次数: {entry.access_count} | 强度: {entry.strength:.2f}")
         print(f"   内容: {entry.content[:120]}...")
 
@@ -6015,9 +7328,16 @@ def cmd_tags(args):
         cm.close()
         return 0
 
-    sorted_tags = sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)[:args.top]
+    sorted_tags = sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)[
+        : args.top
+    ]
 
-    print(c(f"\n🏷️  标签统计（共 {len(tag_counts)} 个，显示前 {len(sorted_tags)}）:", "cyan"))
+    print(
+        c(
+            f"\n🏷️  标签统计（共 {len(tag_counts)} 个，显示前 {len(sorted_tags)}）:",
+            "cyan",
+        )
+    )
     max_len = max(len(t) for t, _ in sorted_tags) if sorted_tags else 0
     for idx, (tag, count) in enumerate(sorted_tags, 1):
         bar = "█" * min(count, 20)
@@ -6041,9 +7361,16 @@ def cmd_cats(args):
     for entry in entries:
         cat_counts[entry.category] = cat_counts.get(entry.category, 0) + 1
 
-    sorted_cats = sorted(cat_counts.items(), key=lambda x: x[1], reverse=True)[:args.top]
+    sorted_cats = sorted(cat_counts.items(), key=lambda x: x[1], reverse=True)[
+        : args.top
+    ]
 
-    print(c(f"\n📂 分类统计（共 {len(cat_counts)} 个，显示前 {len(sorted_cats)}）:", "cyan"))
+    print(
+        c(
+            f"\n📂 分类统计（共 {len(cat_counts)} 个，显示前 {len(sorted_cats)}）:",
+            "cyan",
+        )
+    )
     max_len = max(len(cn) for cn, _ in sorted_cats) if sorted_cats else 0
     for idx, (cat, count) in enumerate(sorted_cats, 1):
         bar = "█" * min(count, 20)
@@ -6064,6 +7391,7 @@ def cmd_timeline(args):
         return 0
 
     from datetime import datetime, timedelta
+
     cutoff = datetime.now() - timedelta(days=args.days)
     cutoff_ts = cutoff.timestamp()
 
@@ -6114,9 +7442,13 @@ def cmd_top(args):
         "created_at": lambda x: x.created_at,
     }.get(args.by, lambda x: x.access_count)
 
-    top_entries = sorted(entries, key=sort_key, reverse=True)[:args.count]
+    top_entries = sorted(entries, key=sort_key, reverse=True)[: args.count]
 
-    by_label = {"access_count": "访问次数", "strength": "记忆强度", "created_at": "创建时间"}
+    by_label = {
+        "access_count": "访问次数",
+        "strength": "记忆强度",
+        "created_at": "创建时间",
+    }
     label = by_label.get(args.by, "访问次数")
 
     print(c(f"\n🔥 热门记忆（按 {label} 排序，前 {args.count} 条）:", "cyan"))
@@ -6124,6 +7456,7 @@ def cmd_top(args):
         val = sort_key(entry)
         if args.by == "created_at":
             from datetime import datetime
+
             val_str = datetime.fromtimestamp(val).strftime("%Y-%m-%d %H:%M")
         else:
             val_str = f"{val:.2f}" if isinstance(val, float) else str(val)
@@ -6138,7 +7471,7 @@ def cmd_top(args):
 def cmd_random(args):
     """随机闪卡复习（v5.1.7 新增）"""
     cm = _get_memory(args)
-    entries = cm.random(count=args.count, category=getattr(args, 'category', None))
+    entries = cm.random(count=args.count, category=getattr(args, "category", None))
 
     if not entries:
         print(c("⚠️  没有找到记忆", "yellow"))
@@ -6148,12 +7481,15 @@ def cmd_random(args):
     print(c(f"\n🎲 随机记忆闪卡（共 {len(entries)} 张）:", "cyan"))
     for idx, entry in enumerate(entries, 1):
         from datetime import datetime
+
         created = datetime.fromtimestamp(entry.created_at).strftime("%Y-%m-%d")
         starred = "⭐" if entry.starred else "  "
-        print(f"\n{'='*50}")
-        print(f"  第 {idx} 张  {starred}  [{entry.category}] 强度: {entry.strength:.2f}")
+        print(f"\n{'=' * 50}")
+        print(
+            f"  第 {idx} 张  {starred}  [{entry.category}] 强度: {entry.strength:.2f}"
+        )
         print(f"  创建: {created}  访问: {entry.access_count}次")
-        print(f"{'='*50}")
+        print(f"{'=' * 50}")
         print(f"\n  {entry.content}")
         if entry.tags:
             print(f"\n  🏷️  标签: {', '.join(entry.tags)}")
@@ -6170,7 +7506,7 @@ def cmd_rename_tag(args):
         print(c(f"\n将标签 '{args.old}' 重命名为 '{args.new}'", "yellow"))
         print(c("此操作将更新所有包含该标签的记忆。", "yellow"))
         confirm = input("\n确认继续？(y/N): ").strip().lower()
-        if confirm != 'y':
+        if confirm != "y":
             print("已取消")
             cm.close()
             return 0
@@ -6190,7 +7526,7 @@ def cmd_rename_cat(args):
         print(c(f"\n将分类 '{args.old}' 重命名为 '{args.new}'", "yellow"))
         print(c("此操作将移动所有该分类下的记忆。", "yellow"))
         confirm = input("\n确认继续？(y/N): ").strip().lower()
-        if confirm != 'y':
+        if confirm != "y":
             print("已取消")
             cm.close()
             return 0
@@ -6252,7 +7588,9 @@ def cmd_rekey(args):
         return 1
 
     # 显示当前状态
-    print(c(f"\n{COLORS['bold']}🔐 加密密钥更换 / KDF 参数升级{COLORS['reset']}", "cyan"))
+    print(
+        c(f"\n{COLORS['bold']}🔐 加密密钥更换 / KDF 参数升级{COLORS['reset']}", "cyan")
+    )
     print("=" * 55)
     print(f"  当前 KDF 算法:    {key_params.algorithm}")
     print(f"  当前迭代次数:    {key_params.iterations:,}")
@@ -6267,7 +7605,12 @@ def cmd_rekey(args):
     if not old_password:
         old_password = getpass.getpass("请输入旧密码: ")
     elif args.old_password:
-        print(c("⚠️  警告：--old-password 会在进程列表中可见，建议改用 MINDFORGE_OLD_PASSWORD 环境变量", "yellow"))
+        print(
+            c(
+                "⚠️  警告：--old-password 会在进程列表中可见，建议改用 MINDFORGE_OLD_PASSWORD 环境变量",
+                "yellow",
+            )
+        )
     if not old_password:
         print(c("❌ 旧密码不能为空", "red"))
         return 1
@@ -6285,7 +7628,12 @@ def cmd_rekey(args):
                 print(c("❌ 两次输入的新密码不一致", "red"))
                 return 1
         elif args.new_password:
-            print(c("⚠️  警告：--new-password 会在进程列表中可见，建议改用 MINDFORGE_NEW_PASSWORD 环境变量", "yellow"))
+            print(
+                c(
+                    "⚠️  警告：--new-password 会在进程列表中可见，建议改用 MINDFORGE_NEW_PASSWORD 环境变量",
+                    "yellow",
+                )
+            )
         if not new_password:
             print(c("❌ 新密码不能为空", "red"))
             return 1
@@ -6317,29 +7665,40 @@ def cmd_rekey(args):
     # v5.6.8 修复：移除函数体内的 `import os`。局部导入会让 `os` 在整个 cmd_rekey
     # 作用域内变成局部名，导致前面的 os.environ.get(...) 抛 UnboundLocalError。
     # 现统一使用模块顶部的 import os。
+    # v5.7.3 安全修复：以 try/finally 包裹，确保环境变量中的明文旧密码
+    # 在函数退出路径（成功/失败）都被清理，不再残留于进程环境。
+    # 原实现：设置后从不清理，rekey 全程及后续派生子进程均可从 /proc/<pid>/environ
+    # 读到明文密码。
     os.environ["MINDFORGE_PASSWORD"] = old_password
-
     try:
-        cm = _get_memory(args)
-    except SystemExit:
-        print(c("❌ 旧密码验证失败", "red"))
-        return 1
-    except Exception as e:
-        print(c(f"❌ 旧密码验证失败：{e}", "red"))
-        return 1
+        try:
+            cm = _get_memory(args)
+        except SystemExit:
+            print(c("❌ 旧密码验证失败", "red"))
+            return 1
+        except Exception as e:
+            print(c(f"❌ 旧密码验证失败：{e}", "red"))
+            return 1
 
-    try:
-        print(c("🔄 正在生成新密钥并重加密数据...", "cyan"))
-        result = cm.rekey(
-            old_password=old_password,
-            new_password=new_password,
-            new_iterations=args.iterations,
-        )
-        cm.close()
-    except Exception as e:
-        print(c(f"❌ rekey 失败：{e}", "red"))
-        print(c("密钥文件已从 .key.bak 恢复，数据库回滚到旧密文，数据未受影响", "yellow"))
-        return 1
+        try:
+            print(c("🔄 正在生成新密钥并重加密数据...", "cyan"))
+            result = cm.rekey(
+                old_password=old_password,
+                new_password=new_password,
+                new_iterations=args.iterations,
+            )
+            cm.close()
+        except Exception as e:
+            print(c(f"❌ rekey 失败：{e}", "red"))
+            print(
+                c(
+                    "密钥文件已从 .key.bak 恢复，数据库回滚到旧密文，数据未受影响",
+                    "yellow",
+                )
+            )
+            return 1
+    finally:
+        os.environ.pop("MINDFORGE_PASSWORD", None)
 
     # 成功报告
     print()
@@ -6349,8 +7708,11 @@ def cmd_rekey(args):
     print(f"  旧迭代次数:      {result['old_iterations']:,}")
     print(f"  新迭代次数:      {result['new_iterations']:,}")
     improvement = (
-        (result['new_iterations'] - result['old_iterations']) / result['old_iterations'] * 100
-        if result['old_iterations'] > 0 else 0
+        (result["new_iterations"] - result["old_iterations"])
+        / result["old_iterations"]
+        * 100
+        if result["old_iterations"] > 0
+        else 0
     )
     print(f"  安全提升:        +{improvement:.0f}%")
     print(f"  密钥备份:        {result['backup_path']}")
@@ -6364,7 +7726,12 @@ def cmd_backup(args):
     """创建记忆库完整备份（v5.6.0 新增）"""
     cm = _get_memory(args)
 
-    print(c(f"\n💾 创建记忆库备份...", "cyan", ))
+    print(
+        c(
+            f"\n💾 创建记忆库备份...",
+            "cyan",
+        )
+    )
 
     try:
         result = cm.backup(output_path=args.output)
@@ -6374,15 +7741,17 @@ def cmd_backup(args):
         return 1
 
     if _json_mode:
-        _json_out({
-            "ok": True,
-            "path": result["path"],
-            "size_bytes": result["size_bytes"],
-            "size_mb": result["size_mb"],
-            "memory_count": result["memory_count"],
-            "encrypted": result["encrypted"],
-            "version": result["version"],
-        })
+        _json_out(
+            {
+                "ok": True,
+                "path": result["path"],
+                "size_bytes": result["size_bytes"],
+                "size_mb": result["size_mb"],
+                "memory_count": result["memory_count"],
+                "encrypted": result["encrypted"],
+                "version": result["version"],
+            }
+        )
         return 0
 
     print()
@@ -6418,16 +7787,20 @@ def cmd_backup_restore(args):
         return 1
 
     # 确定目标路径（与 _get_memory 保持一致的默认值逻辑）
-    key_file_path = Path(args.key_file) if args.key_file else Path(args.db_path).parent / ".key"
+    key_file_path = (
+        Path(args.key_file) if args.key_file else Path(args.db_path).parent / ".key"
+    )
     db_path = args.db_path
     key_file = args.key_file or str(key_file_path)
 
     # 先读取备份信息用于显示
     import zipfile
+
     try:
         with zipfile.ZipFile(backup_file, "r") as zf:
             # P2 #23 修复：外部备份文件用安全 JSON 解析
             from core.storage import _safe_json_loads
+
             manifest = _safe_json_loads(zf.read("manifest.json").decode("utf-8"))
     except Exception as e:
         print(c(f"❌ 无法读取备份文件：{e}", "red"))
@@ -6450,6 +7823,7 @@ def cmd_backup_restore(args):
 
     # 警告：覆盖
     import os as _os
+
     target_db = Path(db_path)
     target_key = Path(key_file) if manifest.get("encrypted") else None
 
@@ -6488,15 +7862,17 @@ def cmd_backup_restore(args):
         return 1
 
     if _json_mode:
-        _json_out({
-            "ok": True,
-            "restored_db": result["restored_db"],
-            "restored_key": result["restored_key"],
-            "memory_count": result["memory_count"],
-            "encrypted": result["encrypted"],
-            "backup_version": result["backup_version"],
-            "mindforge_version": result["mindforge_version"],
-        })
+        _json_out(
+            {
+                "ok": True,
+                "restored_db": result["restored_db"],
+                "restored_key": result["restored_key"],
+                "memory_count": result["memory_count"],
+                "encrypted": result["encrypted"],
+                "backup_version": result["backup_version"],
+                "mindforge_version": result["mindforge_version"],
+            }
+        )
         return 0
 
     print()
@@ -6509,7 +7885,9 @@ def cmd_backup_restore(args):
     print(f"  加密状态:      {'开启 🔐' if result['encrypted'] else '未加密'}")
     print(f"  备份版本:      v{result['mindforge_version']}")
     print()
-    print(c("💡 建议：使用 'MindForge config' 或 'MindForge list' 验证恢复结果", "cyan"))
+    print(
+        c("💡 建议：使用 'MindForge config' 或 'MindForge list' 验证恢复结果", "cyan")
+    )
 
     return 0
 
@@ -6631,15 +8009,20 @@ def cmd_find(args):
     results.sort(key=lambda e: e.created_at, reverse=True)
     total = len(results)
     if args.limit:
-        results = results[:args.limit]
+        results = results[: args.limit]
 
     print(c("\n🔍 高级查找结果", "bold"))
-    print(f"   匹配 {c(str(total), 'cyan')} 条记忆" + (f"（显示前 {len(results)} 条）" if args.limit and total > args.limit else ""))
+    print(
+        f"   匹配 {c(str(total), 'cyan')} 条记忆"
+        + (f"（显示前 {len(results)} 条）" if args.limit and total > args.limit else "")
+    )
 
     for entry in results:
         star = "⭐ " if entry.starred else ""
-        print(f"\n{star}[{c(entry.id[:12], 'dim')}] {c(entry.category, 'green')} "
-              f"[{entry.layer.value}]")
+        print(
+            f"\n{star}[{c(entry.id[:12], 'dim')}] {c(entry.category, 'green')} "
+            f"[{entry.layer.value}]"
+        )
         print(f"   {entry.content[:200]}")
         if entry.tags:
             print(f"   标签: {', '.join('#' + t for t in entry.tags)}")
@@ -6761,14 +8144,28 @@ def cmd_gc(args):
     if dry:
         print(c("💡 这是预览结果。去掉 --dry-run 执行实际 GC。", "cyan"))
     else:
-        total_archived = ad["archived"] + tc.get("sensory_archived", 0) + tc.get("short_term_archived", 0)
+        total_archived = (
+            ad["archived"]
+            + tc.get("sensory_archived", 0)
+            + tc.get("short_term_archived", 0)
+        )
         total_purged = pa.get("purged", 0)
         if total_archived == 0 and total_purged == 0:
             print(c("✅ GC 完成，无需归档或删除的记忆。", "green"))
         else:
-            print(c(f"✅ GC 完成！归档 {total_archived} 条，永久删除 {total_purged} 条。", "green"))
+            print(
+                c(
+                    f"✅ GC 完成！归档 {total_archived} 条，永久删除 {total_purged} 条。",
+                    "green",
+                )
+            )
             if not skip_purge and total_purged > 0:
-                print(c("💡 永久删除的记忆不可恢复。如需保守模式，使用 --skip-purge。", "cyan"))
+                print(
+                    c(
+                        "💡 永久删除的记忆不可恢复。如需保守模式，使用 --skip-purge。",
+                        "cyan",
+                    )
+                )
 
     cm.close()
     return 0
@@ -6791,7 +8188,7 @@ def cmd_export_excel(args):
         output_path=str(output),
         category=args.category,
         layer=layer,
-        starred_only=getattr(args, 'starred', False),
+        starred_only=getattr(args, "starred", False),
     )
 
     size = path.stat().st_size
@@ -6907,7 +8304,7 @@ def cmd_fuzzy_search(args):
         threshold=args.threshold,
     )
 
-    print(c(f"\n🔍 模糊搜索: \"{args.query}\"", "bold"))
+    print(c(f'\n🔍 模糊搜索: "{args.query}"', "bold"))
     print(c(f"   找到 {len(results)} 条结果（阈值 {args.threshold}）\n", "dim"))
 
     if not results:
@@ -6924,8 +8321,12 @@ def cmd_fuzzy_search(args):
             content = cm.highlight(content, args.query, c("", "yellow"), c("", "reset"))
 
         print(f" {i}. [{entry.id[:12]}] {content[:80]}...")
-        print(f"    分类: {entry.category} | 标签: {', '.join(entry.tags) if entry.tags else '无'}")
-        print(f"    相关度: {score:.2f} | 访问: {entry.access_count}次 | 强度: {entry.strength:.2f}")
+        print(
+            f"    分类: {entry.category} | 标签: {', '.join(entry.tags) if entry.tags else '无'}"
+        )
+        print(
+            f"    相关度: {score:.2f} | 访问: {entry.access_count}次 | 强度: {entry.strength:.2f}"
+        )
         print()
 
     cm.close()
@@ -6947,8 +8348,9 @@ def cmd_search_history(args):
 
     for i, item in enumerate(history, 1):
         from datetime import datetime
+
         last_used = datetime.fromtimestamp(item["last_used"]).strftime("%Y-%m-%d %H:%M")
-        print(f" {i}. \"{item['query']}\"  ({item['count']}次, 最近: {last_used})")
+        print(f' {i}. "{item["query"]}"  ({item["count"]}次, 最近: {last_used})')
 
     print()
     cm.close()
@@ -6968,7 +8370,12 @@ def cmd_batch_add_tags(args):
             actor=args.agent,
             session_id=args.session,
         )
-        print(c(f"\n✅ 已为分类 '{args.category}' 的 {count} 条记忆添加标签: {', '.join(tags)}", "green"))
+        print(
+            c(
+                f"\n✅ 已为分类 '{args.category}' 的 {count} 条记忆添加标签: {', '.join(tags)}",
+                "green",
+            )
+        )
     elif args.ids:
         entry_ids = [i.strip() for i in args.ids.split(",") if i.strip()]
         count = cm.batch_add_tags(
@@ -7085,7 +8492,10 @@ def cmd_db_backups(args):
 
     for i, backup in enumerate(backups, 1):
         from datetime import datetime
-        created = datetime.fromtimestamp(backup["created_at"]).strftime("%Y-%m-%d %H:%M:%S")
+
+        created = datetime.fromtimestamp(backup["created_at"]).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
         print(f" {i}. {backup['filename']}")
         print(f"    大小: {backup['size_mb']} MB | 创建时间: {created}")
 
@@ -7108,13 +8518,13 @@ def cmd_db_restore(args):
 
     # SQLite 文件签名校验（v5.2.7 新增：防止恢复非数据库文件导致损坏）
     try:
-        with open(backup_file, 'rb') as f:
+        with open(backup_file, "rb") as f:
             header = f.read(16)
     except (OSError, IOError) as e:
         print(c(f"❌ 读取备份文件失败: {e}", "red"))
         cm.close()
         return 1
-    if not header.startswith(b'SQLite format 3'):
+    if not header.startswith(b"SQLite format 3"):
         print(c("❌ 文件不是有效的 SQLite 数据库", "red"))
         cm.close()
         return 1
@@ -7180,6 +8590,7 @@ def cmd_db_clean_backups(args):
 
 # ===== AI 短剧记忆模块（v5.2.1 新增）=====
 
+
 def cmd_drama_add(args):
     """添加短剧（v5.2.1 新增）"""
     cm = _get_memory(args)
@@ -7220,10 +8631,16 @@ def cmd_drama_list(args):
     print(f"\n找到 {c(str(len(dramas)), 'cyan')} 部短剧")
     for i, d in enumerate(dramas, 1):
         status_color = {
-            "watching": "green", "completed": "cyan",
-            "planned": "yellow", "dropped": "red"
+            "watching": "green",
+            "completed": "cyan",
+            "planned": "yellow",
+            "dropped": "red",
         }.get(d.status.value, "reset")
-        progress = f"{d.current_episode}/{d.total_episodes}" if d.total_episodes else f"{d.current_episode}/?"
+        progress = (
+            f"{d.current_episode}/{d.total_episodes}"
+            if d.total_episodes
+            else f"{d.current_episode}/?"
+        )
         star = "⭐" if d.rating >= 8 else ""
         print(f"\n{i}. {star} {c(d.title, 'bold')} [{c(d.status.value, status_color)}]")
         print(f"   类型: {d.genre.value} | 进度: {progress} | 评分: {d.rating}")
@@ -7260,7 +8677,10 @@ def cmd_drama_get(args):
         print(f"简介:   {drama.description}")
     if drama.last_watched_at:
         from datetime import datetime
-        print(f"上次观看: {datetime.fromtimestamp(drama.last_watched_at).strftime('%Y-%m-%d %H:%M')}")
+
+        print(
+            f"上次观看: {datetime.fromtimestamp(drama.last_watched_at).strftime('%Y-%m-%d %H:%M')}"
+        )
 
     scenes = cm.list_scenes(drama_id=drama.id, limit=5)
     if scenes:
@@ -7348,13 +8768,13 @@ def cmd_drama_stats(args):
     print(f"已看完:     {stats['completed']}")
     print(f"台词总数:   {stats['total_lines']}")
     print(f"经典台词:   {stats['classic_lines']}")
-    if stats['by_genre']:
+    if stats["by_genre"]:
         print("\n按类型:")
-        for genre, cnt in stats['by_genre'].items():
+        for genre, cnt in stats["by_genre"].items():
             print(f"  {genre}: {cnt}")
-    if stats['by_status']:
+    if stats["by_status"]:
         print("\n按状态:")
-        for status, cnt in stats['by_status'].items():
+        for status, cnt in stats["by_status"].items():
             print(f"  {status}: {cnt}")
     cm.close()
     return 0
@@ -7398,17 +8818,19 @@ def cmd_drama_progress(args):
     print(f"短剧总数:   {progress['total_dramas']}")
     print(f"规划总集数: {progress['total_planned_episodes']}")
     print(f"已看总集数: {progress['total_watched_episodes']}")
-    rate = progress['completion_rate']
+    rate = progress["completion_rate"]
     rate_color = "green" if rate >= 80 else "yellow" if rate >= 50 else "red"
     print(f"完成度:     {c(f'{rate}%', rate_color)}")
 
-    if progress['by_genre']:
+    if progress["by_genre"]:
         print("\n按类型分布:")
-        for genre, data in progress['by_genre'].items():
+        for genre, data in progress["by_genre"].items():
             genre_rate = 0.0
-            if data['total_planned'] > 0:
-                genre_rate = data['total_watched'] / data['total_planned'] * 100
-            print(f"  {genre}: {data['count']} 部 | 进度 {data['total_watched']}/{data['total_planned']} ({genre_rate:.1f}%)")
+            if data["total_planned"] > 0:
+                genre_rate = data["total_watched"] / data["total_planned"] * 100
+            print(
+                f"  {genre}: {data['count']} 部 | 进度 {data['total_watched']}/{data['total_planned']} ({genre_rate:.1f}%)"
+            )
     cm.close()
     return 0
 
@@ -7434,6 +8856,7 @@ def cmd_drama_export(args):
 
 # ===== v5.2.9 AI 短剧增强命令 =====
 
+
 def cmd_drama_import(args):
     """从 JSON 批量导入短剧（v5.2.9 新增）"""
     cm = _get_memory(args)
@@ -7444,8 +8867,13 @@ def cmd_drama_import(args):
 
     try:
         # v5.2.9 安全加固：导入前做路径白名单校验
-        _validate_path(args.input, must_exist=True, allow_symlinks=False,
-                       max_size=500 * 1024 * 1024, allowed_exts={".json"})
+        _validate_path(
+            args.input,
+            must_exist=True,
+            allow_symlinks=False,
+            max_size=500 * 1024 * 1024,
+            allowed_exts={".json"},
+        )
         stats = cm.import_dramas(
             input_path=args.input,
             skip_existing=not args.overwrite,
@@ -7497,8 +8925,10 @@ def cmd_drama_stars(args):
         title = (d.title or "(无标题)")[:50]
         status = d.status.value if hasattr(d.status, "value") else str(d.status)
         genre = d.genre.value if hasattr(d.genre, "value") else str(d.genre)
-        print(f"  {i:>3}. [{c(str(round(d.rating, 1)) + '★', rating_color)}] "
-              f"{genre:<10} {status:<10} {c(title, 'bold')}")
+        print(
+            f"  {i:>3}. [{c(str(round(d.rating, 1)) + '★', rating_color)}] "
+            f"{genre:<10} {status:<10} {c(title, 'bold')}"
+        )
 
     cm.close()
     return 0
@@ -7572,6 +9002,7 @@ def cmd_char_list_lines(args):
 
 
 # ===== v5.3.0 AI 短剧增强命令 =====
+
 
 def cmd_drama_info(args):
     """短剧深度统计（v5.3.0 新增）"""
@@ -7857,7 +9288,9 @@ def cmd_char_list(args):
     )
     print(f"\n找到 {c(str(len(chars)), 'cyan')} 个角色")
     for i, ch in enumerate(chars, 1):
-        role_color = {"lead": "yellow", "supporting": "cyan", "villain": "red"}.get(ch.role, "reset")
+        role_color = {"lead": "yellow", "supporting": "cyan", "villain": "red"}.get(
+            ch.role, "reset"
+        )
         actor = f" ({ch.actor})" if ch.actor else ""
         print(f"\n{i}. {ch.name} [{c(ch.role, role_color)}]{actor}")
         if ch.personality:
@@ -8071,6 +9504,7 @@ def cmd_scene_delete(args):
 
 # ===== Agent 记忆优化（v5.2.2 新增）=====
 
+
 def cmd_agent_stats(args):
     """Agent 记忆统计（v5.2.2 新增）"""
     cm = _get_memory(args)
@@ -8082,25 +9516,36 @@ def cmd_agent_stats(args):
         # 单个 Agent 详情
         print(f"Agent ID:   {stats['agent_id']}")
         print(f"记忆总数:   {stats['total_memories']}")
-        if stats['last_active']:
+        if stats["last_active"]:
             from datetime import datetime
-            print(f"最后活跃:   {datetime.fromtimestamp(stats['last_active']).strftime('%Y-%m-%d %H:%M')}")
-        if stats['by_category']:
+
+            print(
+                f"最后活跃:   {datetime.fromtimestamp(stats['last_active']).strftime('%Y-%m-%d %H:%M')}"
+            )
+        if stats["by_category"]:
             print("\n按分类:")
-            for cat, cnt in sorted(stats['by_category'].items(), key=lambda x: x[1], reverse=True)[:10]:
+            for cat, cnt in sorted(
+                stats["by_category"].items(), key=lambda x: x[1], reverse=True
+            )[:10]:
                 print(f"  {cat}: {cnt}")
-        if stats['by_layer']:
+        if stats["by_layer"]:
             print("\n按层级:")
-            for layer, cnt in stats['by_layer'].items():
+            for layer, cnt in stats["by_layer"].items():
                 print(f"  {layer}: {cnt}")
     else:
         # 全部 Agent 概览
         print(f"Agent 总数: {stats['total_agents']}")
-        if stats['by_agent']:
+        if stats["by_agent"]:
             print("\n按 Agent 分布:")
-            for agent, data in sorted(stats['by_agent'].items(), key=lambda x: x[1]['count'], reverse=True)[:15]:
-                count = data['count']
-                cats = ', '.join(data['top_categories'][:3]) if data['top_categories'] else '无'
+            for agent, data in sorted(
+                stats["by_agent"].items(), key=lambda x: x[1]["count"], reverse=True
+            )[:15]:
+                count = data["count"]
+                cats = (
+                    ", ".join(data["top_categories"][:3])
+                    if data["top_categories"]
+                    else "无"
+                )
                 print(f"  {agent}: {count} 条 | 主要分类: {cats}")
     cm.close()
     return 0
@@ -8109,13 +9554,17 @@ def cmd_agent_stats(args):
 def cmd_agent_list(args):
     """列出 Agent 的记忆（v5.2.2 新增）"""
     cm = _get_memory(args)
-    entries = cm.list_by_agent(agent_id=args.agent, limit=args.limit, offset=args.offset)
+    entries = cm.list_by_agent(
+        agent_id=args.agent, limit=args.limit, offset=args.offset
+    )
     print(f"\nAgent [{args.agent}] 的记忆: {len(entries)} 条")
     for i, e in enumerate(entries, 1):
         star = "⭐" if e.starred else "  "
         preview = e.content[:60] + "..." if len(e.content) > 60 else e.content
         print(f"\n{i}. {star} [{e.category}] {c(preview, 'cyan')}")
-        print(f"   ID: {e.id[:16]}... | 层级: {e.layer.value} | 隐私: {e.privacy.value}")
+        print(
+            f"   ID: {e.id[:16]}... | 层级: {e.layer.value} | 隐私: {e.privacy.value}"
+        )
     cm.close()
     return 0
 
@@ -8201,6 +9650,7 @@ def cmd_agent_clean(args):
 
 # ===== v5.2.9 Agent 记忆增强命令 =====
 
+
 def cmd_agent_list_memories(args):
     """列出 Agent 记忆（v5.2.9 新增，表格/JSON 双格式）"""
     cm = _get_memory(args)
@@ -8210,7 +9660,9 @@ def cmd_agent_list_memories(args):
     print(f"  Limit:     {args.limit}")
     print(f"  Offset:    {args.offset}")
 
-    entries = cm.list_by_agent(agent_id=args.agent, limit=args.limit, offset=args.offset)
+    entries = cm.list_by_agent(
+        agent_id=args.agent, limit=args.limit, offset=args.offset
+    )
 
     if not entries:
         print(c("\nℹ️  暂无该 Agent 的记忆", "yellow"))
@@ -8226,14 +9678,22 @@ def cmd_agent_list_memories(args):
                 d["content"] = d["content"][:500]
             json_data.append(d)
         import json as _json
+
         print(_json.dumps(json_data, ensure_ascii=False, indent=2, default=str))
     else:
         print(f"\n共 {c(str(len(entries)), 'cyan')} 条：")
         from datetime import datetime
+
         for i, e in enumerate(entries, 1):
             content = (e.content or "").replace("\n", " ")[:70]
-            created = datetime.fromtimestamp(e.created_at).strftime("%Y-%m-%d %H:%M") if e.created_at else "-"
-            print(f"  {i:>3}. [{created}] ({e.category}/{e.layer}) {e.id[:10]}... {content}")
+            created = (
+                datetime.fromtimestamp(e.created_at).strftime("%Y-%m-%d %H:%M")
+                if e.created_at
+                else "-"
+            )
+            print(
+                f"  {i:>3}. [{created}] ({e.category}/{e.layer}) {e.id[:10]}... {content}"
+            )
 
     cm.close()
     return 0
@@ -8255,6 +9715,7 @@ def cmd_agent_rank(args):
         return 0
 
     from datetime import datetime
+
     labels_map = {
         "count": "记忆数",
         "last_active": "最近活跃",
@@ -8262,19 +9723,29 @@ def cmd_agent_rank(args):
         "starred": "收藏数",
     }
     label = labels_map.get(args.by, args.by)
-    print(f"\n  {'#':>3}  {'Agent ID':<28}  {'记忆数':>6}  {'收藏':>4}  {'平均重要':>6}  {label}")
+    print(
+        f"\n  {'#':>3}  {'Agent ID':<28}  {'记忆数':>6}  {'收藏':>4}  {'平均重要':>6}  {label}"
+    )
     print("  " + "-" * 72)
     for i, r in enumerate(rows, 1):
-        aid = (r["agent_id"] or "")[:26] + ("…" if len(r["agent_id"] or "") > 26 else "")
-        la = datetime.fromtimestamp(r["last_active"]).strftime("%m-%d %H:%M") if r["last_active"] else "-"
+        aid = (r["agent_id"] or "")[:26] + (
+            "…" if len(r["agent_id"] or "") > 26 else ""
+        )
+        la = (
+            datetime.fromtimestamp(r["last_active"]).strftime("%m-%d %H:%M")
+            if r["last_active"]
+            else "-"
+        )
         extra = {
             "count": str(r["count"]),
             "last_active": la,
             "avg_importance": str(r["avg_importance"]),
             "starred": str(r["starred_count"]),
         }[args.by]
-        print(f"  {i:>3}. {aid:<28}  {r['count']:>6}  {r['starred_count']:>4}  "
-              f"{r['avg_importance']:>6}  {c(extra, 'cyan')}")
+        print(
+            f"  {i:>3}. {aid:<28}  {r['count']:>6}  {r['starred_count']:>4}  "
+            f"{r['avg_importance']:>6}  {c(extra, 'cyan')}"
+        )
 
     cm.close()
     return 0
@@ -8320,6 +9791,7 @@ def cmd_agent_forget(args):
 
 # ===== v5.3.0 Agent 记忆增强命令 =====
 
+
 def cmd_agent_profile(args):
     """Agent 记忆画像（v5.3.0 新增）"""
     cm = _get_memory(args)
@@ -8339,10 +9811,19 @@ def cmd_agent_profile(args):
         return 0
 
     from datetime import datetime
+
     print(f"  Agent ID:       {profile['agent_id']}")
     print(f"  记忆总数:       {c(str(profile['total_memories']), 'cyan')}")
-    first = datetime.fromtimestamp(profile['first_active']).strftime("%Y-%m-%d %H:%M") if profile.get('first_active') else "-"
-    last = datetime.fromtimestamp(profile['last_active']).strftime("%Y-%m-%d %H:%M") if profile.get('last_active') else "-"
+    first = (
+        datetime.fromtimestamp(profile["first_active"]).strftime("%Y-%m-%d %H:%M")
+        if profile.get("first_active")
+        else "-"
+    )
+    last = (
+        datetime.fromtimestamp(profile["last_active"]).strftime("%Y-%m-%d %H:%M")
+        if profile.get("last_active")
+        else "-"
+    )
     print(f"  首次活跃:       {first}")
     print(f"  最近活跃:       {c(last, 'green')}")
 
@@ -8361,7 +9842,9 @@ def cmd_agent_profile(args):
         for imp, cnt in profile["by_importance"].items():
             print(f"     {imp}: {cnt}")
 
-    print(f"\n  ⭐ 收藏: {profile.get('starred_count', 0)}  |  📌 置顶: {profile.get('pinned_count', 0)}")
+    print(
+        f"\n  ⭐ 收藏: {profile.get('starred_count', 0)}  |  📌 置顶: {profile.get('pinned_count', 0)}"
+    )
 
     if profile.get("top_tags"):
         print("\n  🏷️  知识领域 Top-10:")
@@ -8483,17 +9966,20 @@ def cmd_agent_search(args):
 
     if args.format == "json":
         import json as _json
+
         out = []
         for r in results:
             imp = getattr(r, "importance", "")
-            out.append({
-                "id": getattr(r, "id", ""),
-                "content": getattr(r, "content", ""),
-                "category": getattr(r, "category", ""),
-                "tags": getattr(r, "tags", []) if hasattr(r, "tags") else [],
-                "importance": imp.value if hasattr(imp, "value") else str(imp),
-                "created_at": getattr(r, "created_at", 0),
-            })
+            out.append(
+                {
+                    "id": getattr(r, "id", ""),
+                    "content": getattr(r, "content", ""),
+                    "category": getattr(r, "category", ""),
+                    "tags": getattr(r, "tags", []) if hasattr(r, "tags") else [],
+                    "importance": imp.value if hasattr(imp, "value") else str(imp),
+                    "created_at": getattr(r, "created_at", 0),
+                }
+            )
         print(_json.dumps(out, ensure_ascii=False, indent=2, default=str))
     else:
         print(c(f"\n📋 共找到 {len(results)} 条匹配记忆", "green"))
@@ -8643,10 +10129,14 @@ def cmd_char_ranking(args):
 
     print(c(f"\n🥇 角色排行 Top {len(results)}", "green"))
     print("-" * 70)
-    print(f"{'排名':<5}{'角色名':<15}{'总台词':<8}{'经典':<8}{'经典率':<10}{'场次':<8}{'平均字数':<10}")
+    print(
+        f"{'排名':<5}{'角色名':<15}{'总台词':<8}{'经典':<8}{'经典率':<10}{'场次':<8}{'平均字数':<10}"
+    )
     for r in results:
-        print(f"{r['rank']:<5}{r['name'][:12]:<15}{r['total_lines']:<8}"
-              f"{r['classic_lines']:<8}{r['classic_ratio']}%{'':<5}{r['scene_count']:<8}{r['avg_line_length']:<10}")
+        print(
+            f"{r['rank']:<5}{r['name'][:12]:<15}{r['total_lines']:<8}"
+            f"{r['classic_lines']:<8}{r['classic_ratio']}%{'':<5}{r['scene_count']:<8}{r['avg_line_length']:<10}"
+        )
 
     cm.close()
     return 0
@@ -8678,7 +10168,9 @@ def cmd_agent_diff(args):
     print(c("\n📊 时间段对比", "cyan"))
     print(f"  {pa['time_range']}: {pa['count']} 条")
     print(f"  {pb['time_range']}: {pb['count']} 条")
-    print(f"  增量: {c(str(result['total_diff']), 'green' if result['total_diff'] >= 0 else 'yellow')}")
+    print(
+        f"  增量: {c(str(result['total_diff']), 'green' if result['total_diff'] >= 0 else 'yellow')}"
+    )
 
     print(c("\n📈 重要度分布（A 时间段）", "cyan"))
     for imp, cnt in pa["by_importance"].items():
@@ -8711,7 +10203,9 @@ def cmd_agent_purge(args):
     print(c("\n⚠️  Agent 记忆清空（v5.3.2）", "bold"))
     print("=" * 60)
     print(f"  Agent ID:   {args.agent}")
-    print(f"  模式:       {'❌ 实际执行！会永久删除！' if not dry_run else '🔍 预览模式 (加 --force 实际执行)'}")
+    print(
+        f"  模式:       {'❌ 实际执行！会永久删除！' if not dry_run else '🔍 预览模式 (加 --force 实际执行)'}"
+    )
 
     if not dry_run:
         print(c("\n  高危操作：将永久删除该 Agent 的全部记忆！", "red"))
@@ -8757,8 +10251,7 @@ def cmd_drama_progress_update(args):
         print(f"  用户评分:   {args.rating}")
 
     try:
-        result = cm.drama_progress(
-            args.drama, args.episode, args.status, args.rating)
+        result = cm.drama_progress(args.drama, args.episode, args.status, args.rating)
     except (ValueError, TypeError) as e:
         print(c(f"\n❌ 失败: {e}", "red"))
         cm.close()
@@ -8812,13 +10305,17 @@ def cmd_drama_rec2(args):
 
     print(c(f"\n🏆 推荐 Top {len(results)}", "green"))
     print("-" * 75)
-    print(f"{'#':<4}{'剧名':<20}{'类型':<10}{'官方分':<8}{'状态':<12}{'看到':<6}{'用户分':<6}")
+    print(
+        f"{'#':<4}{'剧名':<20}{'类型':<10}{'官方分':<8}{'状态':<12}{'看到':<6}{'用户分':<6}"
+    )
     for i, d in enumerate(results, 1):
-        ep_label = f"E{d['current_episode']}" if d['current_episode'] else "-"
-        ur = f"{d['user_rating']}" if d['user_rating'] is not None else "-"
-        ws = d['watch_status'] or "-"
-        print(f"{i:<4}{d['title'][:18]:<20}{d['genre']:<10}{d['rating']:<8}"
-              f"{ws:<12}{ep_label:<6}{ur:<6}")
+        ep_label = f"E{d['current_episode']}" if d["current_episode"] else "-"
+        ur = f"{d['user_rating']}" if d["user_rating"] is not None else "-"
+        ws = d["watch_status"] or "-"
+        print(
+            f"{i:<4}{d['title'][:18]:<20}{d['genre']:<10}{d['rating']:<8}"
+            f"{ws:<12}{ep_label:<6}{ur:<6}"
+        )
 
     cm.close()
     return 0
@@ -8852,15 +10349,23 @@ def cmd_agent_timeline(args):
     print(f"\n  总记忆数:    {result['total_memories']}")
     print(f"  日均记忆:    {result['avg_per_day']}")
 
-    trend_label = {"rising": "📈 上升", "declining": "📉 下降",
-                   "stable": "➡️ 稳定", "no_data": "无数据",
-                   "insufficient_data": "数据不足"}.get(result["trend"], result["trend"])
+    trend_label = {
+        "rising": "📈 上升",
+        "declining": "📉 下降",
+        "stable": "➡️ 稳定",
+        "no_data": "无数据",
+        "insufficient_data": "数据不足",
+    }.get(result["trend"], result["trend"])
     print(f"  趋势:        {trend_label}")
 
     if result.get("peak_day"):
-        print(f"  最活跃日期:  {result['peak_day']['date']}（{result['peak_day']['count']} 条）")
+        print(
+            f"  最活跃日期:  {result['peak_day']['date']}（{result['peak_day']['count']} 条）"
+        )
     if result.get("peak_hour") is not None:
-        print(f"  最活跃时段:  {result['peak_hour']['hour']:02d}:00（{result['peak_hour']['count']} 条）")
+        print(
+            f"  最活跃时段:  {result['peak_hour']['hour']:02d}:00（{result['peak_hour']['count']} 条）"
+        )
 
     if result.get("top_active_hours"):
         hours_str = ", ".join(f"{h:02d}:00" for h in result["top_active_hours"])
@@ -8973,17 +10478,25 @@ def cmd_drama_binge(args):
     print(f"  计划总集数:    {result['total_episodes_planned']}")
     print(f"  完成率:        {result['completion_rate']}%")
     if result.get("average_rating"):
-        print(f"  平均评分:      {result['average_rating']}（{result['rated_count']} 部已评分）")
+        print(
+            f"  平均评分:      {result['average_rating']}（{result['rated_count']} 部已评分）"
+        )
 
     if result.get("recent_watched"):
         print(c("\n🕐 最近观看 Top-5", "cyan"))
         print("-" * 60)
         for i, w in enumerate(result["recent_watched"], 1):
-            status_label = {"watching": "追剧中", "completed": "已完成",
-                           "dropped": "已弃剧", "planned": "计划中"}.get(w["status"], w["status"])
-            print(f"  {i}. {w['title'][:20]:<22} {status_label:<8} "
-                  f"E{w['current_episode']}/{w['total_episodes']} "
-                  f"评分:{w['rating']}")
+            status_label = {
+                "watching": "追剧中",
+                "completed": "已完成",
+                "dropped": "已弃剧",
+                "planned": "计划中",
+            }.get(w["status"], w["status"])
+            print(
+                f"  {i}. {w['title'][:20]:<22} {status_label:<8} "
+                f"E{w['current_episode']}/{w['total_episodes']} "
+                f"评分:{w['rating']}"
+            )
 
     cm.close()
     return 0
@@ -9024,8 +10537,10 @@ def cmd_char_network(args):
         print("-" * 60)
         print(f"  {'#':<4}{'角色名':<16}{'角色类型':<12}{'出场场次':<10}{'关联数':<8}")
         for i, n in enumerate(nodes[:15], 1):
-            print(f"  {i:<4}{n['name'][:14]:<16}{n['role']:<12}"
-                  f"{n['scene_count']:<10}{n['connections']:<8}")
+            print(
+                f"  {i:<4}{n['name'][:14]:<16}{n['role']:<12}"
+                f"{n['scene_count']:<10}{n['connections']:<8}"
+            )
 
     # 关系边（按权重排序，Top-10）
     edges = result.get("edges", [])
@@ -9033,8 +10548,10 @@ def cmd_char_network(args):
         print(c("\n🔗 角色关系 Top-10（按共同出场次数）", "cyan"))
         print("-" * 60)
         for i, e in enumerate(edges[:10], 1):
-            print(f"  {i}. {e['source_name'][:12]} ↔ {e['target_name'][:12]}  "
-                  f"共同出场: {e['weight']} 次")
+            print(
+                f"  {i}. {e['source_name'][:12]} ↔ {e['target_name'][:12]}  "
+                f"共同出场: {e['weight']} 次"
+            )
 
     cm.close()
     return 0
@@ -9070,18 +10587,30 @@ def cmd_agent_sentiment(args):
     bar_pos = "█" * int(result["positive_ratio"] * 20)
     bar_neg = "█" * int(result["negative_ratio"] * 20)
     bar_neu = "█" * int(result["neutral_ratio"] * 20)
-    print(f"  {c('正面', 'green')}: {result['positive']:>5} ({result['positive_ratio']:.1%}) {bar_pos}")
-    print(f"  {c('负面', 'red')}: {result['negative']:>5} ({result['negative_ratio']:.1%}) {bar_neg}")
-    print(f"  {c('中性', 'yellow')}: {result['neutral']:>5} ({result['neutral_ratio']:.1%}) {bar_neu}")
+    print(
+        f"  {c('正面', 'green')}: {result['positive']:>5} ({result['positive_ratio']:.1%}) {bar_pos}"
+    )
+    print(
+        f"  {c('负面', 'red')}: {result['negative']:>5} ({result['negative_ratio']:.1%}) {bar_neg}"
+    )
+    print(
+        f"  {c('中性', 'yellow')}: {result['neutral']:>5} ({result['neutral_ratio']:.1%}) {bar_neu}"
+    )
 
     dom = result["dominant_sentiment"]
-    dom_label = {"positive": "正面主导 😊", "negative": "负面主导 😟", "neutral": "中性主导 😐"}.get(dom, dom)
+    dom_label = {
+        "positive": "正面主导 😊",
+        "negative": "负面主导 😟",
+        "neutral": "中性主导 😐",
+    }.get(dom, dom)
     print(c(f"\n  主导情感: {dom_label}", "bold"))
 
     if result.get("by_importance"):
         print(c("\n📈 按重要度细分", "cyan"))
         for imp, vals in sorted(result["by_importance"].items()):
-            print(f"  {imp:<10} 正:{vals['positive']}  负:{vals['negative']}  中:{vals['neutral']}")
+            print(
+                f"  {imp:<10} 正:{vals['positive']}  负:{vals['negative']}  中:{vals['neutral']}"
+            )
 
     cm.close()
     return 0
@@ -9129,8 +10658,10 @@ def cmd_memory_decay(args):
         print("-" * 70)
         for m in result["critical_memories"][:10]:
             preview = m["content_preview"][:40] or "(空)"
-            print(f"  [{m['importance']:<8}] 保留率:{m['retention']:.1%}  "
-                  f"天数:{m['days_elapsed']:.0f}d  访问:{m['access_count']}  {preview}")
+            print(
+                f"  [{m['importance']:<8}] 保留率:{m['retention']:.1%}  "
+                f"天数:{m['days_elapsed']:.0f}d  访问:{m['access_count']}  {preview}"
+            )
 
     cm.close()
     return 0
@@ -9158,15 +10689,19 @@ def cmd_drama_compare(args):
     dramas = result["dramas"]
     print(c(f"\n📊 对比明细（{result['total_compared']} 部有效）", "cyan"))
     print("-" * 85)
-    print(f"{'#':<4}{'剧名':<16}{'类型':<8}{'集数':<6}{'角色':<6}{'台词':<6}{'经典':<6}{'评分':<6}{'状态':<10}")
+    print(
+        f"{'#':<4}{'剧名':<16}{'类型':<8}{'集数':<6}{'角色':<6}{'台词':<6}{'经典':<6}{'评分':<6}{'状态':<10}"
+    )
     print("-" * 85)
     for i, d in enumerate(dramas, 1):
         if "error" in d:
             print(f"{i:<4}{d['id'][:14]:<16}{c('未找到', 'red')}")
             continue
-        print(f"{i:<4}{d['title'][:14]:<16}{d['genre'][:6]:<8}{d['total_episodes']:<6}"
-              f"{d['character_count']:<6}{d['total_lines']:<6}{d['classic_lines']:<6}"
-              f"{d['rating']:<6}{d['status']:<10}")
+        print(
+            f"{i:<4}{d['title'][:14]:<16}{d['genre'][:6]:<8}{d['total_episodes']:<6}"
+            f"{d['character_count']:<6}{d['total_lines']:<6}{d['classic_lines']:<6}"
+            f"{d['rating']:<6}{d['status']:<10}"
+        )
 
     comp = result.get("comparison", {})
     if comp:
@@ -9231,9 +10766,9 @@ def cmd_char_arc(args):
     print(c("\n📊 三段分布", "cyan"))
     total = sd["early"] + sd["mid"] + sd["late"]
     if total > 0:
-        print(f"  前期:  {sd['early']:>4} 句  ({sd['early']/total:.1%})")
-        print(f"  中期:  {sd['mid']:>4} 句  ({sd['mid']/total:.1%})")
-        print(f"  后期:  {sd['late']:>4} 句  ({sd['late']/total:.1%})")
+        print(f"  前期:  {sd['early']:>4} 句  ({sd['early'] / total:.1%})")
+        print(f"  中期:  {sd['mid']:>4} 句  ({sd['mid'] / total:.1%})")
+        print(f"  后期:  {sd['late']:>4} 句  ({sd['late'] / total:.1%})")
 
     cm.close()
     return 0
@@ -9283,8 +10818,10 @@ def cmd_memory_cluster(args):
     print(f"{'#':<4}{'规模':<6}{'权重':<8}{'主题标签'}")
     print("-" * 75)
     for cl in clusters:
-        print(f"{cl['cluster_id']:<4}{cl['size']:<6}{cl['total_weight']:<8}"
-              f"{cl['label'][:55]}")
+        print(
+            f"{cl['cluster_id']:<4}{cl['size']:<6}{cl['total_weight']:<8}"
+            f"{cl['label'][:55]}"
+        )
 
     # 最大簇的 Top 词
     largest = clusters[0]
@@ -9302,21 +10839,20 @@ def cmd_agent_insight(args):
     try:
         result = cm.agent_insight(args.agent, args.days)
     except (ValueError, TypeError) as e:
-        if getattr(args, 'json_output', False):
+        if getattr(args, "json_output", False):
             _json_out({"error": str(e)})
         else:
             print(c(f"\n❌ 失败: {e}", "red"))
         cm.close()
         return 1
 
-    if getattr(args, 'json_output', False):
+    if getattr(args, "json_output", False):
         _json_out(result)
         cm.close()
         return 0
 
     print(c("\n🔍 混合检索增强（查询扩展 + Cross-Encoder 重排）（v5.3.9）", "bold"))
     print("=" * 60)
-    
 
     if result.get("error"):
         print(c(f"\n❌ {result['error']}", "red"))
@@ -9359,7 +10895,9 @@ def cmd_agent_insight(args):
         print(f"  {layer:<16} {cnt:>5}  ({pct:>5.1f}%)  {bar}")
 
     print(c("\n⭐ 重要度分布", "cyan"))
-    for imp, cnt in sorted(result["importance_distribution"].items(), key=lambda x: -x[1]):
+    for imp, cnt in sorted(
+        result["importance_distribution"].items(), key=lambda x: -x[1]
+    ):
         pct = cnt / total * 100
         print(f"  {imp:<10} {cnt:>5}  ({pct:>5.1f}%)")
 
@@ -9406,7 +10944,9 @@ def cmd_drama_summary(args):
     print(f"  状态:       {result['status']}")
     rating_s = f"{result['rating']:.1f}" if result.get("rating") else "-"
     print(f"  评分:       {rating_s}")
-    src = {"stored": "官方", "derived": "自动生成"}.get(result.get("summary_source"), "未知")
+    src = {"stored": "官方", "derived": "自动生成"}.get(
+        result.get("summary_source"), "未知"
+    )
     print(f"  摘要来源:   {src}")
     print(f"  场景总数:   {result['total_scenes']}")
     print(f"  关键场景:   {result['key_scene_count']}")
@@ -9489,15 +11029,19 @@ def cmd_scene_tension(args):
     if top:
         print(c(f"\n🔥 Top-{len(top)} 高张力场景", "red"))
         print("-" * 85)
-        print(f"{'#':<4}{'集':<5}{'场景标题':<22}{'台词':<6}{'角色':<6}{'冲突':<6}{'强度':<6}{'张力':<8}{'关键'}")
+        print(
+            f"{'#':<4}{'集':<5}{'场景标题':<22}{'台词':<6}{'角色':<6}{'冲突':<6}{'强度':<6}{'张力':<8}{'关键'}"
+        )
         print("-" * 85)
         for i, sc in enumerate(top, 1):
             key_m = "★" if sc.get("is_key_scene") else ""
             title = (sc.get("scene_title") or "")[:20]
             ep = sc.get("episode") or "-"
-            print(f"{i:<4}{str(ep):<5}{title:<22}{sc['line_count']:<6}"
-                  f"{sc['character_count']:<6}{sc['conflict_hits']:<6}"
-                  f"{sc['intensity_hits']:<6}{sc['tension']:<8.1f}{key_m}")
+            print(
+                f"{i:<4}{str(ep):<5}{title:<22}{sc['line_count']:<6}"
+                f"{sc['character_count']:<6}{sc['conflict_hits']:<6}"
+                f"{sc['intensity_hits']:<6}{sc['tension']:<8.1f}{key_m}"
+            )
 
     # 张力曲线：ASCII 可视化（按顺序）
     curve = result.get("tension_curve", [])
@@ -9510,7 +11054,11 @@ def cmd_scene_tension(args):
             # 30 格柱状
             bar_len = int(cp["tension"] / max(max_t, 0.01) * 30)
             bar = "█" * bar_len
-            color = "red" if cp["tension"] >= 60 else ("yellow" if cp["tension"] >= 35 else "cyan")
+            color = (
+                "red"
+                if cp["tension"] >= 60
+                else ("yellow" if cp["tension"] >= 35 else "cyan")
+            )
             print(f"  S{str(idx):<4} {c(bar, color)}  {cp['tension']:.0f}")
 
     cm.close()
@@ -9560,7 +11108,12 @@ def cmd_memory_link(args):
     tdist = result.get("link_type_distribution", {})
     if tdist:
         print(c("\n🏷️  关联类型分布", "cyan"))
-        type_label = {"keyword": "关键词", "tag": "标签", "temporal": "时间", "weak": "弱关联"}
+        type_label = {
+            "keyword": "关键词",
+            "tag": "标签",
+            "temporal": "时间",
+            "weak": "弱关联",
+        }
         for t, cnt in sorted(tdist.items(), key=lambda x: -x[1]):
             print(f"  {type_label.get(t, t):<10} {cnt:>5} 条")
 
@@ -9607,7 +11160,7 @@ def cmd_memory_recall(args):
         cm.close()
         return 1
 
-    if getattr(args, 'json_output', False):
+    if getattr(args, "json_output", False):
         _json_out(result)
         cm.close()
         return 0
@@ -9618,8 +11171,6 @@ def cmd_memory_recall(args):
     print(f"  查询:        {args.query}")
     print(f"  Top-K:       {args.top_k}")
     print(f"  回溯天数:    {args.days}")
-
-    
 
     qk = result.get("query_keywords", [])
     if qk:
@@ -9641,13 +11192,17 @@ def cmd_memory_recall(args):
 
     print(c(f"\n🏆 Top-{len(recalled)} 召回记忆", "cyan"))
     print("-" * 90)
-    print(f"{'#':<4}{'分数':<8}{'覆盖':<8}{'重要度':<10}{'访问':<6}{'年龄(天)':<10}{'预览'}")
+    print(
+        f"{'#':<4}{'分数':<8}{'覆盖':<8}{'重要度':<10}{'访问':<6}{'年龄(天)':<10}{'预览'}"
+    )
     print("-" * 90)
     for i, rc in enumerate(recalled, 1):
         imp = rc["importance"][:8]
         cov = f"{rc['coverage']:.0%}"
-        print(f"{i:<4}{rc['score']:<8.1f}{cov:<8}{imp:<10}{rc['access_count']:<6}"
-              f"{rc['age_days']:<10.1f}{(rc.get('content_preview') or '')[:36]}")
+        print(
+            f"{i:<4}{rc['score']:<8.1f}{cov:<8}{imp:<10}{rc['access_count']:<6}"
+            f"{rc['age_days']:<10.1f}{(rc.get('content_preview') or '')[:36]}"
+        )
 
     # Top 1 匹配关键词
     if recalled:
@@ -9711,16 +11266,20 @@ def cmd_drama_pacing(args):
     if slow_segs:
         print(c("\n🐢 拖沓段（连续慢节奏）", "yellow"))
         for seg in slow_segs:
-            print(f"  第 {seg['episodes']} 集  长度 {seg['length']} 场景  "
-                  f"平均密度 {seg['avg_density']:.2f}")
+            print(
+                f"  第 {seg['episodes']} 集  长度 {seg['length']} 场景  "
+                f"平均密度 {seg['avg_density']:.2f}"
+            )
 
     # 密集段
     fast_segs = result.get("fast_segments", [])
     if fast_segs:
         print(c("\n🔥 密集段（连续快节奏）", "red"))
         for seg in fast_segs:
-            print(f"  第 {seg['episodes']} 集  长度 {seg['length']} 场景  "
-                  f"平均密度 {seg['avg_density']:.2f}")
+            print(
+                f"  第 {seg['episodes']} 集  长度 {seg['length']} 场景  "
+                f"平均密度 {seg['avg_density']:.2f}"
+            )
 
     # 节奏曲线（ASCII 可视化）
     curve = result.get("pacing_curve", [])
@@ -9790,20 +11349,26 @@ def cmd_char_interaction(args):
         return 0
 
     rel_label = {
-        "antagonist": "对抗", "close": "亲密",
-        "frequent": "频繁", "casual": "偶发",
+        "antagonist": "对抗",
+        "close": "亲密",
+        "frequent": "频繁",
+        "casual": "偶发",
     }
     print(c(f"\n🔗 Top-{len(interactions)} 互动关系", "cyan"))
     print("-" * 85)
-    print(f"{'#':<4}{'角色A':<14}{'角色B':<14}{'共现':<6}{'交替':<6}{'冲突':<6}{'强度':<8}{'关系'}")
+    print(
+        f"{'#':<4}{'角色A':<14}{'角色B':<14}{'共现':<6}{'交替':<6}{'冲突':<6}{'强度':<8}{'关系'}"
+    )
     print("-" * 85)
     for i, it in enumerate(interactions, 1):
         na = (it.get("name_a") or "")[:12]
         nb = (it.get("name_b") or "")[:12]
         rel = rel_label.get(it["relation_type"], it["relation_type"])
-        print(f"{i:<4}{na:<14}{nb:<14}{it['co_scenes']:<6}"
-              f"{it['alternations']:<6}{it['conflict_hits']:<6}"
-              f"{it['strength']:<8.1f}{rel}")
+        print(
+            f"{i:<4}{na:<14}{nb:<14}{it['co_scenes']:<6}"
+            f"{it['alternations']:<6}{it['conflict_hits']:<6}"
+            f"{it['strength']:<8.1f}{rel}"
+        )
 
     cm.close()
     return 0
@@ -9828,7 +11393,7 @@ def cmd_quality(args):
         print(f"等  级:     {c(result['grade'], 'cyan')}")
 
         print("\n各项得分:")
-        for item, score in result['breakdown'].items():
+        for item, score in result["breakdown"].items():
             print(f"  {item}: {score}")
 
     else:
@@ -9846,14 +11411,16 @@ def cmd_quality(args):
         print(f"  平均分:   {c(str(result['average_score']), 'green')}")
 
         print("\n等级分布:")
-        for grade, count in result['grades'].items():
+        for grade, count in result["grades"].items():
             if count > 0:
                 print(f"  {grade}: {count} 条")
 
-        if result.get('top_scores'):
+        if result.get("top_scores"):
             print("\n🏆 高分记忆 Top 5:")
-            for i, s in enumerate(result['top_scores'][:5], 1):
-                print(f"  {i}. {s['memory_id'][:16]}... - {s['total_score']}分 ({s['grade']})")
+            for i, s in enumerate(result["top_scores"][:5], 1):
+                print(
+                    f"  {i}. {s['memory_id'][:16]}... - {s['total_score']}分 ({s['grade']})"
+                )
 
     cm.close()
     return 0
@@ -9875,9 +11442,7 @@ def cmd_similar(args):
     print(f"内容预览:   {entry.content[:60]}...")
 
     results = cm.analyze_similarity(
-        memory_id=args.memory_id,
-        limit=args.limit,
-        min_similarity=args.min_similarity
+        memory_id=args.memory_id, limit=args.limit, min_similarity=args.min_similarity
     )
 
     if not results:
@@ -9886,7 +11451,9 @@ def cmd_similar(args):
         print(f"\n找到 {len(results)} 条相似记忆:")
         for i, r in enumerate(results, 1):
             print(f"\n{i}. [{c(str(r['similarity']), 'cyan')}] {r['content_preview']}")
-            print(f"   ID: {r['memory_id'][:16]}... | 分类: {r['category']} | 层级: {r['layer']}")
+            print(
+                f"   ID: {r['memory_id'][:16]}... | 分类: {r['category']} | 层级: {r['layer']}"
+            )
 
     cm.close()
     return 0
@@ -9898,7 +11465,9 @@ def cmd_similar(args):
 def cmd_note_add(args):
     """添加记忆笔记（v5.2.4 新增）"""
     cm = _get_memory(args)
-    result = cm.add_note(args.memory_id, args.content, author=args.author, tags=args.tags)
+    result = cm.add_note(
+        args.memory_id, args.content, author=args.author, tags=args.tags
+    )
     if result.get("success"):
         print(c("\n✅ 笔记已添加", "green"))
         print(f"   笔记 ID: {result['note_id']}")
@@ -9984,8 +11553,12 @@ def cmd_template_list(args):
     print(c(f"\n📋 记忆模板（共 {len(templates)} 个）", "bold"))
     print("=" * 60)
     for t in templates:
-        print(f"  {c(t['id'][:8], 'cyan')} | {c(t['name'], 'bold')} | 使用 {t['use_count']} 次")
-        print(f"    分类: {t['category']} | 重要性: {t['importance']} | 层级: {t['layer']}")
+        print(
+            f"  {c(t['id'][:8], 'cyan')} | {c(t['name'], 'bold')} | 使用 {t['use_count']} 次"
+        )
+        print(
+            f"    分类: {t['category']} | 重要性: {t['importance']} | 层级: {t['layer']}"
+        )
         print(f"    模板: {t['content_template'][:60]}...")
         if t.get("description"):
             print(f"    描述: {t['description']}")
@@ -10006,8 +11579,9 @@ def cmd_template_use(args):
                 key, value = v.split("=", 1)
                 variables[key] = value
 
-    result = cm.use_template(args.template_id, variables=variables,
-                             actor=args.agent, session_id=args.session)
+    result = cm.use_template(
+        args.template_id, variables=variables, actor=args.agent, session_id=args.session
+    )
     if result.get("success"):
         print(c("\n✅ 记忆已创建", "green"))
         print(f"   记忆 ID: {result['memory_id']}")
@@ -10124,7 +11698,9 @@ def cmd_schedule(args):
         print(c(f"\n📅 到期复习（共 {len(reviews)} 条）", "bold"))
         print("=" * 60)
         for r in reviews:
-            print(f"  {c(r['schedule_id'][:8], 'cyan')} | 已复习 {r['review_count']} 次 | 间隔 {r['interval_days']} 天")
+            print(
+                f"  {c(r['schedule_id'][:8], 'cyan')} | 已复习 {r['review_count']} 次 | 间隔 {r['interval_days']} 天"
+            )
             print(f"    记忆: {r['content'][:60]}")
             print(f"    分类: {r['category']} | 重要性: {r['importance']}")
             print(f"    计划时间: {format_time(r['scheduled_at'])}")
@@ -10154,7 +11730,12 @@ def cmd_schedule(args):
         print("=" * 40)
         print(f"   总计划数: {stats['total_schedules']}")
         print(f"   待复习: {stats['pending']}")
-        print(c(f"   已到期: {stats['due_now']}", "yellow" if stats['due_now'] > 0 else "green"))
+        print(
+            c(
+                f"   已到期: {stats['due_now']}",
+                "yellow" if stats["due_now"] > 0 else "green",
+            )
+        )
         print(f"   累计完成复习: {stats['total_reviews_completed']} 次")
         cm.close()
         return 0
@@ -10195,8 +11776,10 @@ def cmd_agent_influence(args):
         print(f"{'Agent ID':<30}{'入度':>6}{'出度':>6}{'共享标签':>8}")
         print("-" * 60)
         for n in top:
-            print(f"{n['agent_id'][:28]:<30}{n['influence_in']:>6}"
-                  f"{n['influence_out']:>6}{n['shared_tags']:>8}")
+            print(
+                f"{n['agent_id'][:28]:<30}{n['influence_in']:>6}"
+                f"{n['influence_out']:>6}{n['shared_tags']:>8}"
+            )
 
     edges = result.get("edges", [])
     if edges:
@@ -10229,7 +11812,9 @@ def cmd_memory_overlap(args):
         cm.close()
         return 1
 
-    print(f"\n  综合相似度:  {result['overall_similarity']}  ({result['similarity_level']})")
+    print(
+        f"\n  综合相似度:  {result['overall_similarity']}  ({result['similarity_level']})"
+    )
 
     tags = result.get("tags", {})
     print(c("\n🏷️  标签重叠", "cyan"))
@@ -10288,10 +11873,18 @@ def cmd_conflict_graph(args):
     if conflicts:
         print(c("\n⚠️  冲突详情（前 20 条）", "cyan"))
         for cf in conflicts[:20]:
-            sev_label = {"high": "🔴高", "medium": "🟡中", "low": "🟢低"}.get(cf["severity"], "?")
-            print(f"\n  {sev_label} [{cf['conflict_type']}] 重要度差: {cf['importance_diff']}")
-            print(f"    A: [{cf['memory_a']['importance']}] {cf['memory_a']['content_preview']}")
-            print(f"    B: [{cf['memory_b']['importance']}] {cf['memory_b']['content_preview']}")
+            sev_label = {"high": "🔴高", "medium": "🟡中", "low": "🟢低"}.get(
+                cf["severity"], "?"
+            )
+            print(
+                f"\n  {sev_label} [{cf['conflict_type']}] 重要度差: {cf['importance_diff']}"
+            )
+            print(
+                f"    A: [{cf['memory_a']['importance']}] {cf['memory_a']['content_preview']}"
+            )
+            print(
+                f"    B: [{cf['memory_b']['importance']}] {cf['memory_b']['content_preview']}"
+            )
             if cf.get("shared_tags"):
                 print(c(f"    ↳ 共享标签: {', '.join(cf['shared_tags'])}", "cyan"))
 
@@ -10335,10 +11928,10 @@ def cmd_drama_quote_map(args):
         print(f"{'角色':<16}{'总台词':>6}{'经典':>6}{'经典率':>8}")
         print("-" * 40)
         for ch in by_char:
-            ratio = round(ch['classic'] / max(1, ch['total']) * 100, 1)
+            ratio = round(ch["classic"] / max(1, ch["total"]) * 100, 1)
             print(f"{ch['name'][:14]:<16}{ch['total']:>6}{ch['classic']:>6}{ratio:>7}%")
             for cl in ch.get("classic_lines", [])[:2]:
-                print(c(f"  \"{cl[:50]}\"", "cyan"))
+                print(c(f'  "{cl[:50]}"', "cyan"))
 
     top_eps = result.get("top_episodes", [])
     if top_eps:
@@ -10350,7 +11943,7 @@ def cmd_drama_quote_map(args):
     if timeline:
         print(c("\n📜 经典台词时间线（前 15 条）", "cyan"))
         for t in timeline[:15]:
-            print(f"  EP{t['episode']}  [{t['character'][:10]}]  \"{t['text'][:40]}\"")
+            print(f'  EP{t["episode"]}  [{t["character"][:10]}]  "{t["text"][:40]}"')
 
     cm.close()
     return 0
@@ -10389,7 +11982,9 @@ def cmd_char_growth(args):
         print(f"{'集':>4}{'台词数':>6}{'情感':>10}{'评分':>8}")
         print("-" * 32)
         for e in emotion_arc:
-            print(f"{e['episode']:>4}{e['line_count']:>6}{e['emotion']:>10}{e['emotion_score']:>8}")
+            print(
+                f"{e['episode']:>4}{e['line_count']:>6}{e['emotion']:>10}{e['emotion_score']:>8}"
+            )
 
     complexity = result.get("complexity_curve", [])
     if complexity:
@@ -10397,8 +11992,10 @@ def cmd_char_growth(args):
         print(f"{'集':>4}{'平均长度':>8}{'词汇量':>8}{'复杂度':>8}")
         print("-" * 32)
         for c_item in complexity:
-            print(f"{c_item['episode']:>4}{c_item['avg_line_length']:>8}"
-                  f"{c_item['vocabulary_size']:>8}{c_item['complexity_score']:>8}")
+            print(
+                f"{c_item['episode']:>4}{c_item['avg_line_length']:>8}"
+                f"{c_item['vocabulary_size']:>8}{c_item['complexity_score']:>8}"
+            )
 
     stages = result.get("activity_stages", [])
     if stages:
@@ -10449,10 +12046,16 @@ def cmd_scene_rhythm(args):
         print(f"{'集':>4}{'场景':>6}{'台词':>6}{'密度':>8}{'节奏':>10}  标题")
         print("-" * 60)
         for sr in rhythms[:20]:
-            pace_label = {"fast": "⚡快", "moderate": "🎵中",
-                          "slow": "🐢慢", "silent": "🔇无"}.get(sr["pace"], "?")
-            print(f"{sr['episode']:>4}{sr['scene_number']:>6}{sr['line_count']:>6}"
-                  f"{sr['density']:>8}{pace_label:>10}  {sr['title'][:20]}")
+            pace_label = {
+                "fast": "⚡快",
+                "moderate": "🎵中",
+                "slow": "🐢慢",
+                "silent": "🔇无",
+            }.get(sr["pace"], "?")
+            print(
+                f"{sr['episode']:>4}{sr['scene_number']:>6}{sr['line_count']:>6}"
+                f"{sr['density']:>8}{pace_label:>10}  {sr['title'][:20]}"
+            )
 
     for s in result.get("suggestions", []):
         print(c(f"\n  ✦ {s}", "yellow"))

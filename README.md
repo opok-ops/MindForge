@@ -6,7 +6,7 @@ Four-Tier Memory · Knowledge Graph · Local-First · AES-256-GCM Encryption · 
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-5.7.2-green.svg)](https://github.com/opok-ops/MindForge/releases)
+[![Version](https://img.shields.io/badge/version-5.7.3-green.svg)](https://github.com/opok-ops/MindForge/releases)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
 [![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
@@ -41,6 +41,7 @@ Most AI agent memory solutions are cloud-locked, flat, and slow. MindForge gives
 ## Why Star ⭐ MindForge?
 
 - **Local-first & private** — your memories never leave your machine; optional AES-256-GCM at-rest encryption
+- **Encrypted backup (v5.7.3)** — `export-json --password` produces AES-256-GCM + PBKDF2 encrypted backups; memories stay unreadable even if the file leaks
 - **Free forever** — MIT license, self-hostable, zero cloud dependency
 - **MCP-native** — 33 MCP tools; drop into Claude Code, OpenClaw or any MCP client in minutes
 - **Solo-dev maintained** — every star is real signal that local-first agent memory matters
@@ -133,6 +134,7 @@ Tested on i7-12700H / 32GB RAM / NVMe SSD / Python 3.12 / SQLite WAL.
 - **Six-Way Hybrid Search** — Vector + FTS5 + TF-IDF + Fuzzy + Query Expansion + Cross-Encoder reranking
 - **Knowledge Graph** — Auto entity/relation extraction, path finding, associative recall
 - **Privacy Engine** — 4-level isolation (PUBLIC/INTERNAL/PRIVATE/STRICT) + AES-256-GCM + PBKDF2-SHA256
+- **Encrypted Export/Import** — `export-json --password` / `import-json --password` AES-256-GCM encrypted backups (v5.7.3)
 - **Federated Memory** — P2P multi-agent sharing with trust levels, fine-grained ACL, conflict resolution
 - **Intent Router** — 3-layer routing (regex → keyword → LLM fallback), 10+ intent categories
 - **Conflict Detection** — Antonym pairs, attribute inconsistency, timeline conflicts + auto-decay
@@ -141,7 +143,7 @@ Tested on i7-12700H / 32GB RAM / NVMe SSD / Python 3.12 / SQLite WAL.
 - **CLI** — 200+ commands with bash/zsh/fish shell completion
 - **REST API** — Standard HTTP API for non-Python applications
 - **Embedding Backends** — sentence-transformers / OpenAI / Ollama / custom HTTP
-- **751+ Test Cases** — Comprehensive test coverage with CI security scanning (bandit + pip-audit)
+- **780+ Test Cases** — Comprehensive test coverage with CI security scanning (bandit + pip-audit)
 
 ---
 

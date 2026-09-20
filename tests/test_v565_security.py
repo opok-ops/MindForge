@@ -30,6 +30,7 @@ class _StorageCase(unittest.TestCase):
         self.tmp = tempfile.mkdtemp(prefix="mf_v565_")
         self.db = os.path.join(self.tmp, "test.db")
         from core.storage import StorageEngine
+
         self.storage = StorageEngine(db_path=self.db, encrypted=False)
 
     def tearDown(self):
@@ -44,18 +45,22 @@ class _StorageCase(unittest.TestCase):
 class TestFederatedEd25519(unittest.TestCase):
     def _two_nodes(self):
         from modules.federated import FederatedMemory
+
         node_a = FederatedMemory(local_peer_id="nodeA")
         node_b = FederatedMemory(local_peer_id="nodeB")
         # 交叉注册：只交换公钥（公钥公开即可），不共享任何对称密钥
-        node_a.register_peer("nodeB", "B", trust_level=0.9,
-                             public_key=node_b.local_public_key)
-        node_b.register_peer("nodeA", "A", trust_level=0.9,
-                             public_key=node_a.local_public_key)
+        node_a.register_peer(
+            "nodeB", "B", trust_level=0.9, public_key=node_b.local_public_key
+        )
+        node_b.register_peer(
+            "nodeA", "A", trust_level=0.9, public_key=node_a.local_public_key
+        )
         return node_a, node_b
 
     def test_keypair_is_ed25519_and_distinct(self):
         from modules.federated import generate_keypair
         import base64
+
         priv1, pub1 = generate_keypair()
         priv2, pub2 = generate_keypair()
         self.assertEqual(len(base64.urlsafe_b64decode(priv1 + "==")), 32)
@@ -111,6 +116,7 @@ class TestFederatedEd25519(unittest.TestCase):
 
     def test_hmac_legacy_still_verifies(self):
         from modules.federated import FederatedMemory
+
         a = FederatedMemory(local_peer_id="a")
         b = FederatedMemory(local_peer_id="b")
         a.register_peer("b", "B", trust_level=0.9, shared_secret="shh")
@@ -164,6 +170,7 @@ class TestAccessLastFlushPrune(_StorageCase):
 class TestIndexEngineBound(unittest.TestCase):
     def test_lru_cap_bounds_all_structures(self):
         from core.indexer import IndexEngine
+
         idx = IndexEngine(max_docs=5)
         for i in range(8):
             idx.index_memory(f"d{i}", f"这是第 {i} 条关于人工智能与记忆系统的内容")
@@ -176,6 +183,7 @@ class TestIndexEngineBound(unittest.TestCase):
 
     def test_unlimited_when_zero(self):
         from core.indexer import IndexEngine
+
         idx = IndexEngine(max_docs=0)
         self.assertIsNone(idx.max_docs)
         for i in range(6):
@@ -188,8 +196,9 @@ class TestAutoArchiveReportsFailure(_StorageCase):
     def test_result_contains_failure_fields(self):
         e = self.storage.add_memory(content="old")
         conn = self.storage._get_conn()
-        conn.execute("UPDATE memories SET created_at=? WHERE id=?",
-                     (time.time() - 999999, e.id))
+        conn.execute(
+            "UPDATE memories SET created_at=? WHERE id=?", (time.time() - 999999, e.id)
+        )
         conn.commit()
         res = self.storage.auto_archive(max_age_hours=0, layer="short_term")
         self.assertIn("failed", res)
@@ -200,8 +209,9 @@ class TestAutoArchiveReportsFailure(_StorageCase):
     def test_failure_counted_not_swallowed(self):
         e = self.storage.add_memory(content="old2")
         conn = self.storage._get_conn()
-        conn.execute("UPDATE memories SET created_at=? WHERE id=?",
-                     (time.time() - 999999, e.id))
+        conn.execute(
+            "UPDATE memories SET created_at=? WHERE id=?", (time.time() - 999999, e.id)
+        )
         conn.commit()
         real = self.storage._get_conn()
 
@@ -228,6 +238,7 @@ class TestAutoArchiveReportsFailure(_StorageCase):
 class TestPrivacyGrantPurge(_StorageCase):
     def test_purge_removes_expired_everywhere(self):
         from modules.privacy import PrivacyEngine
+
         entry = self.storage.add_memory(content="私密", source_agent="owner")
         pe = PrivacyEngine(self.storage)
         pe.grant_access(entry.id, "bob", granted_by="owner", duration_hours=1)
@@ -235,8 +246,10 @@ class TestPrivacyGrantPurge(_StorageCase):
         g = pe._grants[entry.id][0]
         g.expires_at = time.time() - 10
         conn = self.storage._get_conn()
-        conn.execute("UPDATE access_grants SET expires_at=? WHERE grant_id=?",
-                     (time.time() - 10, g.grant_id))
+        conn.execute(
+            "UPDATE access_grants SET expires_at=? WHERE grant_id=?",
+            (time.time() - 10, g.grant_id),
+        )
         conn.commit()
         removed = pe.purge_expired_grants()
         self.assertEqual(removed, 1)
@@ -249,6 +262,7 @@ class TestPrivacyGrantPurge(_StorageCase):
 class TestSharedMemoryPurge(_StorageCase):
     def test_expired_shared_purged(self):
         from modules.federated import FederatedMemory
+
         fed = FederatedMemory(storage=self.storage, local_peer_id="local")
         fed.register_peer("p", "P", trust_level=0.9, public_key=fed.local_public_key)
         m = self.storage.add_memory(content="s")
@@ -263,38 +277,53 @@ class TestSharedMemoryPurge(_StorageCase):
 class TestAgentHeaderTrust(unittest.TestCase):
     def setUp(self):
         from api.server import MindForgeAPIHandler
+
         self.H = MindForgeAPIHandler
 
     def _h(self, headers=None):
         h = types.SimpleNamespace(headers=headers or {})
         # 绑定同一判定方法（其只依赖环境变量），便于以桩对象调用 _extract_actor
         h._client_identity_trusted = types.MethodType(
-            self.H._client_identity_trusted, h)
+            self.H._client_identity_trusted, h
+        )
         return h
 
     def test_default_ignores_spoofed_header(self):
-        env = {k: "" for k in ("MINDFORGE_API_KEY", "MINDFORGE_TRUST_AGENT_HEADER",
-                               "MINDFORGE_AGENT_ID")}
+        env = {
+            k: ""
+            for k in (
+                "MINDFORGE_API_KEY",
+                "MINDFORGE_TRUST_AGENT_HEADER",
+                "MINDFORGE_AGENT_ID",
+            )
+        }
         with mock.patch.dict(os.environ, env, clear=False):
             os.environ.pop("MINDFORGE_API_KEY", None)
             os.environ.pop("MINDFORGE_TRUST_AGENT_HEADER", None)
             os.environ.pop("MINDFORGE_AGENT_ID", None)
             self.assertEqual(
-                self.H._extract_actor(self._h({"X-Agent-Id": "eve"}), {}), "")
+                self.H._extract_actor(self._h({"X-Agent-Id": "eve"}), {}), ""
+            )
 
     def test_header_accepted_only_when_explicitly_trusted(self):
-        env = {"MINDFORGE_API_KEY": "secret",
-               "MINDFORGE_TRUST_AGENT_HEADER": "1"}
+        env = {"MINDFORGE_API_KEY": "secret", "MINDFORGE_TRUST_AGENT_HEADER": "1"}
         with mock.patch.dict(os.environ, env, clear=False):
             self.assertEqual(
-                self.H._extract_actor(self._h({"X-Agent-Id": "eve"}), {}), "eve")
+                self.H._extract_actor(self._h({"X-Agent-Id": "eve"}), {}), "eve"
+            )
 
     def test_api_key_without_flag_still_ignores_header(self):
+        # v5.7.3 行为变更：已配置 API Key 的部署中，未声明的调用者一律按
+        # anonymous 处理（fail-closed，仅可访问 PUBLIC 级记忆），不再回落
+        # 空身份放行隐私记忆。核心意图不变——伪造头 X-Agent-Id 仍被忽略。
         env = {"MINDFORGE_API_KEY": "secret", "MINDFORGE_TRUST_AGENT_HEADER": ""}
         with mock.patch.dict(os.environ, env, clear=False):
             os.environ.pop("MINDFORGE_TRUST_AGENT_HEADER", None)
+            os.environ.pop("MINDFORGE_AGENT_ID", None)
             self.assertEqual(
-                self.H._extract_actor(self._h({"X-Agent-Id": "eve"}), {}), "")
+                self.H._extract_actor(self._h({"X-Agent-Id": "eve"}), {}),
+                "anonymous",
+            )
 
 
 # ---------------- P2 #12：向量流式召回正确性 ----------------
@@ -318,7 +347,8 @@ class TestVectorSearchStreaming(_StorageCase):
             conn.execute(
                 "INSERT INTO memory_embeddings (memory_id, embedding, model_name,"
                 " dimension, created_at, updated_at) VALUES (?,?,?,?,?,?)",
-                (ids[name], blob, "fb", dim, now, now))
+                (ids[name], blob, "fb", dim, now, now),
+            )
         conn.commit()
         res = self.storage.vector_search(query_vector=[1.0, 0.0, 0.0, 0.0], top_k=2)
         self.assertTrue(res)
@@ -332,8 +362,12 @@ class TestBackupRotation(_StorageCase):
         bdir = os.path.join(self.tmp, "backups")
         os.makedirs(bdir, exist_ok=True)
         for i in range(12):
-            open(os.path.join(bdir, f"memory_backup_2026010{1 if i < 9 else 2}_"
-                                    f"{i:02d}0000.db"), "w").close()
+            open(
+                os.path.join(
+                    bdir, f"memory_backup_2026010{1 if i < 9 else 2}_{i:02d}0000.db"
+                ),
+                "w",
+            ).close()
         self.assertEqual(self.storage.delete_old_backups(bdir, keep_count=10), 2)
         remain = [f for f in os.listdir(bdir) if f.startswith("memory_backup_")]
         self.assertEqual(len(remain), 10)
@@ -366,6 +400,7 @@ class TestCorsHeaders(unittest.TestCase):
 
     def test_no_cors_headers_without_origin(self):
         from api.server import MindForgeAPIHandler as H
+
         stub = self._Stub()
         with mock.patch.dict(os.environ, {"MINDFORGE_CORS_ORIGIN": ""}, clear=False):
             os.environ.pop("MINDFORGE_CORS_ORIGIN", None)
@@ -375,10 +410,11 @@ class TestCorsHeaders(unittest.TestCase):
 
     def test_cors_headers_when_origin_set(self):
         from api.server import MindForgeAPIHandler as H
+
         stub = self._Stub()
-        with mock.patch.dict(os.environ,
-                             {"MINDFORGE_CORS_ORIGIN": "http://x.example"},
-                             clear=False):
+        with mock.patch.dict(
+            os.environ, {"MINDFORGE_CORS_ORIGIN": "http://x.example"}, clear=False
+        ):
             H._send_json(stub, {"ok": True})
         self.assertIn("Access-Control-Allow-Origin", stub.sent)
         self.assertIn("Access-Control-Allow-Methods", stub.sent)
@@ -390,13 +426,15 @@ class TestMcpAuthState(unittest.TestCase):
     def test_state_transitions_and_lock(self):
         from mcp.server import _AuthState
         import threading
+
         st = _AuthState()
         self.assertFalse(st.is_authed())
         st.login(100.0)
         self.assertTrue(st.is_authed())
         self.assertTrue(st.authorize(150.0, 30 * 60))  # 窗口内，刷新到 150
-        self.assertEqual(st.authorize(150.0 + 30 * 60 + 1, 30 * 60),
-                         "expired")  # 距上次活动超过 30 分钟
+        self.assertEqual(
+            st.authorize(150.0 + 30 * 60 + 1, 30 * 60), "expired"
+        )  # 距上次活动超过 30 分钟
         self.assertFalse(st.is_authed())
         st.login(1.0)
         st.reset()
@@ -408,11 +446,13 @@ class TestMcpAuthState(unittest.TestCase):
 class TestDefaultDbPath(unittest.TestCase):
     def test_env_override(self):
         from core.paths import get_default_db_path
+
         with mock.patch.dict(os.environ, {"MINDFORGE_DB_PATH": "/x/y.db"}, clear=False):
             self.assertEqual(get_default_db_path(), "/x/y.db")
 
     def test_default_is_stable_home_path(self):
         from core.paths import get_default_db_path
+
         env = dict(os.environ)
         env.pop("MINDFORGE_DB_PATH", None)
         with mock.patch.dict(os.environ, env, clear=True):
@@ -424,8 +464,8 @@ class TestDefaultDbPath(unittest.TestCase):
     def test_mcp_uses_shared_resolver(self):
         import inspect
         import mcp.server as mcp
-        self.assertIn("get_default_db_path",
-                      inspect.getsource(mcp.serve_forever))
+
+        self.assertIn("get_default_db_path", inspect.getsource(mcp.serve_forever))
 
 
 # ---------------- P3 #19 / #20 / #24：核验型回归 ----------------
@@ -434,6 +474,7 @@ class TestCodebaseConsistency(unittest.TestCase):
         import inspect
         import core.mindforge as mf
         import core.storage as storage
+
         src = inspect.getsource(mf._safe_path)
         self.assertIn("_storage_safe_path", src)
         # 功能等价：同一临时路径解析结果一致
@@ -448,6 +489,7 @@ class TestCodebaseConsistency(unittest.TestCase):
     def test_disk_probe_is_1mb_and_cached(self):
         import inspect
         import core.storage as storage
+
         src = inspect.getsource(storage.HardwareProfiler)
         self.assertIn("_probe_bytes = 1024 * 1024", src)
         storage.HardwareProfiler._cached_disk_type = None
@@ -458,6 +500,7 @@ class TestCodebaseConsistency(unittest.TestCase):
 
     def test_requirements_pin_within_pyproject_range(self):
         import re
+
         root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
         req = open(os.path.join(root, "requirements.txt"), encoding="utf-8").read()
         py = open(os.path.join(root, "pyproject.toml"), encoding="utf-8").read()

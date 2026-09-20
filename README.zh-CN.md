@@ -7,9 +7,16 @@
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-5.7.2-green.svg)](https://github.com/opok-ops/MindForge)
+[![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
+[![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
+[![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
+[![Last Commit](https://img.shields.io/github/last-commit/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/commits/master)
 [![CI](https://github.com/opok-ops/MindForge/actions/workflows/ci.yml/badge.svg)](https://github.com/opok-ops/MindForge/actions/workflows/ci.yml)
+[![Documentation](https://img.shields.io/badge/docs-pages-blue.svg)](https://opok-ops.github.io/MindForge/)
 
-> 🌐 [English](README.md) | 📖 [完整文档](docs/) | 📝 [更新日志](CHANGELOG.md) | ⭐ [讨论区](https://github.com/opok-ops/MindForge/discussions)
+> 🌐 [English](README.md) | 🌐 [Live Demo](https://opok-ops.github.io/MindForge/) | 📖 [完整文档](docs/) | 💬 [讨论区](https://github.com/opok-ops/MindForge/discussions) | ⭐ [版本发布](https://github.com/opok-ops/MindForge/releases) | 📝 [更新日志](CHANGELOG.md)
+
+**如果 MindForge 为你节省了时间，请点亮 Star ⭐ —— 这是对独立开发者最好的支持！**
 
 ---
 
@@ -28,6 +35,15 @@
 | **MCP Server** | ✅ 33 个工具 | ❌ | ❌ | ❌ |
 | **CLI** | ✅ 200+ 命令 | ❌ | ❌ | ❌ |
 | **开源协议** | MIT | Apache 2.0 | Apache 2.0 | Apache 2.0 |
+
+---
+
+## 为什么值得 Star ⭐？
+
+- **本地优先、隐私安全** —— 记忆永不离开你的设备，可选 AES-256-GCM 静态加密
+- **永久免费** —— MIT 协议，可自托管，零云依赖
+- **原生 MCP** —— 33 个 MCP 工具，分钟级接入 Claude Code、OpenClaw 或任意 MCP 客户端
+- **独立开发者维护** —— 每一颗 Star 都是对本地优先 AI 记忆方向最真实的认可
 
 ---
 

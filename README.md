@@ -8,6 +8,9 @@ Four-Tier Memory · Knowledge Graph · Local-First · AES-256-GCM Encryption · 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-5.7.2-green.svg)](https://github.com/opok-ops/MindForge/releases)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
+[![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
+[![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
+[![Last Commit](https://img.shields.io/github/last-commit/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/commits/master)
 [![CI](https://github.com/opok-ops/MindForge/actions/workflows/ci.yml/badge.svg)](https://github.com/opok-ops/MindForge/actions/workflows/ci.yml)
 [![Documentation](https://img.shields.io/badge/docs-pages-blue.svg)](https://opok-ops.github.io/MindForge/)
 
@@ -32,6 +35,15 @@ Most AI agent memory solutions are cloud-locked, flat, and slow. MindForge gives
 | **MCP Server** | ✅ 33 tools | ❌ | ❌ | ❌ |
 | **CLI** | ✅ 200+ commands | ❌ | ❌ | ❌ |
 | **License** | MIT | Apache 2.0 | Apache 2.0 | Apache 2.0 |
+
+---
+
+## Why Star ⭐ MindForge?
+
+- **Local-first & private** — your memories never leave your machine; optional AES-256-GCM at-rest encryption
+- **Free forever** — MIT license, self-hostable, zero cloud dependency
+- **MCP-native** — 33 MCP tools; drop into Claude Code, OpenClaw or any MCP client in minutes
+- **Solo-dev maintained** — every star is real signal that local-first agent memory matters
 
 ---
 

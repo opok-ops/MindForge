@@ -15,6 +15,7 @@
 | `MINDFORGE_API_KEY` | REST API 认证密钥 | **必须设置** | 非 localhost 绑定时强制要求 |
 | `MINDFORGE_MCP_SECRET` | MCP Server 共享密钥 | **必须设置** | 启用后 initialize 握手须携带 `_meta.authSecret` |
 | `MINDFORGE_ALLOW_NOAUTH` | 是否允许无认证启动 | `0` | 设为 `0` 强制 fail-closed，即使绑定 localhost 也须配密钥 |
+| `MINDFORGE_TRUST_PROXY` | 是否信任 HTTPS 反向代理 | `0` | 置 `1` 且请求带 `X-Forwarded-Proto: https` 时，API 下发 `Strict-Transport-Security` 响应头 |
 | `MINDFORGE_RATE_LIMIT` | API 速率限制（次/分钟） | `60` | 默认 60，按实际流量调整 |
 
 ## 生产部署 Checklist
@@ -24,7 +25,7 @@
 - [ ] 设置 `MINDFORGE_ALLOW_NOAUTH=0`
 - [ ] API 服务绑定 `127.0.0.1`，通过反向代理（Nginx/Caddy）对外暴露
 - [ ] 反向代理启用 TLS（Let's Encrypt 或自建证书）
-- [ ] 反向代理加 `X-Forwarded-For` 透传真实 IP（限流用）
+- [ ] 反向代理透传 `X-Forwarded-For`（限流用）与 `X-Forwarded-Proto: https`（HSTS 判定用），并设 `MINDFORGE_TRUST_PROXY=1` 让 API 下发 HSTS
 - [ ] 数据库文件和密钥文件权限 `600`，属主仅运行用户
 - [ ] 备份文件存储到独立加密卷
 - [ ] 开启审计日志（`audit.log`）并定期轮转

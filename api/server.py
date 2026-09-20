@@ -336,6 +336,12 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
     # v5.7.2 安全加固：服务端 TLS 启用时下发 HSTS（由 start_api_server 设置）
     _tls_enabled = False
 
+    # HTTPS 反向代理场景：显式信任代理（MINDFORGE_TRUST_PROXY=1）后，
+    # 请求带 X-Forwarded-Proto: https 时同样下发 HSTS（由 start_api_server 设置）。
+    # 默认关闭——纯 HTTP 直连绝不因客户端伪造的 X-Forwarded-Proto 下发 HSTS，
+    # 避免 HSTS pinning 攻击把浏览器钉死在某个不支持 HTTPS 的主机上。
+    _trust_proxy = False
+
     def _send_json(self, data, status=200):
         body = json.dumps(data, ensure_ascii=False, default=str).encode("utf-8")
         self.send_response(status)
@@ -351,8 +357,15 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Cache-Control", "no-store")
-        # 用 getattr 兜底：响应桩/测试对象可能不是 MindForgeAPIHandler 实例
+        # 用 getattr 兜底：响应桩/测试对象可能不是 MindForgeAPIHandler 实例。
+        # HSTS 下发条件（二选一）：
+        #   1) 服务端自启 TLS（_tls_enabled，由 ssl_certfile 启用）；
+        #   2) 显式信任 HTTPS 反代（MINDFORGE_TRUST_PROXY=1）且请求经
+        #      X-Forwarded-Proto: https 到达——纯 HTTP 直连绝不因伪造头下发。
         if getattr(self, "_tls_enabled", False):
+            self.send_header("Strict-Transport-Security", "max-age=31536000")
+        elif (getattr(self, "_trust_proxy", False)
+              and self.headers.get("X-Forwarded-Proto", "").lower() == "https"):
             self.send_header("Strict-Transport-Security", "max-age=31536000")
         # v5.4.8 安全修复：CORS 限制为配置的源（默认仅允许同源）
         allowed_origin = os.environ.get("MINDFORGE_CORS_ORIGIN", "")
@@ -881,6 +894,12 @@ def start_api_server(mindforge_instance, host="127.0.0.1", port=8080,
     use_https = bool(ssl_certfile)
     # v5.7.2 安全加固：TLS 启用时下发 HSTS；纯 HTTP 本地部署不下发（避免误伤）
     MindForgeAPIHandler._tls_enabled = use_https
+    # HTTPS 反向代理场景：MINDFORGE_TRUST_PROXY=1 显式信任代理后，
+    # 请求带 X-Forwarded-Proto: https 时同样下发 HSTS（见 _send_json）。
+    MindForgeAPIHandler._trust_proxy = (
+        os.environ.get("MINDFORGE_TRUST_PROXY", "0").strip().lower()
+        in ("1", "true", "yes", "on")
+    )
     if use_https:
         import ssl as _ssl
         if not ssl_keyfile:

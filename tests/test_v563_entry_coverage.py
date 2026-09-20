@@ -248,7 +248,7 @@ def _free_port() -> int:
 class TestRestAPIEntry(unittest.TestCase):
     """REST 入口层覆盖（P1 #12 / P2 #14 / P2 #15 / P2 #23）"""
 
-    _ENV_KEYS = ("MINDFORGE_API_KEY", "MINDFORGE_ALLOW_NOAUTH")
+    _ENV_KEYS = ("MINDFORGE_API_KEY", "MINDFORGE_ALLOW_NOAUTH", "MINDFORGE_TRUST_PROXY")
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="mf_api_")
@@ -356,6 +356,48 @@ class TestRestAPIEntry(unittest.TestCase):
         with mock.patch.dict(os.environ, {}, clear=True):
             with self.assertRaises(SecurityError):
                 start_api_server(self.cm, host="0.0.0.0", port=self.port)
+
+    def test_security_headers_no_store_on_all_responses(self):
+        """所有 API 响应带 Cache-Control: no-store + nosniff（敏感记忆禁缓存）"""
+        t = self._boot(MINDFORGE_ALLOW_NOAUTH="1")
+        try:
+            with urllib.request.urlopen(
+                    f"http://127.0.0.1:{self.port}/api/health", timeout=5) as resp:
+                self.assertEqual(resp.headers.get("Cache-Control"), "no-store")
+                self.assertEqual(resp.headers.get("X-Content-Type-Options"), "nosniff")
+                self.assertEqual(resp.headers.get("X-Frame-Options"), "DENY")
+        finally:
+            self.cm.close()
+
+    def test_hsts_not_sent_without_tls_or_trust(self):
+        """纯 HTTP 直连（无 TLS、未信任代理）→ 伪造 X-Forwarded-Proto 也不下发 HSTS"""
+        t = self._boot(MINDFORGE_ALLOW_NOAUTH="1")
+        try:
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{self.port}/api/health",
+                headers={"X-Forwarded-Proto": "https"})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                self.assertIsNone(resp.headers.get("Strict-Transport-Security"))
+        finally:
+            self.cm.close()
+
+    def test_hsts_sent_when_trusting_https_proxy(self):
+        """MINDFORGE_TRUST_PROXY=1 + X-Forwarded-Proto: https → 下发 HSTS"""
+        t = self._boot(MINDFORGE_ALLOW_NOAUTH="1", MINDFORGE_TRUST_PROXY="1")
+        try:
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{self.port}/api/health",
+                headers={"X-Forwarded-Proto": "https"})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                self.assertEqual(
+                    resp.headers.get("Strict-Transport-Security"),
+                    "max-age=31536000")
+            # 同部署下普通 HTTP 请求（无 https 标记）不下发
+            with urllib.request.urlopen(
+                    f"http://127.0.0.1:{self.port}/api/health", timeout=5) as resp2:
+                self.assertIsNone(resp2.headers.get("Strict-Transport-Security"))
+        finally:
+            self.cm.close()
 
 
 class TestRateLimitKeyNormalization(unittest.TestCase):

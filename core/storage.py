@@ -393,6 +393,8 @@ class MemoryEntry:
     starred: bool = False
     pinned: bool = False
     expires_at: float = 0.0  # v5.5.2: TTL expiration timestamp (0 = never expires)
+    valid_from: float = 0.0  # v5.7.6: bi-temporal 事实有效起始时间（0 = 无边界）
+    valid_to: float = 0.0    # v5.7.6: bi-temporal 事实有效截止时间（0 = 无边界，仍有效）
     metadata: Dict[str, Any] = field(default_factory=dict)
     encrypted: bool = False
     ciphertext: Optional[bytes] = None
@@ -427,6 +429,8 @@ class MemoryEntry:
             "starred": self.starred,
             "pinned": self.pinned,
             "expires_at": self.expires_at,
+            "valid_from": self.valid_from,
+            "valid_to": self.valid_to,
             "metadata": self.metadata,
         }
 
@@ -774,6 +778,8 @@ class StorageEngine:
                 strength REAL DEFAULT 1.0,
                 starred INTEGER DEFAULT 0,
                 pinned INTEGER DEFAULT 0,
+                valid_from REAL DEFAULT 0,
+                valid_to REAL DEFAULT 0,
                 metadata TEXT DEFAULT '{}',
                 encrypted INTEGER DEFAULT 0
             );
@@ -1025,6 +1031,15 @@ class StorageEngine:
         except sqlite3.OperationalError:
             pass  # column already exists
 
+        # v5.7.6 migration: add valid_from/valid_to columns for bi-temporal facts
+        try:
+            conn.execute("ALTER TABLE memories ADD COLUMN valid_from REAL DEFAULT 0")
+            conn.execute("ALTER TABLE memories ADD COLUMN valid_to REAL DEFAULT 0")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_valid_to ON memories(valid_to)")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # columns already exist
+
     @staticmethod
     def _strip_control(text: Optional[str]) -> str:
         """v5.4.0 安全加固：过滤控制字符（保留 \\t\\n\\r，过滤 \\x00-\\x1f 和 \\x7f）。
@@ -1183,11 +1198,14 @@ class StorageEngine:
                    starred: bool = False,
                    pinned: bool = False,
                    expires_at: float = 0.0,
+                   valid_from: float = 0.0,
+                   valid_to: float = 0.0,
                    metadata: Optional[Dict[str, Any]] = None) -> MemoryEntry:
         """添加记忆
 
         v5.5.2 新增 expires_at 参数（TTL 过期时间戳，0=永不过期）。
         v5.5.6 新增 pinned 参数（置顶标记）。
+        v5.7.6 新增 valid_from/valid_to 参数（bi-temporal 事实有效窗口，0=无边界）。
         """
         # v5.4.7 修复 L-8：拒绝 None 或空内容
         if content is None:
@@ -1256,6 +1274,8 @@ class StorageEngine:
             starred=starred,
             pinned=pinned,
             expires_at=float(expires_at) if expires_at else 0.0,
+            valid_from=float(valid_from) if valid_from else 0.0,
+            valid_to=float(valid_to) if valid_to else 0.0,
             encrypted=self.encrypted,
             ciphertext=ciphertext,
             nonce=nonce,
@@ -1269,8 +1289,9 @@ class StorageEngine:
                 privacy, importance, memory_type, layer,
                 source_session, source_agent, created_at, updated_at,
                 last_accessed_at, access_count, consolidation_count,
-                forgetting_score, strength, starred, pinned, metadata, encrypted, expires_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                forgetting_score, strength, starred, pinned, metadata, encrypted,
+                expires_at, valid_from, valid_to
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             entry.id, entry.content, entry.ciphertext, entry.nonce, entry.salt,
             entry.category, json.dumps(entry.tags, ensure_ascii=False),
@@ -1281,7 +1302,7 @@ class StorageEngine:
             entry.forgetting_score, entry.strength, int(entry.starred),
             int(entry.pinned),
             json.dumps(entry.metadata, ensure_ascii=False), int(entry.encrypted),
-            entry.expires_at
+            entry.expires_at, entry.valid_from, entry.valid_to
         ))
 
         if not self.encrypted:
@@ -1562,6 +1583,8 @@ class StorageEngine:
                       starred: Optional[bool] = None,
                       pinned: Optional[bool] = None,
                       metadata: Optional[Dict[str, Any]] = None,
+                      valid_from: Optional[float] = None,
+                      valid_to: Optional[float] = None,
                       actor: str = "",
                       session_id: str = "") -> bool:
         """更新记忆
@@ -1651,6 +1674,12 @@ class StorageEngine:
         if clean_metadata is not None:
             updates.append("metadata = ?")
             params.append(json.dumps(clean_metadata, ensure_ascii=False))
+        if valid_from is not None:
+            updates.append("valid_from = ?")
+            params.append(float(valid_from))
+        if valid_to is not None:
+            updates.append("valid_to = ?")
+            params.append(float(valid_to))
 
         if not updates:
             return False
@@ -1737,14 +1766,228 @@ class StorageEngine:
 
         # v5.4.5: 内容变更时重新生成嵌入向量（失败不影响更新）
         # v5.7.0 P2：嵌入失败属检索能力降级，记录警告便于排查
-        if content is not None:
-            try:
-                self._store_embedding(entry_id, content)
-            except Exception as _emb_err:
-                logger.warning("更新记忆 %s 后重新生成嵌入失败（向量检索降级）: %s",
-                               entry_id, _emb_err)
-
         return True
+
+    def supersede(self,
+                  entry_id: str,
+                  content: str,
+                  category: Optional[str] = None,
+                  tags: Optional[List[str]] = None,
+                  privacy: Optional[PrivacyLevel] = None,
+                  importance: Optional[Importance] = None,
+                  layer: Optional[MemoryLayer] = None,
+                  metadata: Optional[Dict[str, Any]] = None,
+                  actor: str = "",
+                  session_id: str = "",
+                  valid_from: Optional[float] = None) -> Optional[str]:
+        """Bi-temporal 事实取代（v5.7.6 新增）
+
+        与 Zep/Graphiti 的「事实矛盾自动失效而非删除」对齐：
+        若旧事实仍处于开放窗口（valid_to=0），先关闭其有效窗口
+        （valid_to=now），再以 valid_from=now 创建新事实，并建立
+        supersedes 关联，完整保留历史版本。
+
+        Returns:
+            新记忆 id；旧记忆不存在或已删除时返回 None。
+        """
+        conn = self._get_conn()
+        old = self.get_memory(entry_id)
+        if old is None or old.category == "trash":
+            return None
+        now = time.time()
+        # 关闭旧事实的开放窗口（保留历史，不删除）
+        if not old.valid_to:
+            conn.execute(
+                "UPDATE memories SET valid_to = ?, updated_at = ? WHERE id = ?",
+                (now, now, entry_id)
+            )
+            try:
+                self._memory_cache.invalidate(entry_id)
+            except Exception:
+                pass
+        # 新事实继承旧条目未显式覆盖的字段
+        new_cat = category if category is not None else old.category
+        new_tags = tags if tags is not None else (list(old.tags) if old.tags else None)
+        new_privacy = privacy if privacy is not None else old.privacy
+        new_importance = importance if importance is not None else old.importance
+        new_layer = layer if layer is not None else old.layer
+        new_meta = metadata if metadata is not None else (dict(old.metadata) if old.metadata else None)
+        new_entry = self.add_memory(
+            content=content,
+            category=new_cat,
+            tags=new_tags,
+            privacy=new_privacy,
+            importance=new_importance,
+            layer=new_layer,
+            source_session=session_id or old.source_session,
+            source_agent=actor or old.source_agent,
+            metadata=new_meta,
+            valid_from=float(valid_from) if valid_from else now,
+        )
+        # 建立 supersedes 关联（新 → 旧），并记录审计
+        try:
+            conn.execute(
+                "INSERT OR IGNORE INTO memory_links (id, source_id, target_id, link_type, note, created_at) "
+                "VALUES (?, ?, ?, 'supersedes', '', ?)",
+                (str(uuid.uuid4()), new_entry.id, entry_id, now)
+            )
+        except sqlite3.OperationalError as _e:
+            logger.warning("supersede 关联写入失败: %s", _e)
+        self._add_audit("supersede", new_entry.id, actor, session_id,
+                        new_privacy.value if new_privacy else "",
+                        details={"supersedes": entry_id})
+        conn.commit()
+        return new_entry.id
+
+    def valid_at(self,
+                 timestamp: Optional[float] = None,
+                 category: Optional[str] = None,
+                 limit: int = 50) -> List[MemoryEntry]:
+        """按事实有效时间查询（Bi-temporal as-of，v5.7.6 新增）
+
+        返回在 timestamp（默认当前时间）处于有效窗口
+        （valid_from <= ts 且（valid_to = 0 或 valid_to > ts））的记忆，
+        排除回收站。timestamp 传 0 或 None 表示只看「当前有效」。
+        """
+        ts = time.time() if timestamp is None else float(timestamp)
+        sql = ("SELECT * FROM memories WHERE category != 'trash' "
+               "AND (valid_from = 0 OR valid_from <= ?) "
+               "AND (valid_to = 0 OR valid_to > ?) ")
+        params: List[Any] = [ts, ts]
+        if category:
+            sql += "AND category = ? "
+            params.append(category)
+        sql += "ORDER BY updated_at DESC LIMIT ?"
+        params.append(int(limit))
+        rows = self._get_conn().execute(sql, params).fetchall()
+        return [self._row_to_entry(r) for r in rows]
+
+    def gdpr_report(self) -> Dict[str, Any]:
+        """GDPR 数据合规报告（v5.7.6 新增）
+
+        统计各类个人数据的存储量、加密状态与本地边界，
+        供数据主体行使知情权与审计用途。
+        """
+        conn = self._get_conn()
+
+        def _count(table: str) -> int:
+            try:
+                return int(conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+            except sqlite3.OperationalError:
+                return 0
+
+        return {
+            "generated_at": time.time(),
+            "db_path": str(getattr(self, "db_path", "")),
+            "encrypted_at_rest": bool(self.encrypted),
+            "data_categories": {
+                "memories": _count("memories"),
+                "memory_versions": _count("memory_versions"),
+                "memory_links": _count("memory_links"),
+                "audit_log": _count("audit_log"),
+                "archived_memories": _count("archived_memories"),
+            },
+            "retention_mechanisms": {
+                "trash": True,
+                "ttl_expires_at": True,
+                "bi_temporal_valid_to": True,
+            },
+            "rights_exercisable": ["export_all", "erase", "delete_memory", "purge_trash"],
+            "local_only": True,
+        }
+
+    def gdpr_export_all(self) -> Dict[str, Any]:
+        """导出全部个人数据（数据可携权，v5.7.6 新增）
+
+        一次性导出 memories（全字段）、版本历史、关联、审计日志、
+        搜索历史与归档记忆；密文模式下 content 为密文（附解密说明）。
+        """
+        conn = self._get_conn()
+
+        def _all(table: str, order: str = "created_at") -> List[Dict[str, Any]]:
+            try:
+                rows = conn.execute(f"SELECT * FROM {table} ORDER BY {order}").fetchall()
+            except sqlite3.OperationalError:
+                return []
+            out = []
+            for r in rows:
+                d = {k: r[k] for k in r.keys()}
+                for k in ("tags", "metadata", "details"):
+                    if k in d and isinstance(d[k], str):
+                        try:
+                            d[k] = json.loads(d[k])
+                        except (ValueError, json.JSONDecodeError):
+                            pass
+                out.append(d)
+            return out
+
+        return {
+            "format": "mindforge-gdpr-export",
+            "version": "1.0",
+            "exported_at": time.time(),
+            "encrypted_at_rest": bool(self.encrypted),
+            "memories": _all("memories"),
+            "memory_versions": _all("memory_versions", "changed_at"),
+            "memory_links": _all("memory_links"),
+            "audit_log": _all("audit_log", "timestamp"),
+            "archived_memories": _all("archived_memories", "archived_at"),
+        }
+
+    def gdpr_erase_all(self, backup: bool = True,
+                       actor: str = "gdpr_erase",
+                       key_file: Optional[str] = None) -> Dict[str, Any]:
+        """删除权（被遗忘权）实现（v5.7.6 新增）
+
+        先自动创建完整备份（数据库 + 密钥文件），再永久删除
+        memory_links / memory_versions / audit_log / archived_memories /
+        memories / memory_fts，并清空缓存与访问计数挂账。
+        返回各表删除计数与备份路径。不可逆，调用方必须先提示确认。
+        """
+        backup_path = ""
+        if backup:
+            try:
+                import shutil
+                backup_info = self.create_backup()
+                if backup_info.get("success"):
+                    backup_path = str(backup_info["path"])
+                    key_path = key_file or getattr(self, "key_file", "")
+                    if key_path and Path(key_path).exists():
+                        try:
+                            shutil.copy2(key_path, str(Path(backup_path).parent / "memory_backup.key"))
+                        except (OSError, IOError) as _ke:
+                            logger.warning("gdpr erase 密钥备份失败: %s", _ke)
+            except Exception as e:
+                logger.warning("gdpr erase 备份失败（仍继续删除）: %s", e)
+        conn = self._get_conn()
+        deleted: Dict[str, int] = {}
+        # 先删子表（外键引用），再删主表
+        for table in ("memory_links", "memory_versions", "audit_log",
+                      "archived_memories", "memories"):
+            try:
+                deleted[table] = int(conn.execute(f"DELETE FROM {table}").rowcount)
+            except sqlite3.OperationalError as e:
+                deleted[table] = 0
+                logger.warning("gdpr erase 清理 %s 失败: %s", table, e)
+        try:
+            # contentless FTS5 表不能用 DELETE，需用 delete-all 特殊命令
+            conn.execute("INSERT INTO memory_fts(memory_fts) VALUES('delete-all')")
+        except sqlite3.OperationalError as e:
+            logger.warning("gdpr erase 清理 FTS 失败: %s", e)
+        conn.commit()
+        cache = getattr(self, "_memory_cache", None)
+        if cache is not None and hasattr(cache, "clear"):
+            try:
+                cache.clear()
+            except Exception:
+                pass
+        with self._access_lock:
+            if hasattr(self, "_access_pending"):
+                self._access_pending.clear()
+            if hasattr(self, "_access_last_flush"):
+                self._access_last_flush.clear()
+        self._add_audit("gdpr_erase", "", actor, "", "PUBLIC",
+                        details={"backup": backup_path, "deleted": deleted})
+        return {"deleted": deleted, "backup": backup_path}
 
     @_with_rollback
     def bulk_update_memory_fields(self,
@@ -6605,6 +6848,8 @@ class StorageEngine:
             starred=bool(row["starred"]) if "starred" in row.keys() else False,
             pinned=bool(row["pinned"]) if "pinned" in row.keys() else False,
             expires_at=float(row["expires_at"]) if "expires_at" in row.keys() and row["expires_at"] else 0.0,
+            valid_from=float(row["valid_from"]) if "valid_from" in row.keys() and row["valid_from"] else 0.0,
+            valid_to=float(row["valid_to"]) if "valid_to" in row.keys() and row["valid_to"] else 0.0,
             metadata=meta_val,
             encrypted=bool(row["encrypted"]),
             ciphertext=row["ciphertext"],
@@ -6750,7 +6995,9 @@ class StorageEngine:
                           # v5.5.0 新增审计动作
                           "deduplicate_merge", "recalibrate", "reinforce",
                           # v5.5.5 fix: evolve 加入白名单
-                          "evolve"}
+                          "evolve",
+                          # v5.7.6 新增：bi-temporal 取代 + GDPR 被遗忘权
+                          "supersede", "gdpr_erase"}
         # v5.4.2：高敏感操作，审计失败时 fail-closed
         HIGH_SENSITIVE_ACTIONS = {"delete", "purge", "grant", "revoke", "forget",
                                   "agent_purge", "agent_forget"}

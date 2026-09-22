@@ -103,7 +103,7 @@ except ImportError:
     except (ImportError, ValueError):
         # 兜底值：仅当 core/version 完全不可导入时启用。发版时必须与
         # core/version.py 的 __version__ 一起更新（见发版清单），否则漂移。
-        __version__ = "5.7.5"
+        __version__ = "5.7.6"
 
 # 懒加载 modules：仅在对应命令执行时才导入，大幅加速 CLI 启动
 _modules_cache = {}
@@ -541,6 +541,8 @@ def cmd_add(args):
         source_session=args.session,
         source_agent=args.agent,
         starred=getattr(args, "star", False),
+        valid_from=getattr(args, "valid_from", 0.0),
+        valid_to=getattr(args, "valid_to", 0.0),
     )
 
     if getattr(args, "json_output", False):
@@ -703,6 +705,8 @@ def cmd_update(args):
             args.importance,
             args.layer,
             starred is not None,
+            getattr(args, "valid_from", None) is not None,
+            getattr(args, "valid_to", None) is not None,
         ]
     ):
         print(c("⚠️  请至少指定一个要更新的字段", "yellow"))
@@ -719,6 +723,8 @@ def cmd_update(args):
         starred=starred,
         actor=args.agent,
         session_id=args.session,
+        valid_from=getattr(args, "valid_from", None),
+        valid_to=getattr(args, "valid_to", None),
     )
 
     if success:
@@ -728,6 +734,140 @@ def cmd_update(args):
 
     cm.close()
     return 0 if success else 1
+
+
+def cmd_supersede(args):
+    """事实取代：关闭旧事实有效窗口并创建新事实（v5.7.6 新增）"""
+    cm = _get_memory(args)
+    new_id = cm.supersede(
+        entry_id=args.id,
+        content=args.content,
+        category=args.category,
+        tags=args.tags,
+        privacy=PrivacyLevel.from_string(args.privacy) if args.privacy else None,
+        importance=Importance.from_string(args.importance) if args.importance else None,
+        layer=MemoryLayer.from_string(args.layer) if args.layer else None,
+        actor=args.agent,
+        session_id=args.session,
+        valid_from=args.valid_from,
+    )
+    if not new_id:
+        print(c("❌ 取代失败：记忆不存在或无权限", "red"))
+        cm.close()
+        return 1
+    print(c("\n✅ 事实已取代（旧版本保留在历史中）", "green"))
+    print(f"   旧记忆: {args.id[:16]}...（有效窗口已关闭）")
+    print(f"   新记忆: {new_id}")
+    cm.close()
+    return 0
+
+
+def cmd_valid_at(args):
+    """按事实有效时间查询（Bi-temporal as-of，v5.7.6 新增）"""
+    cm = _get_memory(args)
+    ts = args.ts
+    entries = cm.valid_at(
+        timestamp=ts,
+        category=args.category,
+        limit=args.limit,
+        actor=args.agent,
+        session_id=args.session,
+    )
+    if getattr(args, "json_output", False):
+        _json_out(
+            {
+                "as_of": ts,
+                "count": len(entries),
+                "memories": [
+                    {
+                        "id": e.id,
+                        "content": e.content,
+                        "category": e.category,
+                        "valid_from": e.valid_from,
+                        "valid_to": e.valid_to,
+                        "updated_at": e.updated_at,
+                    }
+                    for e in entries
+                ],
+            }
+        )
+        cm.close()
+        return 0
+    label = format_time(ts) if ts else "当前时间"
+    print(c(f"\n📅 {label} 时有效的记忆（{len(entries)} 条）", "bold"))
+    for e in entries:
+        vf = format_time(e.valid_from) if e.valid_from else "-"
+        vt = format_time(e.valid_to) if e.valid_to else "∞"
+        print(f"\n  [{e.category}] {e.content[:120]}")
+        print(f"    有效窗口: {vf} → {vt}")
+    cm.close()
+    return 0
+
+
+def cmd_gdpr_report(args):
+    """GDPR 数据合规报告（v5.7.6 新增）"""
+    cm = _get_memory(args)
+    rep = cm.gdpr_report()
+    if getattr(args, "json_output", False):
+        _json_out(rep)
+        cm.close()
+        return 0
+    print(c("\n📋 GDPR 数据合规报告", "bold"))
+    print("=" * 56)
+    print(f"数据库: {rep.get('db_path', '')}")
+    print(f"静态加密: {'是' if rep.get('encrypted_at_rest') else '否'}")
+    print(f"本地存储: {'是' if rep.get('local_only') else '否'}")
+    print(c("\n数据类别与数量", "cyan"))
+    for k, v in rep.get("data_categories", {}).items():
+        print(f"  {k:<22} {v}")
+    print(c("\n留存机制", "cyan"))
+    for k, v in rep.get("retention_mechanisms", {}).items():
+        print(f"  {k:<22} {'启用' if v else '未启用'}")
+    print(c("\n可行使权利", "cyan"))
+    for r in rep.get("rights_exercisable", []):
+        print(f"  - {r}")
+    print(c("\n说明：本报告仅反映本地数据状态；MindForge 默认数据不出本机。", "yellow"))
+    cm.close()
+    return 0
+
+
+def cmd_gdpr_export_all(args):
+    """导出全部个人数据（数据可携权，v5.7.6 新增）"""
+    cm = _get_memory(args)
+    data = cm.gdpr_export_all()
+    try:
+        with open(args.output, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except OSError as e:
+        print(c(f"❌ 导出失败：{e}", "red"))
+        cm.close()
+        return 1
+    print(c(f"\n✅ 已导出 {len(data.get('memories', []))} 条记忆到 {args.output}", "green"))
+    print(
+        f"   包含: 版本历史 {len(data.get('memory_versions', []))} 条 / "
+        f"审计日志 {len(data.get('audit_log', []))} 条 / "
+        f"关联 {len(data.get('memory_links', []))} 条 / "
+        f"归档 {len(data.get('archived_memories', []))} 条"
+    )
+    cm.close()
+    return 0
+
+
+def cmd_gdpr_erase(args):
+    """删除权（被遗忘权）：永久删除全部个人数据（v5.7.6 新增，不可逆）"""
+    if not args.force:
+        print(c("\n⚠️  将永久删除全部记忆、版本历史、审计日志与关联数据！", "red"))
+        print(c("   该操作不可逆。加 --force 确认执行（执行前自动创建备份）。", "yellow"))
+        return 1
+    cm = _get_memory(args)
+    res = cm.gdpr_erase_all(backup=not args.no_backup, actor="cli_gdpr_erase")
+    print(c("\n✅ 数据已擦除（被遗忘权已执行）", "green"))
+    for k, v in res.get("deleted", {}).items():
+        print(f"   {k:<22} 删除 {v} 条")
+    if res.get("backup"):
+        print(f"   擦除前备份: {res['backup']}")
+    cm.close()
+    return 0
 
 
 def cmd_delete(args):
@@ -2967,6 +3107,18 @@ def main(argv=None):
     )
     p_add.add_argument("--agent", default="cli", help="Agent ID")
     p_add.add_argument("--star", action="store_true", help="添加后直接收藏")
+    p_add.add_argument(
+        "--valid-from",
+        type=float,
+        default=0.0,
+        help="事实有效起始时间（Unix 秒，v5.7.6 bi-temporal；0=无边界）",
+    )
+    p_add.add_argument(
+        "--valid-to",
+        type=float,
+        default=0.0,
+        help="事实有效截止时间（Unix 秒，v5.7.6 bi-temporal；0=无边界/仍有效）",
+    )
 
     p_search = sub.add_parser("search", help="搜索记忆", parents=[json_parser])
     p_search.add_argument("query", help="搜索查询")
@@ -3047,6 +3199,80 @@ def main(argv=None):
     p_update.add_argument("--unstar", action="store_true", help="取消收藏")
     p_update.add_argument("--agent", default="cli", help="Agent ID")
     p_update.add_argument("--session", default="cli", help="会话 ID")
+    p_update.add_argument(
+        "--valid-from",
+        type=float,
+        help="事实有效起始时间（Unix 秒，v5.7.6 bi-temporal）",
+    )
+    p_update.add_argument(
+        "--valid-to",
+        type=float,
+        help="事实有效截止时间（Unix 秒，v5.7.6 bi-temporal）",
+    )
+
+    p_supersede = sub.add_parser(
+        "supersede",
+        help="事实取代：关闭旧事实窗口并创建新事实（v5.7.6 新增）",
+        parents=[json_parser],
+    )
+    p_supersede.add_argument("id", help="要取代的旧记忆 ID")
+    p_supersede.add_argument("content", help="新事实内容")
+    p_supersede.add_argument("--category", "-c", help="新分类（默认继承旧事实）")
+    p_supersede.add_argument("--tags", "-t", nargs="+", help="新标签（默认继承旧事实）")
+    p_supersede.add_argument(
+        "--privacy",
+        "-p",
+        choices=["PUBLIC", "INTERNAL", "PRIVATE", "STRICT"],
+        help="隐私等级（默认继承旧事实）",
+    )
+    p_supersede.add_argument(
+        "--importance",
+        "-i",
+        choices=["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+        help="重要性（默认继承旧事实）",
+    )
+    p_supersede.add_argument(
+        "--layer",
+        "-l",
+        choices=["sensory", "short_term", "long_term", "permanent"],
+        help="层级（默认继承旧事实）",
+    )
+    p_supersede.add_argument(
+        "--valid-from",
+        type=float,
+        default=None,
+        help="新事实有效起始时间（Unix 秒，默认=当前时间）",
+    )
+    p_supersede.add_argument("--agent", default="cli", help="Agent ID")
+    p_supersede.add_argument("--session", default="", help="会话 ID")
+
+    p_valid_at = sub.add_parser(
+        "valid-at", help="按事实有效时间查询（v5.7.6 新增）", parents=[json_parser]
+    )
+    p_valid_at.add_argument(
+        "--ts", type=float, default=None, help="Unix 时间戳（默认=当前时间）"
+    )
+    p_valid_at.add_argument("--category", "-c", help="分类筛选")
+    p_valid_at.add_argument("--limit", type=int, default=50, help="数量限制")
+    p_valid_at.add_argument("--agent", default="", help="Agent ID")
+    p_valid_at.add_argument("--session", default="", help="会话 ID")
+
+    p_gdpr_report = sub.add_parser(
+        "gdpr-report", help="GDPR 数据合规报告（v5.7.6 新增）", parents=[json_parser]
+    )
+    p_gdpr_export_all = sub.add_parser(
+        "gdpr-export-all",
+        help="导出全部个人数据（数据可携权，v5.7.6 新增）",
+    )
+    p_gdpr_export_all.add_argument("output", help="导出 JSON 文件路径")
+    p_gdpr_erase = sub.add_parser(
+        "gdpr-erase",
+        help="删除权：永久擦除全部个人数据（v5.7.6 新增，不可逆）",
+    )
+    p_gdpr_erase.add_argument("--force", action="store_true", help="确认执行（不可逆）")
+    p_gdpr_erase.add_argument(
+        "--no-backup", action="store_true", help="跳过擦除前自动备份"
+    )
 
     p_delete = sub.add_parser(
         "delete", help="删除记忆（v5.1.1 补全）", parents=[json_parser]
@@ -6349,6 +6575,12 @@ def _main_dispatch(args, parser=None):
         # v5.2.7 新增：记忆版本历史
         "history": cmd_history,
         "rollback": cmd_rollback,
+        # v5.7.6 新增：Bi-temporal 事实时序 + GDPR 合规工具包
+        "supersede": cmd_supersede,
+        "valid-at": cmd_valid_at,
+        "gdpr-report": cmd_gdpr_report,
+        "gdpr-export-all": cmd_gdpr_export_all,
+        "gdpr-erase": cmd_gdpr_erase,
         # v5.2.8 新增
         "export-csv": cmd_export_csv,
         "diff": cmd_diff,

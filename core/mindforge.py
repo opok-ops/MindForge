@@ -396,11 +396,14 @@ class MindForge:
             starred: bool = False,
             pinned: bool = False,
             expires_at: float = 0.0,
+            valid_from: float = 0.0,
+            valid_to: float = 0.0,
             metadata: Optional[Dict[str, Any]] = None) -> MemoryEntry:
         """添加一条记忆到存储并建立索引。
 
         v5.5.2 新增 expires_at 参数（TTL 过期时间戳，0=永不过期）。
         v5.5.6 新增 pinned 参数（置顶标记）。
+        v5.7.6 新增 valid_from/valid_to 参数（bi-temporal 事实有效窗口，0=无边界）。
 
         Args:
             content: 记忆内容文本。
@@ -456,6 +459,8 @@ class MindForge:
             starred=starred,
             pinned=pinned,
             expires_at=expires_at,
+            valid_from=valid_from,
+            valid_to=valid_to,
             metadata=metadata,
         )
 
@@ -660,11 +665,14 @@ class MindForge:
                starred: Optional[bool] = None,
                pinned: Optional[bool] = None,
                metadata: Optional[Dict[str, Any]] = None,
+               valid_from: Optional[float] = None,
+               valid_to: Optional[float] = None,
                actor: str = "",
                session_id: str = "") -> bool:
         """更新记忆
 
         v5.5.6 新增 pinned 参数。
+        v5.7.6 新增 valid_from/valid_to 参数（bi-temporal 事实有效窗口）。
         """
         # v5.6.2 安全修复：隐私访问控制
         entry = self._storage.get_memory(memory_id, actor, session_id)
@@ -685,6 +693,8 @@ class MindForge:
             starred=starred,
             pinned=pinned,
             metadata=metadata,
+            valid_from=valid_from,
+            valid_to=valid_to,
             actor=actor,
             session_id=session_id,
         )
@@ -705,6 +715,88 @@ class MindForge:
                 logger.warning("Failed to re-index memory %s after update: %s", memory_id, e)
 
         return success
+
+    def supersede(self,
+                  entry_id: str,
+                  content: str,
+                  category: Optional[str] = None,
+                  tags: Optional[List[str]] = None,
+                  privacy: Optional[PrivacyLevel] = None,
+                  importance: Optional[Importance] = None,
+                  layer: Optional[MemoryLayer] = None,
+                  metadata: Optional[Dict[str, Any]] = None,
+                  actor: str = "",
+                  session_id: str = "",
+                  valid_from: Optional[float] = None) -> Optional[str]:
+        """Bi-temporal 事实取代（v5.7.6 新增）
+
+        关闭旧事实的有效窗口并创建新事实（旧版本保留在版本历史中），
+        返回新记忆 id；旧记忆不存在或无权限时返回 None。
+        """
+        old = self._storage.get_memory(entry_id, actor, session_id)
+        if old is None:
+            return None
+        ok, _reason = self.privacy_engine.check_access(old, actor, session_id)
+        if not ok:
+            return None
+        new_id = self._storage.supersede(
+            entry_id=entry_id,
+            content=content,
+            category=category,
+            tags=tags,
+            privacy=privacy,
+            importance=importance,
+            layer=layer,
+            metadata=metadata,
+            actor=actor,
+            session_id=session_id,
+            valid_from=valid_from,
+        )
+        if new_id:
+            try:
+                self._index.index_memory(
+                    new_id,
+                    content,
+                    metadata={"category": category or (old.category if old else "general"),
+                              "tags": tags or (old.tags if old else []),
+                              "importance": (importance.value if hasattr(importance, 'value') else
+                                              (old.importance.value if old and hasattr(old.importance, 'value') else "MEDIUM"))},
+                )
+            except Exception as e:
+                logger.warning("supersede 新记忆 %s 建索引失败: %s", new_id, e)
+        return new_id
+
+    def valid_at(self,
+                 timestamp: Optional[float] = None,
+                 category: Optional[str] = None,
+                 limit: int = 50,
+                 actor: str = "",
+                 session_id: str = "") -> List[MemoryEntry]:
+        """按事实有效时间查询（Bi-temporal as-of，v5.7.6 新增）
+
+        返回在 timestamp（默认当前时间）处于有效窗口的记忆，并执行隐私过滤。
+        """
+        entries = self._storage.valid_at(timestamp=timestamp, category=category, limit=limit)
+        result = []
+        for e in entries:
+            ok, _reason = self.privacy_engine.check_access(e, actor, session_id)
+            if ok:
+                result.append(e)
+        return result
+
+    def gdpr_report(self) -> Dict[str, Any]:
+        """GDPR 数据合规报告（v5.7.6 新增）"""
+        return self._storage.gdpr_report()
+
+    def gdpr_export_all(self) -> Dict[str, Any]:
+        """导出全部个人数据（数据可携权，v5.7.6 新增）"""
+        return self._storage.gdpr_export_all()
+
+    def gdpr_erase_all(self, backup: bool = True, actor: str = "gdpr_erase") -> Dict[str, Any]:
+        """删除权（被遗忘权）实现（v5.7.6 新增，不可逆）"""
+        key_file = getattr(self.config, "key_file", None) or None
+        return self._storage.gdpr_erase_all(backup=backup, actor=actor,
+                                            key_file=key_file)
 
     def delete(self, memory_id: str, actor: str = "",
                session_id: str = "", hard_delete: bool = False) -> bool:

@@ -23,6 +23,7 @@ MindForge REST API Server
   GET     /api/memories           列出（?limit=&offset=&…）   do_GET
   GET     /api/memories/{id}      获取单条（需认证）          do_GET
   GET     /api/export             导出 JSON（上限 5000 条）    do_GET
+  GET     /api/valid-at           按事实有效时间查询（v5.7.6）  do_GET
   POST    /api/memories           添加记忆（JSON body）       do_POST
   POST    /api/import             批量导入（≤10000 条）       do_POST
   PUT     /api/memories/{id}      更新记忆（JSON body）       do_PUT
@@ -316,6 +317,21 @@ def _validate_source_agent(value) -> str:
     if not isinstance(value, str):
         raise ValueError("Field 'source_agent' must be a string")
     return value[:128]
+
+
+def _validate_float_ts(value) -> float:
+    """v5.7.6：valid_from/valid_to 时间戳校验（None/0 → 0.0，非法抛 ValueError）。"""
+    if value is None:
+        return 0.0
+    if isinstance(value, bool):
+        raise ValueError("Field 'valid_from'/'valid_to' must be a number")
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        raise ValueError("Field 'valid_from'/'valid_to' must be a number")
+    if f < 0:
+        raise ValueError("Field 'valid_from'/'valid_to' must be >= 0")
+    return f
 
 
 def _log_unhandled_api_error(exc: Exception) -> None:
@@ -723,6 +739,36 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                     }
                 )
 
+            elif path == "/api/valid-at":
+                # v5.7.6 新增：Bi-temporal as-of 查询（事实有效时间）
+                ts_raw = qs.get("ts", [None])[0]
+                ts = None
+                if ts_raw is not None:
+                    try:
+                        ts = float(ts_raw)
+                    except (TypeError, ValueError):
+                        self._send_json({"error": "Invalid 'ts' parameter"}, 400)
+                        return
+                limit = _safe_int(
+                    qs.get("limit", ["50"])[0], default=50, min_val=1, max_val=10000
+                )
+                category = _sanitize_category(
+                    qs.get("category", [None])[0], default=None
+                )
+                entries = self.mindforge.valid_at(
+                    timestamp=ts,
+                    category=category,
+                    limit=limit,
+                    actor=self._extract_actor(qs),
+                    session_id=(qs.get("session", [""])[0] or ""),
+                )
+                memories = [
+                    e.to_dict() if hasattr(e, "to_dict") else vars(e) for e in entries
+                ]
+                self._send_json(
+                    {"as_of": ts, "total": len(memories), "memories": memories}
+                )
+
             elif path == "/":
                 # v5.6.5 P2 #16：根路径不再枚举完整 API 端点清单，
                 # 避免在信息探测阶段向未授权方暴露攻击面。
@@ -781,6 +827,8 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                     importance = _validate_importance(body.get("importance"))
                     starred = _validate_starred(body.get("starred"))
                     source_agent = _validate_source_agent(body.get("source_agent", ""))
+                    valid_from = _validate_float_ts(body.get("valid_from"))
+                    valid_to = _validate_float_ts(body.get("valid_to"))
                 except ValueError as ve:
                     self._send_json({"error": str(ve)}, 400)
                     return
@@ -791,6 +839,8 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                     importance=importance,
                     starred=starred,
                     source_agent=source_agent,
+                    valid_from=valid_from,
+                    valid_to=valid_to,
                 )
                 self._send_json(
                     entry.to_dict() if hasattr(entry, "to_dict") else vars(entry), 201
@@ -899,6 +949,8 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                     )
                     importance = _validate_importance(body.get("importance"))
                     starred = _validate_starred(body.get("starred"))
+                    valid_from = _validate_float_ts(body.get("valid_from"))
+                    valid_to = _validate_float_ts(body.get("valid_to"))
                 except ValueError as ve:
                     self._send_json({"error": str(ve)}, 400)
                     return
@@ -909,6 +961,8 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                     tags=tags,
                     importance=importance,
                     starred=starred,
+                    valid_from=valid_from,
+                    valid_to=valid_to,
                     # v5.7.3 安全修复：写路径透传调用者身份，
                     # update 内部 check_access 按来源校验，杜绝持 Key 越权改删
                     actor=self._extract_actor(qs),

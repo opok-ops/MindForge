@@ -33,7 +33,7 @@ except ImportError:
     except (ImportError, ValueError):
         # 兜底值：仅当 core/version 完全不可导入时启用。发版时必须与
         # core/version.py 的 __version__ 一起更新（见发版清单），否则漂移。
-        __version__ = "5.7.5"
+        __version__ = "5.7.6"
 
 
 def _import_mindforge():
@@ -183,6 +183,42 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
                 "layer": {"type": "string", "enum": ["sensory", "short_term", "long_term", "permanent"],
                          "description": "记忆层级，默认 short_term"},
                 "agent_id": {"type": "string", "description": "关联 Agent ID（可选）"},
+                "valid_from": {"type": "number", "description": "事实有效起始时间（Unix 秒，v5.7.6；0=无边界）"},
+                "valid_to": {"type": "number", "description": "事实有效截止时间（Unix 秒，v5.7.6；0=仍有效）"},
+            },
+        },
+    },
+    {
+        "name": "memory_supersede",
+        "description": "Bi-temporal 事实取代（v5.7.6）：关闭旧事实有效窗口并创建新事实，旧版本保留在历史中。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["id", "content"],
+            "properties": {
+                "id": {"type": "string", "description": "要取代的旧记忆 ID"},
+                "content": {"type": "string", "description": "新事实内容"},
+                "category": {"type": "string", "description": "新分类（默认继承旧事实）"},
+                "tags": {"type": "array", "items": {"type": "string"}, "description": "新标签（默认继承旧事实）"},
+                "importance": {"type": "string", "enum": ["critical", "high", "medium", "low"],
+                              "description": "新重要性（默认继承旧事实）"},
+                "layer": {"type": "string", "enum": ["sensory", "short_term", "long_term", "permanent"],
+                         "description": "新层级（默认继承旧事实）"},
+                "valid_from": {"type": "number", "description": "新事实有效起始时间（Unix 秒，默认=当前时间）"},
+                "agent_id": {"type": "string", "description": "调用者 Agent ID（写入审计）"},
+            },
+        },
+    },
+    {
+        "name": "memory_valid_at",
+        "description": "按事实有效时间查询（Bi-temporal as-of，v5.7.6）：返回 timestamp 时处于有效窗口的记忆。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "ts": {"type": "number", "description": "Unix 时间戳（默认=当前时间）"},
+                "category": {"type": "string", "description": "按分类过滤"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 50},
+                "actor": {"type": "string", "description": "调用者身份（Agent ID），启用隐私过滤"},
+                "session_id": {"type": "string", "description": "调用者会话 ID"},
             },
         },
     },
@@ -692,6 +728,8 @@ def h_memory_add(mf, args: Dict[str, Any]) -> Dict[str, Any]:
             layer=_to_layer(args.get("layer"), MemoryLayer.SHORT_TERM),
             privacy=PrivacyLevel.INTERNAL,
             source_agent=args.get("agent_id") or "",
+            valid_from=_safe_float(args.get("valid_from"), 0.0, 0.0),
+            valid_to=_safe_float(args.get("valid_to"), 0.0, 0.0),
         )
         return {"ok": True, "memory": _entry_to_dict(entry)}
     except ValueError as e:
@@ -1034,6 +1072,45 @@ def h_memory_diff(mf, args: Dict[str, Any]) -> Dict[str, Any]:
     ))
 
 
+def h_memory_supersede(mf, args: Dict[str, Any]) -> Dict[str, Any]:
+    err = _require_args(args, "id", "content")
+    if err:
+        return err
+    try:
+        new_id = mf.supersede(
+            entry_id=str(args["id"]),
+            content=str(args["content"]),
+            category=args.get("category"),
+            tags=_to_list_str(args["tags"]) if args.get("tags") else None,
+            importance=_to_importance(args["importance"], None) if args.get("importance") else None,
+            layer=_to_layer(args["layer"], None) if args.get("layer") else None,
+            actor=args.get("agent_id") or "",
+            valid_from=_safe_float(args.get("valid_from"), 0.0, 0.0) or None,
+        )
+    except ValueError as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+    if not new_id:
+        return {"ok": False, "error": "memory not found or not accessible"}
+    return {"ok": True, "new_id": new_id}
+
+
+def h_memory_valid_at(mf, args: Dict[str, Any]) -> Dict[str, Any]:
+    ts_raw = args.get("ts")
+    ts_v = None if ts_raw is None else _safe_float(ts_raw, 0.0, 0.0)
+    entries = mf.valid_at(
+        timestamp=ts_v,
+        category=args.get("category"),
+        limit=_safe_int(args.get("limit", 50), 50, 1, 500),
+        actor=args.get("actor") or "",
+        session_id=args.get("session_id") or "",
+    )
+    return {
+        "as_of": ts_v,
+        "total": len(entries),
+        "memories": [_entry_to_dict(e) for e in entries],
+    }
+
+
 HANDLERS: Dict[str, Any] = {
     "memory_add": h_memory_add,
     "memory_search": h_memory_search,
@@ -1073,6 +1150,9 @@ HANDLERS: Dict[str, Any] = {
     "embedding_status": h_embedding_status,
     # v5.5.8 新增
     "memory_diff": h_memory_diff,
+    # v5.7.6 新增：Bi-temporal 事实时序
+    "memory_supersede": h_memory_supersede,
+    "memory_valid_at": h_memory_valid_at,
 }
 
 

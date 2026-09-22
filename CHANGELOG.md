@@ -3,7 +3,47 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [5.7.6] - 2026-09-22
+
+Bi-temporal 事实时序 + GDPR 合规工具包：事实取代自动失效（而非删除）、
+按有效时间 as-of 查询、数据可携 / 被遗忘权三件套，MCP 工具 33 → 35。
+
+### Added
+
+- **Bi-temporal 事实时序（core/storage.py、core/mindforge.py）**：memories 表
+  新增 `valid_from` / `valid_to` 列（含旧库自动迁移与 `idx_valid_to` 索引）；
+  `add` / `update` 支持有效窗口参数；新增 `valid_at(timestamp)` as-of 查询
+  （排除回收站，支持分类与上限）；新增 `supersede()`——关闭旧事实开放窗口
+  并保留版本历史，以新事实继承旧字段并建立 `supersedes` 关联，写入审计
+  （对齐 Zep/Graphiti 的「事实矛盾自动失效而非删除」实践）。
+- **GDPR 合规工具包**：`gdpr_report()`（数据类别/数量/加密状态/可行使权利）、
+  `gdpr_export_all()`（memories/versions/links/audit/archived 全量可携导出，
+  tags/metadata 反序列化）、`gdpr_erase_all()`（先备份数据库与密钥文件，再
+  按外键顺序永久删除全部数据并清理 FTS 与缓存，写入 `gdpr_erase` 审计）。
+- **CLI 新命令**：`supersede`、`valid-at`（--ts/--category/--limit）、
+  `gdpr-report`（--json）、`gdpr-export-all`、`gdpr-erase`
+  （--force/--no-backup）；`add` / `update` / `supersede` 支持
+  --valid-from / --valid-to。
+- **REST API**：`POST / PUT /api/memories` 支持 valid_from / valid_to；
+  新增 `GET /api/valid-at`（ts/limit/category/actor/session），
+  非法时间戳返回 400。
+- **MCP**：新增 `memory_supersede`、`memory_valid_at`，工具总数 33 → 35。
+
+### Fixed
+
+- **审计动作白名单（core/storage.py）**：补入 `supersede` / `gdpr_erase`，
+  此前会因白名单缺失被降级为 `other`，导致取代与擦除操作无精确审计记录。
+
+### Tests
+
+- 新增 `tests/test_v576_bitemporal.py`（18 项）与 `tests/test_v576_gdpr.py`
+  （8 项）：schema 迁移 / 旧库补列、as-of 查询、supersede 语义（窗口关闭 /
+  继承 / 关联 / 审计 / 加密库）、CLI / MCP / API 三面接通、GDPR 报告 / 导出 /
+  擦除（含备份与密钥副本）。
+- 全量 **827 项全部通过**（801 基线 + 26 新增）；文档一致性守卫 PASS。
+
 ## [5.7.5] - 2026-09-22
+
 
 发布治理修复：修复 README 重写导致的回归测试失败与官网版本漂移，
 版本号真值统一到 5.7.5，文档一致性守卫恢复全绿。

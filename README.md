@@ -8,7 +8,7 @@ MindForge gives AI agents a persistent, structured long-term memory: a four-tier
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-5.7.3-green.svg)](https://github.com/opok-ops/MindForge/releases)
+[![Version](https://img.shields.io/badge/version-5.7.5-green.svg)](https://github.com/opok-ops/MindForge/releases)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
 [![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
@@ -91,6 +91,7 @@ MindForge stats
 
 ```
 ┌──────────────────────────────────────────────────────┐
+│           MindForge v5.7.5            │
 │  Cognitive Layer  Personality · KnowledgeGraph       │
 │                   MemoryEvolution · FederatedMemory  │
 ├──────────────────────────────────────────────────────┤
@@ -182,7 +183,7 @@ memory:
 - **Encrypted databases**: when a key file is present, set `MINDFORGE_PASSWORD` so the process can unlock the store. This is required for the dsh-mindforge bridge and any non-interactive integration (MCP / REST API / scripts) accessing an encrypted store.
 - **API authentication**: if `MINDFORGE_API_KEY` is configured, unauthenticated callers are treated as `anonymous` and can only reach PUBLIC memories. All read/write paths carry actor identity for authorization and audit.
 - **Access logs are sanitized**: search terms and memory IDs are stripped from logs.
-- **Upgrade note**: v5.5.7 removed the experimental HMAC-XOR downgrade path. Blobs created under that flag can no longer be decrypted — back up your database before upgrading if you enabled it.
+- **Upgrade note**: v5.5.7 removed the experimental HMAC-XOR downgrade path (config flag `EXPERIMENTAL_HMAC_XOR`, 即「降级加密」). Blobs created under that flag can no longer be decrypted — back up your database before upgrading if you enabled it.
 
 See [SECURITY.md](SECURITY.md) for the full security policy.
 

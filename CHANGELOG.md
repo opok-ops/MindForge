@@ -3,6 +3,32 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [5.7.5] - 2026-09-22
+
+发布治理修复：修复 README 重写导致的回归测试失败与官网版本漂移，
+版本号真值统一到 5.7.5，文档一致性守卫恢复全绿。
+
+### Fixed
+
+- **README HMAC_XOR 迁移提示回归（README.md）**：v5.7.3 发布前 README 重写
+  丢失 `EXPERIMENTAL_HMAC_XOR` 精确标志名与「降级加密」说明，导致
+  `tests/test_v557_webhook_sig_export.py::test_readme_has_hmac_xor_migration_notice`
+  失败——v5.7.3 实际未全绿。已恢复完整提示（含精确配置标志名与中文说明）。
+- **官网版本漂移（website/index.html）**：v5.7.3 发版时官网仍停留在
+  v5.7.2 / 751 测试，文档一致性守卫 8 项不一致。现已全部对齐 v5.7.5 与
+  最新测试数（JSON-LD、顶栏、hero 徽标、安装示例、开发者板块、更新日志）。
+- **README 架构图版本标题缺失（README.md）**：架构图重写后丢失版本标题行，
+  一致性守卫架构图断言失配；已恢复 `MindForge v5.7.5` 标题行。
+- **版本号兜底同步（cli/main.py、mcp/server.py）**：兜底 `__version__`
+  随 core/version.py 真值升到 5.7.5，消除兜底漂移风险。
+- **pyproject.toml 版本同步**：`project.version` 升到 5.7.5，与唯一真值一致。
+
+### Tests
+
+- 新增 `tests/test_v575_release_consistency.py`（12 项）：版本真值唯一源、
+  README 徽章/架构图/HMAC_XOR 提示、官网版本与测试数、CHANGELOG/官网条目对齐。
+- 全量 **801 项全部通过**（789 基线 + 12 新增）；文档一致性守卫 PASS。
+
 ## [5.7.3] - 2026-09-20
 
 隐私边界加固 + 加密导出发布：修复 API 与核心层的越权读改写路径，

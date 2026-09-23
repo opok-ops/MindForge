@@ -103,7 +103,7 @@ except ImportError:
     except (ImportError, ValueError):
         # 兜底值：仅当 core/version 完全不可导入时启用。发版时必须与
         # core/version.py 的 __version__ 一起更新（见发版清单），否则漂移。
-        __version__ = "5.7.6"
+        __version__ = "5.7.7"
 
 # 懒加载 modules：仅在对应命令执行时才导入，大幅加速 CLI 启动
 _modules_cache = {}
@@ -758,6 +758,110 @@ def cmd_supersede(args):
     print(c("\n✅ 事实已取代（旧版本保留在历史中）", "green"))
     print(f"   旧记忆: {args.id[:16]}...（有效窗口已关闭）")
     print(f"   新记忆: {new_id}")
+    cm.close()
+    return 0
+
+
+def cmd_agent_pin(args):
+    """Agent 自主标记关键记忆：置顶冻结衰减 + 重置遗忘分（v5.7.7 新增）"""
+    cm = _get_memory(args)
+    ok = cm.agent_pin(args.id, importance=args.importance,
+                      actor=args.agent, session_id=args.session)
+    if not ok:
+        print(c("❌ 标记失败：记忆不存在或无权限", "red"))
+        cm.close()
+        return 1
+    print(c("\n✅ 已标记为关键记忆（置顶 · 衰减冻结 · 遗忘分已重置）", "green"))
+    print(f"   ID: {args.id}")
+    if args.importance:
+        print(f"   重要度: {args.importance}")
+    cm.close()
+    return 0
+
+
+def cmd_memory_forget(args):
+    """Agent 自主遗忘：软删除移入回收站（v5.7.7 新增）"""
+    cm = _get_memory(args)
+    ok = cm.agent_forget(args.id, reason=args.reason,
+                         actor=args.agent, session_id=args.session)
+    if not ok:
+        print(c("❌ 遗忘失败：记忆不存在或无权限", "red"))
+        cm.close()
+        return 1
+    print(c("\n🧠 已自主遗忘（移入回收站，可 restore 恢复）", "yellow"))
+    if args.reason:
+        print(f"   原因: {args.reason}")
+    cm.close()
+    return 0
+
+
+def cmd_agent_decay_boost(args):
+    """Agent 标记「这条不再重要」：加速遗忘（v5.7.7 新增）"""
+    cm = _get_memory(args)
+    ok = cm.agent_decay_boost(args.id, amount=args.amount,
+                              actor=args.agent, session_id=args.session)
+    if not ok:
+        print(c("❌ 加速遗忘失败：记忆不存在或无权限", "red"))
+        cm.close()
+        return 1
+    entry = cm.get(args.id)
+    score = entry.forgetting_score if entry else "?"
+    print(c(f"\n🔥 已加速遗忘（forgetting_score +{args.amount} → {score}）", "yellow"))
+    cm.close()
+    return 0
+
+
+def cmd_connector_list(args):
+    """列出可用数据连接器（v5.7.7 新增）"""
+    from modules.connectors import list_connectors
+    conns = list_connectors()
+    print(c(f"\n📦 数据连接器（{len(conns)} 个）", "bold"))
+    for c_ in conns:
+        print(f"  - {c_['name']}: {c_['description']}")
+    print(c("\n用法: MindForge connector-ingest <名称> <文件路径或URL> [--category X]", "dim"))
+    return 0
+
+
+def cmd_connector_ingest(args):
+    """通过连接器导入数据（v5.7.7 新增）"""
+    cm = _get_memory(args)
+    try:
+        stats = cm.connector_ingest(
+            args.connector, args.source,
+            category=args.category, source_agent=args.source_agent or "connector")
+    except ValueError as e:
+        print(c(f"❌ {e}", "red"))
+        cm.close()
+        return 1
+    if getattr(args, "json_output", False):
+        _json_out(stats)
+        cm.close()
+        return 0
+    print(c(f"\n✅ 连接器 [{args.connector}] 导入完成", "green"))
+    for k, v in stats.items():
+        print(f"   {k}: {v}")
+    cm.close()
+    return 0
+
+
+def cmd_conflict_reconcile(args):
+    """冲突自动调和（Bi-temporal，v5.7.7 新增）"""
+    cm = _get_memory(args)
+    dry_run = getattr(args, "dry_run", False)
+    result = cm.reconcile_conflicts(auto=not dry_run)
+    reconciled = result.get("reconciled", [])
+    needs = result.get("needs_review", [])
+    if getattr(args, "json_output", False):
+        _json_out(result)
+        cm.close()
+        return 0
+    print(c(f"\n⚖️ 冲突调和完成（自动失效 {len(reconciled)} · 待人工 {len(needs)}）", "bold"))
+    for r in reconciled:
+        print(f"  ✔ {r['conflict_type']} [{r['suggested_action']}] → 失效 "
+              f"{r.get('expired_id') or '?'}  （{r['description'][:40]}）")
+    for n in needs:
+        print(f"  ⚠ {n['conflict_type']} [{n['suggested_action']}] 需人工确认: "
+              f"{n['description'][:50]}")
     cm.close()
     return 0
 
@@ -3272,6 +3376,66 @@ def main(argv=None):
     p_gdpr_erase.add_argument("--force", action="store_true", help="确认执行（不可逆）")
     p_gdpr_erase.add_argument(
         "--no-backup", action="store_true", help="跳过擦除前自动备份"
+    )
+
+    p_agent_pin = sub.add_parser(
+        "agent-pin", help="Agent 标记关键记忆：置顶冻结衰减（v5.7.7 新增）"
+    )
+    p_agent_pin.add_argument("id", help="记忆 ID")
+    p_agent_pin.add_argument(
+        "--importance", choices=["low", "medium", "high", "critical"],
+        help="提升重要度（可选）"
+    )
+    p_agent_pin.add_argument("--agent", default="cli", help="Agent ID")
+    p_agent_pin.add_argument("--session", default="cli", help="会话 ID")
+
+    p_agent_forget = sub.add_parser(
+        "memory-forget", help="Agent 自主遗忘：软删除移入回收站（v5.7.7 新增）"
+    )
+    p_agent_forget.add_argument("id", help="记忆 ID")
+    p_agent_forget.add_argument("--reason", default="", help="遗忘原因（写入审计）")
+    p_agent_forget.add_argument("--agent", default="cli", help="Agent ID")
+    p_agent_forget.add_argument("--session", default="cli", help="会话 ID")
+
+    p_agent_decay_boost = sub.add_parser(
+        "memory-decay-boost", help="Agent 标记不再重要：加速遗忘（v5.7.7 新增）"
+    )
+    p_agent_decay_boost.add_argument("id", help="记忆 ID")
+    p_agent_decay_boost.add_argument(
+        "amount", type=float, nargs="?", default=1.0,
+        help="遗忘分增量（封顶 10）"
+    )
+    p_agent_decay_boost.add_argument("--agent", default="cli", help="Agent ID")
+    p_agent_decay_boost.add_argument("--session", default="cli", help="会话 ID")
+
+    p_connector_list = sub.add_parser(
+        "connector-list", help="列出可用数据连接器（v5.7.7 新增）"
+    )
+
+    p_connector_ingest = sub.add_parser(
+        "connector-ingest",
+        help="通过连接器导入数据（v5.7.7 新增）",
+        parents=[json_parser],
+    )
+    p_connector_ingest.add_argument(
+        "connector", help="连接器名称（json/csv/markdown/file/url）"
+    )
+    p_connector_ingest.add_argument("source", help="数据源（文件路径或 URL）")
+    p_connector_ingest.add_argument("--category", default=None, help="导入分类")
+    p_connector_ingest.add_argument(
+        "--source-agent", default="connector", help="来源 Agent 标记"
+    )
+
+    p_conflict_reconcile = sub.add_parser(
+        "conflict-reconcile",
+        help="冲突自动调和（Bi-temporal，v5.7.7 新增）",
+        parents=[json_parser],
+    )
+    p_conflict_reconcile.add_argument(
+        "--dry-run", action="store_true", help="仅报告不执行"
+    )
+    p_conflict_reconcile.add_argument(
+        "--id", action="append", help="限定记忆 ID（可多次）"
     )
 
     p_delete = sub.add_parser(
@@ -6577,6 +6741,13 @@ def _main_dispatch(args, parser=None):
         "rollback": cmd_rollback,
         # v5.7.6 新增：Bi-temporal 事实时序 + GDPR 合规工具包
         "supersede": cmd_supersede,
+        # v5.7.7 新增：Agent 记忆治理 + 连接器 + 冲突调和
+        "agent-pin": cmd_agent_pin,
+        "memory-forget": cmd_memory_forget,
+        "memory-decay-boost": cmd_agent_decay_boost,
+        "connector-list": cmd_connector_list,
+        "connector-ingest": cmd_connector_ingest,
+        "conflict-reconcile": cmd_conflict_reconcile,
         "valid-at": cmd_valid_at,
         "gdpr-report": cmd_gdpr_report,
         "gdpr-export-all": cmd_gdpr_export_all,

@@ -61,7 +61,7 @@ jobs:
           # 精确锁定工具数：官网/README 对外宣称 35 个（v5.7.6 新增
           # memory_supersede / memory_valid_at），此前阈值只卡 >=30，
           # 误删 3 个工具 CI 也不会报警。改为等值断言，让数量回归可被守护。
-          assert len(tools) == 35, f'Expected exactly 35 tools, got {len(tools)}'
+          assert len(tools) == 40, f'Expected exactly 40 tools, got {len(tools)}'
           print(f'MCP tools: {len(tools)} OK')
           "
 

@@ -24,6 +24,9 @@ MindForge REST API Server
   GET     /api/memories/{id}      获取单条（需认证）          do_GET
   GET     /api/export             导出 JSON（上限 5000 条）    do_GET
   GET     /api/valid-at           按事实有效时间查询（v5.7.6）  do_GET
+  GET     /api/connectors          列出可用数据连接器（v5.7.7）  do_GET
+  POST    /api/agent/forget        Agent 自主遗忘（v5.7.7）     do_POST
+  POST    /api/conflicts/reconcile 冲突自动调和（v5.7.7）      do_POST
   POST    /api/memories           添加记忆（JSON body）       do_POST
   POST    /api/import             批量导入（≤10000 条）       do_POST
   PUT     /api/memories/{id}      更新记忆（JSON body）       do_PUT
@@ -769,6 +772,10 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                     {"as_of": ts, "total": len(memories), "memories": memories}
                 )
 
+
+            elif path == "/api/connectors":
+                from modules.connectors import list_connectors
+                self._send_json({"connectors": list_connectors()})
             elif path == "/":
                 # v5.6.5 P2 #16：根路径不再枚举完整 API 端点清单，
                 # 避免在信息探测阶段向未授权方暴露攻击面。
@@ -846,6 +853,28 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                     entry.to_dict() if hasattr(entry, "to_dict") else vars(entry), 201
                 )
 
+            elif path == "/api/agent/forget":
+                mid = body.get("id", "")
+                if not isinstance(mid, str) or not mid:
+                    self._send_json({"error": "Missing 'id' field"}, 400)
+                    return
+                ok = self.mindforge.agent_forget(
+                    mid, reason=body.get("reason", ""),
+                    actor=body.get("actor", ""),
+                    session_id=body.get("session_id", ""))
+                if not ok:
+                    self._send_json({"error": "memory not found or not accessible"}, 404)
+                    return
+                self._send_json({"status": "forgotten", "id": mid})
+            elif path == "/api/conflicts/reconcile":
+                auto = bool(body.get("auto", True))
+                memory_ids = body.get("memory_ids")
+                if memory_ids is not None and not isinstance(memory_ids, list):
+                    self._send_json({"error": "'memory_ids' must be a list"}, 400)
+                    return
+                result = self.mindforge.reconcile_conflicts(
+                    memory_ids=memory_ids, auto=auto)
+                self._send_json({"status": "ok", **result})
             elif path == "/api/import":
                 memories = body.get("memories", [])
                 # v5.7.0 P2：批量导入端点额外限流（10 req/60s/IP）

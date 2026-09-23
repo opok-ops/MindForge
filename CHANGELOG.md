@@ -3,7 +3,56 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [5.7.7] - 2026-09-23
+
+Agent 记忆治理 + 冲突自动调和 + 多源连接器框架：Agent 可自主 pin / forget /
+加速衰减并显式关闭事实窗口；冲突按重要度与时效自动失效旧一方；连接器框架
+统一 json / csv / markdown / file / url 摄取入口，MCP 工具 35 → 40。
+
+### Added
+
+- **Agent 记忆治理（core/storage.py、core/mindforge.py）**：新增 `agent_pin()`
+  （pinned=1 + forgetting_score=0 + 可选提升重要度，冻结衰减引擎豁免）、
+  `agent_forget()`（软删除移入回收站并记录原因，可 restore 恢复）、
+  `boost_forgetting()`（forgetting_score 增量封顶 10，联动遗忘曲线）、
+  `expire_memory()`（关闭 valid_to 开放窗口，Bi-temporal 显式失效）。
+  四者均经 facade 隐私引擎检查并写入独立审计动作。
+- **冲突自动调和（Bi-temporal 版）**：`reconcile_conflicts(memory_ids, auto)`——
+  `keep_newer` 自动失效较旧一方、`keep_higher_importance` 自动失效低重要度
+  一方（均为关闭有效窗口而非删除），`merge` / `review_needed` 归入
+  needs_review 人工确认；`auto=False` 仅报告不执行；写 `conflict_reconcile`
+  总账审计。
+- **多源连接器框架（modules/connectors.py，新模块）**：`BaseConnector` 契约 +
+  `register_connector` / `get_connector` / `list_connectors` 注册表；
+  内置 json（复用 import_json）、csv（复用 import_csv）、markdown（按段落摄取）、
+  file（按扩展名分派）、url（抓取文本，内置 SSRF 防护拒绝内网/回环地址）五类；
+  facade `connector_ingest()` 统一入口并写 `connector_ingest` 审计。
+- **CLI 新命令**：`agent-pin`（--importance）、`memory-forget`（--reason）、
+  `memory-decay-boost`（增量）、`connector-list`、`connector-ingest`
+  （--category/--source-agent）、`conflict-reconcile`（--dry-run/--id/--json）。
+- **REST API**：新增 `GET /api/connectors`、`POST /api/agent/forget`
+  （id/reason）、`POST /api/conflicts/reconcile`（auto/memory_ids）。
+- **MCP**：新增 `memory_agent_pin`、`memory_agent_forget`、
+  `memory_agent_decay_boost`、`memory_connector_ingest`、`conflict_reconcile`，
+  工具总数 35 → 40（ci.yml 断言同步）。
+
+### Fixed
+
+- **审计动作白名单（core/storage.py）**：补入 `agent_pin` / `agent_forget` /
+  `agent_decay_boost` / `conflict_expire` / `conflict_reconcile` /
+  `connector_ingest` 六个动作，避免治理与连接器操作被降级为 `other`。
+
+### Tests
+
+- 新增 `tests/test_v577_agent_governance.py`（20 项）：Agent 治理语义
+  （pin 冻结衰减 / forget 可恢复 / decay 封顶 / expire 幂等 / 隐私访问控制）、
+  冲突调和（keep_higher_importance / keep_newer 自动失效、review_needed、
+  auto=False）、连接器（注册表 / json 摄取 / file 分派 / URL SSRF / 未知报错）、
+  CLI / MCP / API 三面接通。
+- 全量 **847 项全部通过**（827 基线 + 20 新增）；文档一致性守卫 PASS。
+
 ## [5.7.6] - 2026-09-22
+
 
 Bi-temporal 事实时序 + GDPR 合规工具包：事实取代自动失效（而非删除）、
 按有效时间 as-of 查询、数据可携 / 被遗忘权三件套，MCP 工具 33 → 35。

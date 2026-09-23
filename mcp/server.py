@@ -33,7 +33,7 @@ except ImportError:
     except (ImportError, ValueError):
         # 兜底值：仅当 core/version 完全不可导入时启用。发版时必须与
         # core/version.py 的 __version__ 一起更新（见发版清单），否则漂移。
-        __version__ = "5.7.6"
+        __version__ = "5.7.7"
 
 
 def _import_mindforge():
@@ -219,6 +219,75 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
                 "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 50},
                 "actor": {"type": "string", "description": "调用者身份（Agent ID），启用隐私过滤"},
                 "session_id": {"type": "string", "description": "调用者会话 ID"},
+            },
+        },
+    },
+    {
+        "name": "memory_agent_pin",
+        "description": "Agent 自主标记关键记忆（v5.7.7）：置顶冻结衰减 + 重置遗忘分，可提升重要度。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+                "id": {"type": "string", "description": "记忆 ID"},
+                "importance": {"type": "string", "enum": ["low", "medium", "high", "critical"],
+                              "description": "提升重要度（可选）"},
+                "agent_id": {"type": "string", "description": "调用者 Agent ID"},
+            },
+        },
+    },
+    {
+        "name": "memory_agent_forget",
+        "description": "Agent 自主遗忘（v5.7.7）：软删除移入回收站（可 restore 恢复），记录原因。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+                "id": {"type": "string", "description": "记忆 ID"},
+                "reason": {"type": "string", "description": "遗忘原因（写入审计）"},
+                "agent_id": {"type": "string", "description": "调用者 Agent ID"},
+            },
+        },
+    },
+    {
+        "name": "memory_agent_decay_boost",
+        "description": "Agent 标记「这条不再重要」（v5.7.7）：提升 forgetting_score 加速遗忘（封顶 10）。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+                "id": {"type": "string", "description": "记忆 ID"},
+                "amount": {"type": "number", "minimum": 0.1, "maximum": 10.0,
+                          "description": "遗忘分增量（默认 1.0）"},
+                "agent_id": {"type": "string", "description": "调用者 Agent ID"},
+            },
+        },
+    },
+    {
+        "name": "memory_connector_ingest",
+        "description": "通过连接器导入数据（v5.7.7）：json / csv / markdown / file / url。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["connector", "source"],
+            "properties": {
+                "connector": {"type": "string",
+                             "description": "连接器名称（json/csv/markdown/file/url）"},
+                "source": {"type": "string", "description": "数据源（文件路径或 URL）"},
+                "category": {"type": "string", "description": "导入分类"},
+                "source_agent": {"type": "string", "description": "来源 Agent 标记"},
+            },
+        },
+    },
+    {
+        "name": "conflict_reconcile",
+        "description": "冲突自动调和（Bi-temporal，v5.7.7）：keep_newer / keep_higher_importance 自动失效旧事实，其余待人工。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "auto": {"type": "boolean", "default": True,
+                        "description": "false 时仅报告不执行"},
+                "memory_ids": {"type": "array", "items": {"type": "string"},
+                              "description": "限定记忆 ID 列表（可选）"},
             },
         },
     },
@@ -1111,6 +1180,68 @@ def h_memory_valid_at(mf, args: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def h_memory_agent_pin(mf, args):
+    err = _require_args(args, "id")
+    if err:
+        return err
+    try:
+        ok = mf.agent_pin(str(args["id"]), importance=args.get("importance"),
+                          actor=args.get("agent_id") or "")
+    except ValueError as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+    return {"ok": ok}
+
+
+def h_memory_agent_forget(mf, args):
+    err = _require_args(args, "id")
+    if err:
+        return err
+    try:
+        ok = mf.agent_forget(str(args["id"]), reason=args.get("reason") or "",
+                             actor=args.get("agent_id") or "")
+    except ValueError as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+    return {"ok": ok}
+
+
+def h_memory_agent_decay_boost(mf, args):
+    err = _require_args(args, "id")
+    if err:
+        return err
+    try:
+        ok = mf.agent_decay_boost(
+            str(args["id"]),
+            amount=_safe_float(args.get("amount", 1.0), 1.0, 0.1, 10.0),
+            actor=args.get("agent_id") or "")
+    except ValueError as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+    return {"ok": ok}
+
+
+def h_memory_connector_ingest(mf, args):
+    err = _require_args(args, "connector", "source")
+    if err:
+        return err
+    try:
+        stats = mf.connector_ingest(
+            str(args["connector"]), str(args["source"]),
+            category=args.get("category"),
+            source_agent=args.get("source_agent") or "connector")
+    except ValueError as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+    return {"ok": True, "stats": stats}
+
+
+def h_conflict_reconcile(mf, args):
+    try:
+        result = mf.reconcile_conflicts(
+            memory_ids=args.get("memory_ids"),
+            auto=bool(args.get("auto", True)))
+    except ValueError as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+    return {"ok": True, **result}
+
+
 HANDLERS: Dict[str, Any] = {
     "memory_add": h_memory_add,
     "memory_search": h_memory_search,
@@ -1153,6 +1284,12 @@ HANDLERS: Dict[str, Any] = {
     # v5.7.6 新增：Bi-temporal 事实时序
     "memory_supersede": h_memory_supersede,
     "memory_valid_at": h_memory_valid_at,
+    # v5.7.7 新增：Agent 记忆治理 + 连接器 + 冲突调和
+    "memory_agent_pin": h_memory_agent_pin,
+    "memory_agent_forget": h_memory_agent_forget,
+    "memory_agent_decay_boost": h_memory_agent_decay_boost,
+    "memory_connector_ingest": h_memory_connector_ingest,
+    "conflict_reconcile": h_conflict_reconcile,
 }
 
 

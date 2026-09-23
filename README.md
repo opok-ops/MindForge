@@ -8,7 +8,7 @@ MindForge gives AI agents a persistent, structured long-term memory: a four-tier
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-5.7.6-green.svg)](https://github.com/opok-ops/MindForge/releases)
+[![Version](https://img.shields.io/badge/version-5.7.7-green.svg)](https://github.com/opok-ops/MindForge/releases)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
 [![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
@@ -30,7 +30,7 @@ Key design decisions:
 - **Structured memory.** Four tiers (sensory, short-term, long-term, permanent) with promotion and decay driven by the Ebbinghaus forgetting curve.
 - **Retrieval quality.** Six complementary retrieval paths fused into one ranked result, instead of a single vector index.
 - **Encryption by default.** AES-256-GCM at rest with PBKDF2 key derivation; encrypted backups you can export and trust.
-- **Open interfaces.** MCP server (35 tools), Python SDK, CLI with shell completion, and a REST API for non-Python consumers.
+- **Open interfaces.** MCP server (40 tools), Python SDK, CLI with shell completion, and a REST API for non-Python consumers.
 
 ## Quick Start
 
@@ -71,6 +71,9 @@ MindForge stats
 
 - **Four-tier memory** — sensory buffer, short-term, long-term, and permanent tiers with Ebbinghaus-based decay and periodic consolidation.
 - **Conflict detection** — antonym pairs, attribute inconsistencies, and timeline conflicts, with automatic decay.
+- **Agent memory governance** — `agent_pin` freezes decay and pins key memories, `agent_forget` soft-deletes with a reason, `agent_decay_boost` accelerates forgetting, and `expire_memory` closes a fact's validity window (v5.7.7).
+- **Conflict auto-reconcile** — `reconcile_conflicts` closes the stale side of `keep_newer` / `keep_higher_importance` conflicts (Bi-temporal expiry, never deletes), and routes `merge` / `review_needed` to human review (v5.7.7).
+- **Connector framework** — pluggable `json` / `csv` / `markdown` / `file` / `url` connectors with a registry and SSRF guard; extensible via `register_connector` (v5.7.7).
 - **Bi-temporal facts** — `valid_from` / `valid_to` windows with as-of queries (`valid_at`) and `supersede` fact replacement that expires the old fact instead of deleting it, keeping full version history (v5.7.6).
 - **Skill extraction** — clusters memories into reusable slots, steps, and trigger words.
 
@@ -83,7 +86,7 @@ MindForge stats
 
 **Integration**
 
-- **MCP server** — 35 tools, drop into Claude Code, OpenClaw, or any MCP client.
+- **MCP server** — 40 tools, drop into Claude Code, OpenClaw, or any MCP client.
 - **Federated memory** — P2P sharing between agents with trust levels, ACLs, and conflict resolution.
 - **REST API** — standard HTTP endpoints for non-Python applications.
 - **CLI** — 200+ commands with bash / zsh / fish completion.
@@ -93,7 +96,7 @@ MindForge stats
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│           MindForge v5.7.6            │
+│           MindForge v5.7.7            │
 │  Cognitive Layer  Personality · KnowledgeGraph       │
 │                   MemoryEvolution · FederatedMemory  │
 ├──────────────────────────────────────────────────────┤

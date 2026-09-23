@@ -798,6 +798,82 @@ class MindForge:
         return self._storage.gdpr_erase_all(backup=backup, actor=actor,
                                             key_file=key_file)
 
+    # ===== Agent 记忆治理（v5.7.7 新增）=====
+
+    def agent_pin(self, memory_id: str, importance: Optional[str] = None,
+                  actor: str = "", session_id: str = "") -> bool:
+        """Agent 自主标记关键记忆：置顶冻结衰减 + 重置遗忘分 + 可选提升重要度"""
+        entry = self._storage.get_memory(memory_id, actor, session_id)
+        if entry is None:
+            return False
+        ok, _reason = self.privacy_engine.check_access(entry, actor, session_id)
+        if not ok:
+            return False
+        return self._storage.agent_pin(memory_id, importance, actor, session_id)
+
+    def agent_forget(self, memory_id: str, reason: str = "",
+                     actor: str = "", session_id: str = "") -> bool:
+        """Agent 自主遗忘：软删除移入回收站（可恢复），记录原因"""
+        entry = self._storage.get_memory(memory_id, actor, session_id)
+        if entry is None:
+            return False
+        ok, _reason = self.privacy_engine.check_access(entry, actor, session_id)
+        if not ok:
+            return False
+        success = self._storage.agent_forget(memory_id, reason, actor, session_id)
+        if success:
+            self._index.remove_memory(memory_id)
+        return success
+
+    def agent_decay_boost(self, memory_id: str, amount: float = 1.0,
+                          actor: str = "", session_id: str = "") -> bool:
+        """Agent 标记「这条不再重要」：加速遗忘（提升 forgetting_score）"""
+        entry = self._storage.get_memory(memory_id, actor, session_id)
+        if entry is None:
+            return False
+        ok, _reason = self.privacy_engine.check_access(entry, actor, session_id)
+        if not ok:
+            return False
+        return self._storage.boost_forgetting(memory_id, amount, actor, session_id)
+
+    def expire_memory(self, memory_id: str, actor: str = "",
+                      session_id: str = "") -> bool:
+        """显式关闭事实有效窗口（Bi-temporal 失效，v5.7.7）"""
+        entry = self._storage.get_memory(memory_id, actor, session_id)
+        if entry is None:
+            return False
+        ok, _reason = self.privacy_engine.check_access(entry, actor, session_id)
+        if not ok:
+            return False
+        return self._storage.expire_memory(memory_id, actor, session_id)
+
+    def reconcile_conflicts(self, memory_ids: Optional[List[str]] = None,
+                            auto: bool = True) -> Dict[str, Any]:
+        """冲突自动调和（Bi-temporal 版，v5.7.7 新增）
+
+        keep_newer / keep_higher_importance 自动关闭旧事实有效窗口；
+        merge / review_needed 归入 needs_review 供人工确认。
+        """
+        return self._storage.reconcile_conflicts(memory_ids, auto)
+
+    def connector_ingest(self, connector: str, source: str, **kwargs) -> Dict[str, Any]:
+        """通过连接器框架导入数据（v5.7.7 新增）
+
+        Args:
+            connector: 连接器名（json / csv / markdown / file / url）
+            source: 数据源（文件路径或 URL）
+        """
+        from modules.connectors import get_connector, list_connector_names
+        cls = get_connector(connector)
+        if cls is None:
+            raise ValueError(
+                f"未知连接器: {connector}（可用: {', '.join(list_connector_names())}）")
+        result = cls().ingest(self, source, **kwargs)
+        self._storage._add_audit("connector_ingest", "", "connector", "", "",
+                                 details={"connector": connector, "source": str(source)[:300],
+                                          "stats": result})
+        return result
+
     def delete(self, memory_id: str, actor: str = "",
                session_id: str = "", hard_delete: bool = False) -> bool:
         """删除记忆"""

@@ -1862,6 +1862,175 @@ class StorageEngine:
         rows = self._get_conn().execute(sql, params).fetchall()
         return [self._row_to_entry(r) for r in rows]
 
+    # ===== Agent 记忆治理（v5.7.7 新增）=====
+
+    def agent_pin(self, entry_id: str,
+                  importance: Optional[str] = None,
+                  actor: str = "",
+                  session_id: str = "") -> bool:
+        """Agent 自主标记关键记忆（v5.7.7 新增）
+
+        置顶（pinned=1）以冻结衰减（memory_decay.protect_pinned 默认跳过
+        pinned 记忆），重置遗忘分（forgetting_score=0），可同时提升重要度。
+        写入 agent_pin 审计。返回 False 表示记忆不存在或已在回收站。
+        """
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT pinned, importance FROM memories "
+            "WHERE id = ? AND category != 'trash'", (entry_id,)).fetchone()
+        if not row:
+            return False
+        now = time.time()
+        imp_v = None
+        if importance:
+            try:
+                imp_v = self._downgrade_enum(
+                    Importance.from_string(str(importance)), Importance, None)
+            except Exception:
+                imp_v = None
+        updates = ["pinned = 1", "forgetting_score = 0", "updated_at = ?"]
+        params: List[Any] = [now]
+        if imp_v is not None:
+            updates.append("importance = ?")
+            params.append(imp_v.value if hasattr(imp_v, "value") else str(imp_v))
+        params.append(entry_id)
+        conn.execute(f"UPDATE memories SET {', '.join(updates)} WHERE id = ?", params)
+        try:
+            self._memory_cache.invalidate(entry_id)
+        except Exception:
+            pass
+        conn.commit()
+        self._add_audit("agent_pin", entry_id, actor, session_id, "",
+                        details={"importance": importance or row[1]})
+        return True
+
+    def agent_forget(self, entry_id: str, reason: str = "",
+                     actor: str = "", session_id: str = "") -> bool:
+        """Agent 自主遗忘（v5.7.7 新增）
+
+        软删除（移入回收站，可 restore 恢复），并写入 agent_forget 审计
+        （含原因）。返回 False 表示记忆不存在或删除失败。
+        """
+        ok = self.delete_memory(entry_id, actor, session_id, hard_delete=False)
+        if ok:
+            self._add_audit("agent_forget", entry_id, actor, session_id, "",
+                            details={"reason": (reason or "")[:500]})
+        return ok
+
+    def boost_forgetting(self, entry_id: str, amount: float = 1.0,
+                         actor: str = "", session_id: str = "") -> bool:
+        """Agent 标记「这条不再重要」：加速遗忘（v5.7.7 新增）
+
+        提升 forgetting_score（封顶 10.0），使遗忘曲线更快将其降级/归档。
+        写入 agent_decay_boost 审计。
+        """
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT forgetting_score FROM memories "
+            "WHERE id = ? AND category != 'trash'", (entry_id,)).fetchone()
+        if not row:
+            return False
+        try:
+            amount = float(amount)
+        except (TypeError, ValueError):
+            amount = 1.0
+        if amount <= 0:
+            amount = 1.0
+        new_score = min(10.0, float(row[0] or 0.0) + amount)
+        now = time.time()
+        conn.execute(
+            "UPDATE memories SET forgetting_score = ?, updated_at = ? WHERE id = ?",
+            (new_score, now, entry_id))
+        try:
+            self._memory_cache.invalidate(entry_id)
+        except Exception:
+            pass
+        conn.commit()
+        self._add_audit("agent_decay_boost", entry_id, actor, session_id, "",
+                        details={"amount": amount, "score": new_score})
+        return True
+
+    def expire_memory(self, entry_id: str, actor: str = "",
+                      session_id: str = "") -> bool:
+        """关闭事实有效窗口（Bi-temporal 失效，v5.7.7 新增）
+
+        若 valid_to=0（开放窗口）则置 valid_to=now；已关闭或已删除返回 False。
+        用于冲突调和与「事实已过时」的显式失效——保留历史、不删除。
+        """
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT valid_to, category FROM memories WHERE id = ?",
+            (entry_id,)).fetchone()
+        if not row or row[1] == "trash":
+            return False
+        if row[0] and float(row[0]) > 0:
+            return False
+        now = time.time()
+        conn.execute(
+            "UPDATE memories SET valid_to = ?, updated_at = ? WHERE id = ?",
+            (now, now, entry_id))
+        try:
+            self._memory_cache.invalidate(entry_id)
+        except Exception:
+            pass
+        conn.commit()
+        self._add_audit("conflict_expire", entry_id, actor, session_id, "",
+                        details={"valid_to": now})
+        return True
+
+    def reconcile_conflicts(self, memory_ids: Optional[List[str]] = None,
+                            auto: bool = True) -> Dict[str, Any]:
+        """冲突自动调和（Bi-temporal 版，v5.7.7 新增）
+
+        基于 detect_conflicts 的 suggested_action：
+          - keep_newer             → 自动关闭较旧一方的有效窗口（expire）
+          - keep_higher_importance → 自动关闭低重要度一方的有效窗口
+          - merge / review_needed  → 归入 needs_review（人工确认）
+        auto=False 时仅报告不执行。写一条 conflict_reconcile 总账审计。
+        注意：detect_conflicts 只扫描明文库（encrypted=0）。
+        """
+        conflicts = self.detect_conflicts(memory_ids)
+        reconciled: List[Dict[str, Any]] = []
+        needs_review: List[Dict[str, Any]] = []
+        imp_map = {"LOW": 0, "MEDIUM": 1, "HIGH": 2, "CRITICAL": 3}
+        conn = self._get_conn()
+
+        def _meta(mid: str):
+            row = conn.execute(
+                "SELECT updated_at, importance FROM memories WHERE id = ?",
+                (mid,)).fetchone()
+            if not row:
+                return (0.0, "MEDIUM")
+            return (float(row[0] or 0.0), row[1] or "MEDIUM")
+
+        for c in conflicts:
+            a_id, b_id = c["memory_a_id"], c["memory_b_id"]
+            action = c["suggested_action"]
+            if not auto:
+                needs_review.append({**c, "status": "pending"})
+                continue
+            if action == "keep_newer":
+                a_ts, _ = _meta(a_id)
+                b_ts, _ = _meta(b_id)
+                older = a_id if a_ts <= b_ts else b_id
+                ok = self.expire_memory(older, actor="reconcile")
+                reconciled.append({**c, "action_taken": "expire",
+                                   "expired_id": older if ok else None})
+            elif action == "keep_higher_importance":
+                _, a_imp = _meta(a_id)
+                _, b_imp = _meta(b_id)
+                lower = a_id if imp_map.get(a_imp, 1) <= imp_map.get(b_imp, 1) else b_id
+                ok = self.expire_memory(lower, actor="reconcile")
+                reconciled.append({**c, "action_taken": "expire",
+                                   "expired_id": lower if ok else None})
+            else:
+                needs_review.append({**c, "status": "needs_review"})
+
+        self._add_audit("conflict_reconcile", "", "reconcile", "", "",
+                        details={"reconciled": len(reconciled),
+                                 "needs_review": len(needs_review)})
+        return {"reconciled": reconciled, "needs_review": needs_review}
+
     def gdpr_report(self) -> Dict[str, Any]:
         """GDPR 数据合规报告（v5.7.6 新增）
 
@@ -6997,7 +7166,11 @@ class StorageEngine:
                           # v5.5.5 fix: evolve 加入白名单
                           "evolve",
                           # v5.7.6 新增：bi-temporal 取代 + GDPR 被遗忘权
-                          "supersede", "gdpr_erase"}
+                          "supersede", "gdpr_erase",
+                          # v5.7.7 新增：Agent 治理 + 冲突调和 + 连接器
+                          "agent_pin", "agent_forget", "agent_decay_boost",
+                          "conflict_expire", "conflict_reconcile",
+                          "connector_ingest"}
         # v5.4.2：高敏感操作，审计失败时 fail-closed
         HIGH_SENSITIVE_ACTIONS = {"delete", "purge", "grant", "revoke", "forget",
                                   "agent_purge", "agent_forget"}

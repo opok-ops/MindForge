@@ -44,3 +44,5 @@ dsh-mindforge/
 # 性能报告生成的中间图表与逐页渲染预览（PDF/JSON 为交付物，保留跟踪）
 benchmarks/results/chart_*.png
 benchmarks/results/preview/
+# Source maps — 生产包/仓库禁止携带源码映射（防源码逆向还原）
+*.map

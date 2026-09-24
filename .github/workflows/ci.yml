@@ -70,6 +70,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+      - name: No tracked source maps
+        run: |
+          MAPS=$(git ls-files '*.map')
+          if [ -n "$MAPS" ]; then
+            echo '::error::source map 文件被 git 跟踪（源码映射泄露风险，生产包可能带出源码）：'
+            echo "$MAPS"
+            exit 1
+          fi
+          echo 'no tracked source maps: OK'
+
 
       - name: Set up Python
         uses: actions/setup-python@v6

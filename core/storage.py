@@ -7170,7 +7170,9 @@ class StorageEngine:
                           # v5.7.7 新增：Agent 治理 + 冲突调和 + 连接器
                           "agent_pin", "agent_forget", "agent_decay_boost",
                           "conflict_expire", "conflict_reconcile",
-                          "connector_ingest"}
+                          "connector_ingest",
+                          # v5.7.9 新增：知识图谱抽取
+                          "graph_extract"}
         # v5.4.2：高敏感操作，审计失败时 fail-closed
         HIGH_SENSITIVE_ACTIONS = {"delete", "purge", "grant", "revoke", "forget",
                                   "agent_purge", "agent_forget"}

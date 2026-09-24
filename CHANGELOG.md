@@ -3,7 +3,46 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [5.7.9] - 2026-09-24
+
+知识图谱自动管道：从「有结构没闭环」到「写入即建图、重启可恢复、接口可查询」。
+此前图谱引擎仅存在内存态 + 手工调用；本版本补齐持久化加载、add 自动抽取、
+STRICT 隐私隔离与三面查询接口。
+
+### Added
+
+- **自动抽取入图（core/mindforge.py + core/types.py）**：`MemoryConfig` 新增
+  `auto_extract_graph`（默认 False）；开启后 `add()` 完成写入即自动调用
+  `extract_graph(memory_id=...)`，失败不阻断主流程（try/except + warning）。
+- **图谱持久化（modules/knowledge_graph.py）**：`__init__(storage, auto_load=True)`
+  自动建表 + 从 knowledge_graph / graph_relations 表重建内存态（重启后实体/关系/
+  邻接可用）；同进程 `_processed_memory_ids` 防抖，避免全库增量重复建关系；
+  旧库缺表时 `_ensure_tables()` 容错升级。
+- **中文实体模式**：technology 补充中文技术栈词，organization 补充中文组织后缀
+  （公司/集团/大学/研究院/实验室/工作室/团队/中心），新增 product 类型
+  （微信/支付宝/飞书/钉钉/抖音/浏览器/编辑器 等）。
+- **STRICT 隐私隔离**：`extract_graph` 对 STRICT 记忆直接跳过（返回
+  `skipped: strict_privacy`），隐私记忆永不入图。
+- **查询接口**：
+  - facade：`graph_stats` / `graph_related`（BFS）/ `graph_path` / `graph_entities`
+  - CLI：`graph path --from-name X --to-name Y` 新子命令；`graph extract --memory-id`；
+    统一走 facade（此前每次新建空实例导致重启即失）
+  - REST：`GET /api/graph/stats`、`GET /api/graph/related?entity=&depth=`、
+    `GET /api/graph/path?from=&to=`、`POST /api/graph/extract`
+  - MCP：`memory_graph_stats` / `memory_graph_related` / `memory_graph_extract`
+    （工具数 40 → 43）
+- **审计**：`graph_extract` 加入 ACTION_WHITELIST（不再降级 other），
+  单条与批量抽取均写审计。
+
+### Tests
+
+- 新增 `tests/test_v579_graph.py`（15 项）：自动抽取开关/审计、重启持久化恢复、
+  防抖、显式抽取、STRICT 跳过、全库增量、BFS 相关与路径、CLI、API、MCP 43 工具、
+  handler 冒烟。
+- 全量 **873 项全部通过**（858 基线 + 15 新增）；文档一致性守卫 PASS。
+
 ## [5.7.8] - 2026-09-24
+
 
 向量语义检索点亮：可复现评测基线 + 确定性伪向量后端。此前 README 宣称混合检索
 但无外部可复现证据，本版本把「宣称」变成「可验证」——固定数据集、固定种子、

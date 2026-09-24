@@ -91,6 +91,8 @@ class MemoryConfig:
     default_importance: Importance = Importance.MEDIUM
     default_layer: MemoryLayer = MemoryLayer.SHORT_TERM
     auto_consolidate: bool = True
+    # v5.7.9：add/update 后自动抽取实体/关系入知识图谱（默认关闭，显式开启）
+    auto_extract_graph: bool = False
     consolidate_interval_hours: int = 24
     forget_curve_enabled: bool = True
     vector_dim: int = 384

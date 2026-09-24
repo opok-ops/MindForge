@@ -103,7 +103,7 @@ except ImportError:
     except (ImportError, ValueError):
         # 兜底值：仅当 core/version 完全不可导入时启用。发版时必须与
         # core/version.py 的 __version__ 一起更新（见发版清单），否则漂移。
-        __version__ = "5.7.8"
+        __version__ = "5.7.9"
 
 # 懒加载 modules：仅在对应命令执行时才导入，大幅加速 CLI 启动
 _modules_cache = {}
@@ -2043,41 +2043,68 @@ def cmd_consolidate(args):
 
 
 def cmd_graph(args):
-    """知识图谱操作"""
+    """知识图谱操作（v5.7.9：统一走 MindForge facade，自动持久化恢复）"""
     cm = _get_memory(args)
-    kg = _lazy_import("KnowledgeGraph")(storage=cm.storage)
+    try:
+        if args.graph_action == "stats":
+            stats = cm.graph_stats()
+            if getattr(args, "json_output", False):
+                _json_out(stats)
+                return 0
+            print(c("知识图谱统计", "bold"))
+            print(f"  实体总数: {stats['total_entities']}")
+            print(f"  关系总数: {stats['total_relations']}")
+            print("\n  实体类型:")
+            for etype, count in stats["entity_types"].items():
+                print(f"    {etype}: {count}")
+            print("\n  关系类型:")
+            for rtype, count in stats["relation_types"].items():
+                print(f"    {rtype}: {count}")
 
-    if args.graph_action == "stats":
-        stats = kg.get_entity_stats()
-        if getattr(args, "json_output", False):
-            _json_out(stats)
-            cm.close()
-            return 0
-        print(c("知识图谱统计", "bold"))
-        print(f"  实体总数: {stats['total_entities']}")
-        print(f"  关系总数: {stats['total_relations']}")
-        print("\n  实体类型:")
-        for etype, count in stats["entity_types"].items():
-            print(f"    {etype}: {count}")
-        print("\n  关系类型:")
-        for rtype, count in stats["relation_types"].items():
-            print(f"    {rtype}: {count}")
+        elif args.graph_action == "related":
+            entity = args.entity or ""
+            if not entity:
+                print(c("请指定 --entity", "red"))
+                return 2
+            related = cm.graph_related(entity, depth=args.depth)
+            print(f"\n与 '{c(entity, 'cyan')}' 相关的实体：")
+            for name, rel_type, weight in related:
+                print(f"  - {name}  [{rel_type}]  (权重: {weight:.2f})")
 
-    elif args.graph_action == "related":
-        entity = args.entity
-        related = kg.get_related_entities(entity, depth=args.depth)
-        print(f"\n与 '{c(entity, 'cyan')}' 相关的实体：")
-        for name, rel_type, weight in related:
-            print(f"  - {name}  [{rel_type}]  (权重: {weight:.2f})")
+        elif args.graph_action == "path":
+            frm = getattr(args, "from_name", "") or ""
+            to = getattr(args, "to_name", "") or ""
+            if not frm or not to:
+                print(c("请指定 --from-name 与 --to-name", "red"))
+                return 2
+            p = cm.graph_path(frm, to)
+            if not p:
+                print(c(f"未找到 {frm} -> {to} 的路径", "yellow"))
+                return 0
+            print(f"路径: {' -> '.join(p['entities'])}")
+            if getattr(args, "json_output", False):
+                _json_out(p)
 
-    elif args.graph_action == "extract":
-        text = args.text
-        entities = kg.extract_entities(text)
-        print(f"\n提取到 {len(entities)} 个实体：")
-        for name, etype in entities:
-            print(f"  - {name} ({etype})")
-
-    cm.close()
+        elif args.graph_action == "extract":
+            mid = getattr(args, "memory_id", "") or ""
+            text = args.text or ""
+            if mid:
+                try:
+                    stats = cm.extract_graph(memory_id=mid)
+                except ValueError as e:
+                    print(c(f"❌ {e}", "red"))
+                    return 1
+            elif text:
+                entities, relations = cm._knowledge_graph.process_memory("", text)
+                stats = {"entities_added": len(entities), "relations_added": len(relations),
+                         "memory_processed": 0}
+            else:
+                stats = cm.extract_graph()
+            print(f"新增实体: {stats.get('entities_added', 0)}, 新增关系: {stats.get('relations_added', 0)}")
+            if getattr(args, "json_output", False):
+                _json_out(stats)
+    finally:
+        cm.close()
     return 0
 
 
@@ -4239,11 +4266,14 @@ def main(argv=None):
 
     p_graph = sub.add_parser("graph", help="知识图谱", parents=[json_parser])
     p_graph.add_argument(
-        "graph_action", choices=["stats", "related", "extract"], help="操作"
+        "graph_action", choices=["stats", "related", "extract", "path"], help="操作"
     )
     p_graph.add_argument("--entity", help="实体名称")
     p_graph.add_argument("--depth", type=int, default=2, help="深度")
     p_graph.add_argument("--text", help="要提取的文本")
+    p_graph.add_argument("--memory-id", help="从指定记忆 ID 提取入图（v5.7.9）")
+    p_graph.add_argument("--from-name", help="路径起点实体（v5.7.9）")
+    p_graph.add_argument("--to-name", help="路径终点实体（v5.7.9）")
 
     p_personality = sub.add_parser("personality", help="人格化")
     p_personality.add_argument(

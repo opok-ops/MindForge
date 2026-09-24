@@ -317,7 +317,7 @@ class TestCLI(unittest.TestCase):
 
 
 class TestMCP(unittest.TestCase):
-    """MCP：工具数 40 + 新工具调用"""
+    """MCP：工具数 43 + 新工具调用"""
 
     def test_tools_list_count_and_new_tools(self):
         import sys
@@ -325,7 +325,7 @@ class TestMCP(unittest.TestCase):
         from mcp.server import _handle_tools_list, _handle_tools_call
         tools = _handle_tools_list({})["tools"]
         names = [t["name"] for t in tools]
-        self.assertEqual(len(tools), 40)
+        self.assertEqual(len(tools), 43)
         for n in ("memory_agent_pin", "memory_agent_forget",
                   "memory_agent_decay_boost", "memory_connector_ingest",
                   "conflict_reconcile"):

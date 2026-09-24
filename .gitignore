@@ -46,3 +46,5 @@ benchmarks/results/chart_*.png
 benchmarks/results/preview/
 # Source maps — 生产包/仓库禁止携带源码映射（防源码逆向还原）
 *.map
+
+mf_v579_*/

@@ -33,7 +33,7 @@ except ImportError:
     except (ImportError, ValueError):
         # 兜底值：仅当 core/version 完全不可导入时启用。发版时必须与
         # core/version.py 的 __version__ 一起更新（见发版清单），否则漂移。
-        __version__ = "5.7.8"
+        __version__ = "5.7.9"
 
 
 def _import_mindforge():
@@ -654,6 +654,34 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
             },
         },
     },
+    {
+        "name": "memory_graph_stats",
+        "description": "知识图谱统计（v5.7.9）：实体/关系总数与类型分布。",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "memory_graph_related",
+        "description": "查询与指定实体相关的实体（BFS，v5.7.9）。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["entity"],
+            "properties": {
+                "entity": {"type": "string", "description": "实体名称"},
+                "depth": {"type": "integer", "minimum": 1, "maximum": 5, "default": 2, "description": "BFS 深度"},
+                "max_results": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20, "description": "返回上限"},
+            },
+        },
+    },
+    {
+        "name": "memory_graph_extract",
+        "description": "触发知识图谱抽取（v5.7.9）：指定记忆 ID 或全库增量（同进程防抖，STRICT 隐私跳过）。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "memory_id": {"type": "string", "description": "指定记忆 ID（缺省=全库增量）"},
+            },
+        },
+    },
 ]
 
 
@@ -1232,6 +1260,33 @@ def h_memory_connector_ingest(mf, args):
     return {"ok": True, "stats": stats}
 
 
+def h_graph_stats(mf, args):
+    try:
+        return {"ok": True, "stats": mf.graph_stats()}
+    except Exception as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_graph_related(mf, args):
+    err = _require_args(args, "entity")
+    if err:
+        return err
+    try:
+        return {"ok": True, "entity": args["entity"],
+                "related": mf.graph_related(str(args["entity"]), depth=int(args.get("depth", 2)))}
+    except Exception as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_graph_extract(mf, args):
+    try:
+        mid = args.get("memory_id", "") or ""
+        stats = mf.extract_graph(memory_id=mid) if mid else mf.extract_graph()
+        return {"ok": True, **stats}
+    except ValueError as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
 def h_conflict_reconcile(mf, args):
     try:
         result = mf.reconcile_conflicts(
@@ -1290,6 +1345,10 @@ HANDLERS: Dict[str, Any] = {
     "memory_agent_decay_boost": h_memory_agent_decay_boost,
     "memory_connector_ingest": h_memory_connector_ingest,
     "conflict_reconcile": h_conflict_reconcile,
+    # v5.7.9 新增：知识图谱
+    "memory_graph_stats": h_graph_stats,
+    "memory_graph_related": h_graph_related,
+    "memory_graph_extract": h_graph_extract,
 }
 
 

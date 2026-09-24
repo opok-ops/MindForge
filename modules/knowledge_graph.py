@@ -51,12 +51,21 @@ ENTITY_PATTERNS = {
         r'\b(react|vue|angular|django|flask|spring|fastapi)\b',
         r'\b(mysql|postgresql|mongodb|redis|elasticsearch|sqlite)\b',
         r'\b(docker|kubernetes|k8s|aws|gcp|azure)\b',
+        # v5.7.9：中文技术栈词
+        r'(python|java|mysql|redis|sqlite|docker|kubernetes|微信小程序|浏览器插件)',
     ],
     "person": [
         r'(?:Mr\.|Mrs\.|Ms\.|Dr\.|Prof\.)\s+[A-Z][a-z]+',
     ],
     "organization": [
         r'(?:Inc|Ltd|LLC|Corp|Corporation|Company|University|Institute)\b',
+        # v5.7.9：中文组织后缀（公司/集团/大学/研究院等）
+        r'[\u4e00-\u9fff]{2,12}(?:公司|集团|大学|研究院|实验室|工作室|团队|中心)',
+    ],
+    "product": [
+        # v5.7.9：常见产品/平台名
+        r'\b(wechat|alipay|feishu|lark|dingtalk|douyin|chrome|vscode|github|gitlab|slack|notion)\b',
+        r'(微信|支付宝|飞书|钉钉|抖音|浏览器|编辑器)',
     ],
 }
 
@@ -73,11 +82,16 @@ RELATION_PATTERNS = [
 class KnowledgeGraph:
     """知识图谱引擎"""
 
-    def __init__(self, storage=None):
+    def __init__(self, storage=None, auto_load=True):
         self.storage = storage
         self.entities: Dict[str, KnowledgeEntity] = {}
         self.relations: Dict[str, KnowledgeRelation] = {}
         self._adjacency: Dict[str, List[Tuple[str, str, float]]] = defaultdict(list)
+        # v5.7.9：同进程内已抽取记忆 ID（防抖，避免全库增量重复建关系）
+        self._processed_memory_ids: set = set()
+        if self.storage is not None and auto_load:
+            self._ensure_tables()
+            self._load_from_db()
 
     def extract_entities(self, text: str) -> List[Tuple[str, str]]:
         """从文本中提取实体（简易版）"""
@@ -127,6 +141,69 @@ class KnowledgeGraph:
             if entity.lower() in text_lower:
                 return entity
         return None
+
+    def _ensure_tables(self) -> None:
+        """v5.7.9：确保图谱持久化表存在（旧库升级容错）"""
+        try:
+            conn = self.storage._get_conn()
+            conn.executescript("""
+                CREATE TABLE IF NOT EXISTS knowledge_graph (
+                    id TEXT PRIMARY KEY,
+                    entity TEXT,
+                    entity_type TEXT,
+                    description TEXT,
+                    metadata TEXT DEFAULT '{}',
+                    created_at REAL
+                );
+                CREATE TABLE IF NOT EXISTS graph_relations (
+                    id TEXT PRIMARY KEY,
+                    from_entity TEXT,
+                    to_entity TEXT,
+                    relation_type TEXT,
+                    weight REAL DEFAULT 1.0,
+                    memory_ids TEXT DEFAULT '[]',
+                    metadata TEXT DEFAULT '{}',
+                    created_at REAL
+                );
+            """)
+            conn.commit()
+        except sqlite3.OperationalError as _kg_err:
+            logger.warning("创建知识图谱表失败: %s", _kg_err)
+
+    def _load_from_db(self) -> None:
+        """v5.7.9：从持久化表重建内存态（重启后实体/关系/邻接可用）"""
+        try:
+            conn = self.storage._get_conn()
+            for row in conn.execute(
+                "SELECT id, entity, entity_type, description, metadata, created_at "
+                "FROM knowledge_graph"
+            ):
+                eid, name, etype, desc_text, meta, created = row
+                self.entities[eid] = KnowledgeEntity(
+                    id=eid, name=name, entity_type=etype or "general",
+                    description=desc_text or "",
+                    metadata=json.loads(meta) if meta else {},
+                    created_at=created or 0.0,
+                )
+            for row in conn.execute(
+                "SELECT id, from_entity, to_entity, relation_type, weight, "
+                "memory_ids, metadata, created_at FROM graph_relations"
+            ):
+                rid, fe, te, rtype, weight, mids, meta, created = row
+                rel = KnowledgeRelation(
+                    id=rid, from_entity=fe, to_entity=te, relation_type=rtype,
+                    weight=weight or 1.0,
+                    memory_ids=json.loads(mids) if mids else [],
+                    metadata=json.loads(meta) if meta else {},
+                    created_at=created or 0.0,
+                )
+                self.relations[rid] = rel
+                self._adjacency[fe].append((te, rtype, rel.weight))
+                self._adjacency[te].append((fe, rtype, rel.weight))
+                for mid in rel.memory_ids:
+                    self._processed_memory_ids.add(mid)
+        except sqlite3.OperationalError as _kg_err:
+            logger.warning("加载知识图谱失败: %s", _kg_err)
 
     def add_entity(self, name: str, entity_type: str = "general",
                    description: str = "", metadata: Optional[Dict] = None) -> KnowledgeEntity:
@@ -205,6 +282,9 @@ class KnowledgeGraph:
 
     def process_memory(self, memory_id: str, content: str) -> Tuple[List[KnowledgeEntity], List[KnowledgeRelation]]:
         """处理一条记忆，提取实体和关系"""
+        # v5.7.9：同进程内已处理记忆直接跳过（防抖）
+        if memory_id and memory_id in self._processed_memory_ids:
+            return [], []
         entities_data = self.extract_entities(content)
         entity_names = [name for name, _ in entities_data]
 
@@ -220,6 +300,9 @@ class KnowledgeGraph:
         for subj, rel_type, obj in relations:
             relation = self.add_relation(subj, obj, rel_type, memory_id=memory_id)
             added_relations.append(relation)
+
+        if memory_id:
+            self._processed_memory_ids.add(memory_id)
 
         return added_entities, added_relations
 

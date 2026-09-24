@@ -780,6 +780,26 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                     self._send_json(st)
                 except Exception as e:
                     self._send_json({"error": str(e)}, 500)
+            elif path == "/api/graph/stats":
+                self._send_json(self.mindforge.graph_stats())
+            elif path == "/api/graph/related":
+                entity = qs.get("entity", [""])[0]
+                if not entity:
+                    self._send_json({"error": "Missing 'entity' param"}, 400)
+                    return
+                try:
+                    depth = int(qs.get("depth", ["2"])[0] or 2)
+                except ValueError:
+                    depth = 2
+                self._send_json({"entity": entity, "depth": depth,
+                                 "related": self.mindforge.graph_related(entity, depth=depth)})
+            elif path == "/api/graph/path":
+                frm = qs.get("from", [""])[0]
+                to = qs.get("to", [""])[0]
+                if not frm or not to:
+                    self._send_json({"error": "Missing 'from'/'to' params"}, 400)
+                    return
+                self._send_json(self.mindforge.graph_path(frm, to) or {"path": None})
             elif path == "/api/connectors":
                 from modules.connectors import list_connectors
                 self._send_json({"connectors": list_connectors()})
@@ -882,6 +902,18 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                 result = self.mindforge.reconcile_conflicts(
                     memory_ids=memory_ids, auto=auto)
                 self._send_json({"status": "ok", **result})
+            elif path == "/api/graph/extract":
+                mid = body.get("memory_id", "")
+                if mid is not None and not isinstance(mid, str):
+                    self._send_json({"error": "'memory_id' must be a string"}, 400)
+                    return
+                try:
+                    stats = (self.mindforge.extract_graph(memory_id=mid) if mid
+                             else self.mindforge.extract_graph())
+                except ValueError as ve:
+                    self._send_json({"error": str(ve)}, 400)
+                    return
+                self._send_json({"status": "ok", **stats})
             elif path == "/api/import":
                 memories = body.get("memories", [])
                 # v5.7.0 P2：批量导入端点额外限流（10 req/60s/IP）

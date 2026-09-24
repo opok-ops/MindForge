@@ -13,6 +13,8 @@ MindForge 嵌入引擎
   MINDFORGE_EMBEDDING_MODEL=text-embedding-3-small
   MINDFORGE_EMBEDDING_API_URL=https://custom.endpoint/embed
   OLLAMA_HOST=http://localhost:11434
+  MINDFORGE_EMBEDDING_BACKEND=fake        # v5.7.8：确定性伪向量（测试/评测基线，无需模型）
+
 
 默认模型: paraphrase-multilingual-MiniLM-L12-v2 (384 维, ~120MB, 支持50+语言)
 """
@@ -499,6 +501,89 @@ class HTTPBackend(EmbeddingBackend):
         return all_results
 
 
+# ===== 确定性伪向量后端（v5.7.8） =====
+
+class FakeBackend(EmbeddingBackend):
+    """确定性伪向量后端（v5.7.8 新增）
+
+    不依赖任何模型 / 网络，为测试与评测基线提供确定性向量：
+    - 相同文本 → 相同向量（可复现）
+    - 共享字符 bigram 的文本 → 余弦相似度更高（近似词面重合）
+    - 输出 L2 归一化
+
+    用途：
+    - CI / 无模型环境跑通向量检索完整链路
+    - benchmarks/embedding_eval.py 提供可复现基线
+      （MINDFORGE_EMBEDDING_BACKEND=fake 或 create_backend("fake")）
+    - 开发者本地快速冒烟
+
+    注意：伪向量不代表真实语义，仅在无真实模型时作链路与基线用途。
+    """
+
+    def __init__(self, model_name: str = "fake-bigram", seed: int = 42,
+                 dimension: int = 384):
+        self._model_name = model_name
+        self._seed = int(seed)
+        self._dimension = int(dimension)
+        self._available = True
+
+    @property
+    def is_available(self) -> bool:
+        return True
+
+    @property
+    def dimension(self) -> int:
+        return self._dimension
+
+    @property
+    def model_name(self) -> str:
+        return self._model_name
+
+    def _vec(self, text: str) -> List[float]:
+        import hashlib
+        n = self._dimension
+        vec = [0.0] * n
+        t = text.lower()
+        seed_b = self._seed.to_bytes(4, "big")
+        # 字符 bigram 哈希桶（位置无关 → 词面重合度高者相似）
+        for i in range(len(t) - 1):
+            g = t[i:i + 2]
+            if g == "  " or g[0] == " " or g[1] == " ":
+                continue
+            h = hashlib.blake2b(
+                g.encode("utf-8", "ignore") + seed_b, digest_size=8).digest()
+            v = int.from_bytes(h, "big") / 2 ** 64
+            idx = int.from_bytes(
+                hashlib.blake2b(g.encode("utf-8", "ignore") + b"\x01" + seed_b,
+                                digest_size=4).digest(), "big") % n
+            vec[idx] += v
+        # 单字符（权重减半）
+        for ch in set(t):
+            if ch.isspace():
+                continue
+            h = hashlib.blake2b(
+                ch.encode("utf-8", "ignore") + seed_b, digest_size=8).digest()
+            v = int.from_bytes(h, "big") / 2 ** 64
+            idx = int.from_bytes(
+                hashlib.blake2b(ch.encode("utf-8", "ignore") + b"\x02" + seed_b,
+                                digest_size=4).digest(), "big") % n
+            vec[idx] += v * 0.5
+        norm = sum(x * x for x in vec) ** 0.5
+        if norm > 0:
+            vec = [x / norm for x in vec]
+        return vec
+
+    def encode(self, text: str) -> Optional[List[float]]:
+        if not text:
+            return None
+        return self._vec(text)
+
+    def encode_batch(self, texts: List[str]) -> Optional[List[List[float]]]:
+        if not texts:
+            return None
+        return [self._vec(t) for t in texts]
+
+
 # ===== 后端工厂 =====
 
 _BACKEND_REGISTRY = {
@@ -506,6 +591,7 @@ _BACKEND_REGISTRY = {
     "openai": OpenAIBackend,
     "ollama": OllamaBackend,
     "http": HTTPBackend,
+    "fake": FakeBackend,  # v5.7.8：确定性测试/评测后端
 }
 
 
@@ -541,6 +627,11 @@ def create_backend(backend_name: str = "", model_name: str = "",
         return cls(model_name=model, **kwargs)
     elif backend_name == "http":
         return cls(model_name=model_name or "custom", **kwargs)
+    elif backend_name == "fake":
+        seed = int(kwargs.pop("seed", 42))
+        dim = int(kwargs.pop("dimension", DEFAULT_DIMENSION))
+        # fake 无真实模型名：忽略 DEFAULT_MODEL，统一为可辨识的确定性标识
+        return cls(model_name="fake-bigram-" + str(seed), seed=seed, dimension=dim, **kwargs)
     else:
         model = model_name or DEFAULT_MODEL
         return cls(model_name=model, **kwargs)
@@ -651,6 +742,8 @@ class EmbeddingEngine:
             )
             if self._backend.is_available:
                 self._dimension = self._backend.dimension
+                # v5.7.8：真实模型名以实际后端为准（fake 等后端不使用默认模型）
+                self._model_name = self._backend.model_name
                 self._available = True
                 logger.info("EmbeddingEngine 加载成功 [%s]: %s (dim=%d)",
                             self._backend_name, self._model_name, self._dimension)

@@ -773,6 +773,13 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                 )
 
 
+            elif path == "/api/embedding/status":
+                # v5.7.8：嵌入向量状态（后端/模型/维度/已嵌入数）
+                try:
+                    st = self.mindforge.get_embedding_status()
+                    self._send_json(st)
+                except Exception as e:
+                    self._send_json({"error": str(e)}, 500)
             elif path == "/api/connectors":
                 from modules.connectors import list_connectors
                 self._send_json({"connectors": list_connectors()})

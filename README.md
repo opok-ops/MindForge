@@ -8,7 +8,7 @@ MindForge gives AI agents a persistent, structured long-term memory: a four-tier
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-5.7.7-green.svg)](https://github.com/opok-ops/MindForge/releases)
+[![Version](https://img.shields.io/badge/version-5.7.8-green.svg)](https://github.com/opok-ops/MindForge/releases)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
 [![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
@@ -71,6 +71,7 @@ MindForge stats
 
 - **Four-tier memory** — sensory buffer, short-term, long-term, and permanent tiers with Ebbinghaus-based decay and periodic consolidation.
 - **Conflict detection** — antonym pairs, attribute inconsistencies, and timeline conflicts, with automatic decay.
+- **Reproducible embedding eval** — `benchmarks/embedding_eval.py` compares hybrid / vector / FTS5 / TF-IDF on a fixed multilingual set with fixed seeds (Recall@5 / MRR@10 / NDCG@10); deterministic `fake` backend runs without any model for CI baselines (v5.7.8).
 - **Agent memory governance** — `agent_pin` freezes decay and pins key memories, `agent_forget` soft-deletes with a reason, `agent_decay_boost` accelerates forgetting, and `expire_memory` closes a fact's validity window (v5.7.7).
 - **Conflict auto-reconcile** — `reconcile_conflicts` closes the stale side of `keep_newer` / `keep_higher_importance` conflicts (Bi-temporal expiry, never deletes), and routes `merge` / `review_needed` to human review (v5.7.7).
 - **Connector framework** — pluggable `json` / `csv` / `markdown` / `file` / `url` connectors with a registry and SSRF guard; extensible via `register_connector` (v5.7.7).
@@ -96,7 +97,7 @@ MindForge stats
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│           MindForge v5.7.7            │
+│           MindForge v5.7.8            │
 │  Cognitive Layer  Personality · KnowledgeGraph       │
 │                   MemoryEvolution · FederatedMemory  │
 ├──────────────────────────────────────────────────────┤

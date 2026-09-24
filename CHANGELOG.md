@@ -3,7 +3,39 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [5.7.8] - 2026-09-24
+
+向量语义检索点亮：可复现评测基线 + 确定性伪向量后端。此前 README 宣称混合检索
+但无外部可复现证据，本版本把「宣称」变成「可验证」——固定数据集、固定种子、
+四路口径与指标全部落盘。
+
+### Added
+
+- **可复现评测基线（benchmarks/embedding_eval.py，新文件）**：内置 20 条
+  中英双语标注查询（锁定，勿改）；四路对比 hybrid（0.6 文本 + 0.4 向量融合）/
+  vector / FTS5 / TF-IDF；指标 Recall@5 / MRR@10 / NDCG@10；`--backend` /
+  `--seed` / `--limit` / `--json`；同 backend + 同 seed 输出确定一致。
+- **确定性伪向量后端（core/embedding.py）**：`FakeBackend`——字符 bigram
+  哈希桶 + L2 归一化，同文本同向量、共享词面者相似度高；注册进
+  `_BACKEND_REGISTRY`（`create_backend("fake")` 或
+  `MINDFORGE_EMBEDDING_BACKEND=fake`），CI/无模型环境可确定性跑通完整
+  向量链路；评测基线人人可复现。
+- **引擎模型名真实化（core/embedding.py）**：`EmbeddingEngine._try_load`
+  成功后以实际后端模型名同步 `_model_name`，`get_embedding_status()`
+  返回真实模型（此前固定显示默认模型）。
+- **REST API**：新增 `GET /api/embedding/status`（available / model_name /
+  dimension / embedding_count）。
+
+### Tests
+
+- 新增 `tests/test_v578_embedding.py`（11 项）：FakeBackend 确定性 / 归一化 /
+  维度 / 注册表 / 未知后端报错列可用名；评测基线同 seed 两次结果一致 +
+  指标结构合法；FakeBackend 注入后 search 走 vector 融合路由；rebuild 链路；
+  无后端降级；API 状态端点；CLI embedding-status 冒烟。
+- 全量 **858 项全部通过**（847 基线 + 11 新增）；文档一致性守卫 PASS。
+
 ## [5.7.7] - 2026-09-23
+
 
 Agent 记忆治理 + 冲突自动调和 + 多源连接器框架：Agent 可自主 pin / forget /
 加速衰减并显式关闭事实窗口；冲突按重要度与时效自动失效旧一方；连接器框架

@@ -37,9 +37,9 @@ def _read(rel: str) -> str:
 class TestVersionTruth(unittest.TestCase):
     """版本号真值必须收敛在 core/version.py，且各处投影一致。"""
 
-    def test_core_version_is_577(self):
-        self.assertEqual(core_version.__version__, "5.7.7")
-        self.assertEqual(core_version.VERSION_INFO, (5, 7, 7))
+    def test_core_version_is_578(self):
+        self.assertEqual(core_version.__version__, "5.7.8")
+        self.assertEqual(core_version.VERSION_INFO, (5, 7, 8))
 
     def test_pyproject_matches_core_version(self):
         m = re.search(r'^version\s*=\s*"([^"]+)"', _read("pyproject.toml"), re.M)

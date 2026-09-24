@@ -126,6 +126,7 @@ class MindForge:
         self._event_bus = None          # v5.5.5 lazy (事件总线)
         self._privacy_engine = None     # v5.6.2 lazy (隐私引擎)
         self._kg = None                 # v5.7.9 lazy (知识图谱)
+        self._skill_store_obj = None    # v5.8.0 lazy (经验蒸馏)
 
         if self.config.encrypted:
             self._init_encryption()
@@ -5264,6 +5265,68 @@ class MindForge:
             "skills_found": len(skills),
             "skills": [s.to_dict() for s in skills[:50]],
         }
+
+    # ------------------------------------------------------------------
+    # v5.8.0 程序性记忆 / 经验蒸馏（Cases → Skills 自进化）
+    # ------------------------------------------------------------------
+    @property
+    def _skill_store(self):
+        """惰性加载经验存储（案例 + 技能模板，持久化恢复）"""
+        if self._skill_store_obj is None:
+            from modules.experience import SkillStore
+            self._skill_store_obj = SkillStore(storage=self._storage)
+        return self._skill_store_obj
+
+    def record_experience(self, task: str, content: str = "", result: str = "",
+                          outcome: str = "success", duration_seconds: float = 0.0,
+                          tags: Optional[List[str]] = None,
+                          source_memory_ids: Optional[List[str]] = None,
+                          agent_id: str = "") -> Dict[str, Any]:
+        """记录一次任务经验（Case），供后续蒸馏为可复用技能（v5.8.0）"""
+        if not isinstance(task, str) or not task.strip():
+            raise ValueError("task 不能为空")
+        case = self._skill_store.record_case(
+            task=task, content=content, result=result, outcome=outcome,
+            duration_seconds=duration_seconds, tags=tags,
+            source_memory_ids=source_memory_ids, agent_id=agent_id)
+        self._storage._add_audit(
+            "experience_record", case.id, agent_id or "", "", "",
+            {"note": f"task={str(task)[:80]}"})
+        return case.to_dict()
+
+    def distill_skills(self, min_cluster_size: int = 2, max_skills: int = 50) -> Dict[str, Any]:
+        """从成功案例蒸馏技能模板并持久化（v5.8.0）"""
+        stats = self._skill_store.distill(
+            min_cluster_size=max(1, int(min_cluster_size)),
+            max_skills=max(1, min(500, int(max_skills))))
+        self._storage._add_audit(
+            "experience_distill", "", "", "", "",
+            {"note": f"cases={stats['cases_processed']} saved={stats['skills_saved']}"})
+        return stats
+
+    def skill_match(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
+        """按新任务匹配已存技能（触发词/标签/bigram，v5.8.0）"""
+        return self._skill_store.match_skills(query, limit=limit)
+
+    def skill_render(self, name: str, **kwargs) -> Optional[str]:
+        """用参数渲染技能为可执行流程（v5.8.0）"""
+        return self._skill_store.render_skill(name, **kwargs)
+
+    def skill_stats(self) -> Dict[str, Any]:
+        """经验统计（案例/技能数，v5.8.0）"""
+        return self._skill_store.stats()
+
+    def skill_list(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """列出已存技能（v5.8.0）"""
+        return self._skill_store.list_skills(limit=limit)
+
+    def skill_cases(self, limit: int = 100, outcome: str = "") -> List[Dict[str, Any]]:
+        """列出经验案例（v5.8.0）"""
+        return self._skill_store.list_cases(limit=limit, outcome=outcome)
+
+    def skill_case_delete(self, case_id: str) -> bool:
+        """删除经验案例（v5.8.0）"""
+        return self._skill_store.delete_case(case_id)
 
     # --- 4. 混合检索增强：查询扩展 + Cross-Encoder 重排 ---
     def search_enhanced(self, query: str,

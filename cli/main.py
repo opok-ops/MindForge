@@ -103,7 +103,7 @@ except ImportError:
     except (ImportError, ValueError):
         # 兜底值：仅当 core/version 完全不可导入时启用。发版时必须与
         # core/version.py 的 __version__ 一起更新（见发版清单），否则漂移。
-        __version__ = "5.7.9"
+        __version__ = "5.8.0"
 
 # 懒加载 modules：仅在对应命令执行时才导入，大幅加速 CLI 启动
 _modules_cache = {}
@@ -2103,6 +2103,105 @@ def cmd_graph(args):
             print(f"新增实体: {stats.get('entities_added', 0)}, 新增关系: {stats.get('relations_added', 0)}")
             if getattr(args, "json_output", False):
                 _json_out(stats)
+    finally:
+        cm.close()
+    return 0
+
+
+def cmd_experience(args):
+    """程序性记忆 / 经验蒸馏（v5.8.0）"""
+    cm = _get_memory(args)
+    try:
+        action = args.exp_action
+        if action == "record":
+            tags = [t.strip() for t in (args.tags or "").split(",") if t.strip()]
+            mids = [m.strip() for m in (args.memory_ids or "").split(",") if m.strip()]
+            case = cm.record_experience(
+                task=args.task or "", content=args.content or "",
+                result=args.result or "", outcome=args.outcome,
+                duration_seconds=float(args.duration or 0.0), tags=tags,
+                source_memory_ids=mids, agent_id=args.agent or "")
+            if getattr(args, "json_output", False):
+                _json_out(case)
+                return 0
+            print(c(f"✔ 已记录案例 {case['id'][:8]}… (task={case['task'][:40]})", "green"))
+        elif action == "distill":
+            stats = cm.distill_skills(min_cluster_size=int(args.min_cluster or 2))
+            if getattr(args, "json_output", False):
+                _json_out(stats)
+                return 0
+            print(c("\n🧠 经验蒸馏", "bold"))
+            print(f"  处理案例: {stats['cases_processed']}")
+            print(f"  发现技能: {c(str(stats['skills_found']), 'green' if stats['skills_found'] else 'yellow')}")
+            print(f"  已落库:   {stats['skills_saved']}")
+            for i, s in enumerate(stats['skills'][:5], 1):
+                print(f"    [{i}] {s['name']}  (confidence={s['confidence']}, cluster={s['cluster_size']})")
+        elif action == "match":
+            if not args.query:
+                print(c("请指定 --query", "red"))
+                return 2
+            hits = cm.skill_match(args.query, limit=int(args.limit or 5))
+            if getattr(args, "json_output", False):
+                _json_out({"query": args.query, "skills": hits})
+                return 0
+            print(c(f"\n🔎 匹配 '{args.query}':", "bold"))
+            if not hits:
+                print(c("  无匹配技能（先 record 案例再 distill）", "yellow"))
+                return 0
+            for h in hits:
+                print(f"  - {h['name']}  (score 触发词/标签, confidence={h['confidence']})")
+        elif action == "render":
+            if not args.name:
+                print(c("请指定 --name", "red"))
+                return 2
+            params = {}
+            for p in (args.param or []):
+                if "=" in p:
+                    k, v = p.split("=", 1)
+                    params[k.strip()] = v.strip()
+            out = cm.skill_render(args.name, **params)
+            if out is None:
+                print(c(f"技能不存在: {args.name}", "red"))
+                return 1
+            print(out)
+        elif action == "stats":
+            st = cm.skill_stats()
+            if getattr(args, "json_output", False):
+                _json_out(st)
+                return 0
+            print(c("经验统计（v5.8.0）", "bold"))
+            print(f"  案例数: {st['total_cases']}")
+            print(f"  技能数: {st['total_skills']}")
+            for oc, n in st['outcome_counts'].items():
+                print(f"    {oc}: {n}")
+        elif action == "list":
+            skills = cm.skill_list(limit=int(args.limit or 20))
+            if getattr(args, "json_output", False):
+                _json_out({"skills": skills})
+                return 0
+            print(c("已存技能", "bold"))
+            if not skills:
+                print(c("  暂无技能（先 record + distill）", "yellow"))
+                return 0
+            for s in skills:
+                print(f"  - {s['name']}  (confidence={s['confidence']}, cluster={s['cluster_size']})")
+        elif action == "cases":
+            cases = cm.skill_cases(limit=int(args.limit or 20), outcome=args.outcome)
+            if getattr(args, "json_output", False):
+                _json_out({"cases": cases})
+                return 0
+            print(c("经验案例", "bold"))
+            if not cases:
+                print(c("  暂无案例", "yellow"))
+                return 0
+            for cc in cases:
+                print(f"  - {cc['id'][:8]}… [{cc['outcome']}] {cc['task'][:50]}")
+        elif action == "delete":
+            if not args.case_id:
+                print(c("请指定 --case-id", "red"))
+                return 2
+            ok = cm.skill_case_delete(args.case_id)
+            print(c("已删除" if ok else f"案例不存在: {args.case_id}", "green" if ok else "yellow"))
     finally:
         cm.close()
     return 0
@@ -4274,6 +4373,27 @@ def main(argv=None):
     p_graph.add_argument("--memory-id", help="从指定记忆 ID 提取入图（v5.7.9）")
     p_graph.add_argument("--from-name", help="路径起点实体（v5.7.9）")
     p_graph.add_argument("--to-name", help="路径终点实体（v5.7.9）")
+
+    p_exp = sub.add_parser("experience", help="程序性记忆/经验蒸馏（v5.8.0）", parents=[json_parser])
+    p_exp.add_argument(
+        "exp_action", choices=["record", "distill", "match", "render",
+                                "stats", "list", "cases", "delete"], help="操作"
+    )
+    p_exp.add_argument("--task", help="任务描述")
+    p_exp.add_argument("--content", default="", help="过程/步骤内容")
+    p_exp.add_argument("--result", default="", help="结果")
+    p_exp.add_argument("--outcome", default="success",
+                       choices=["success", "partial", "failure"], help="结果类型")
+    p_exp.add_argument("--duration", type=float, default=0.0, help="耗时秒")
+    p_exp.add_argument("--tags", default="", help="逗号分隔标签")
+    p_exp.add_argument("--agent", default="", help="Agent ID")
+    p_exp.add_argument("--memory-ids", default="", help="逗号分隔来源记忆 ID")
+    p_exp.add_argument("--query", help="匹配查询")
+    p_exp.add_argument("--limit", type=int, default=10, help="数量限制")
+    p_exp.add_argument("--min-cluster", type=int, default=2, help="最小聚类数")
+    p_exp.add_argument("--name", help="技能名")
+    p_exp.add_argument("--param", action="append", default=[], help="渲染参数 key=value")
+    p_exp.add_argument("--case-id", help="案例 ID")
 
     p_personality = sub.add_parser("personality", help="人格化")
     p_personality.add_argument(
@@ -6830,6 +6950,7 @@ def _main_dispatch(args, parser=None):
         "intent-router": cmd_intent_router,
         "conflict-scan": cmd_conflict_scan,
         "skill-extract": cmd_skill_extract,
+    "experience": cmd_experience,
         "rerank-search": cmd_rerank_search,
         "session-focus": cmd_session_focus,
         # v5.4.5 新增向量检索

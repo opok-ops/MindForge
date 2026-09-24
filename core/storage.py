@@ -7172,7 +7172,9 @@ class StorageEngine:
                           "conflict_expire", "conflict_reconcile",
                           "connector_ingest",
                           # v5.7.9 新增：知识图谱抽取
-                          "graph_extract"}
+                          "graph_extract",
+                          # v5.8.0 新增：经验蒸馏
+                          "experience_record", "experience_distill"}
         # v5.4.2：高敏感操作，审计失败时 fail-closed
         HIGH_SENSITIVE_ACTIONS = {"delete", "purge", "grant", "revoke", "forget",
                                   "agent_purge", "agent_forget"}

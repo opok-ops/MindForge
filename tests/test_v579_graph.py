@@ -289,12 +289,12 @@ class TestAPI(unittest.TestCase):
 
 
 class TestMCP(unittest.TestCase):
-    """MCP：43 工具 + 3 个新工具 + handlers"""
+    """MCP：48 工具（43 基线 + 5 个 v5.8.0 经验工具）+ 3 个图谱工具 + handlers"""
 
     def test_mcp_tool_schemas(self):
         from mcp.server import TOOL_SCHEMAS, HANDLERS
         names = [t["name"] for t in TOOL_SCHEMAS]
-        self.assertEqual(len(names), 43)
+        self.assertEqual(len(names), 48)
         self.assertIn("memory_graph_stats", names)
         self.assertIn("memory_graph_related", names)
         self.assertIn("memory_graph_extract", names)

@@ -3,7 +3,42 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [5.8.0] - 2026-09-24
+
+程序性记忆 / 经验蒸馏（Cases → Skills 自进化）：补齐「声明性事实记忆 + 程序性技能
+记忆」双记忆的最后一块拼图。此前 skill_extractor 只能从记忆「抽取展示」技能模板，
+本版本打通记录→蒸馏→落库→匹配→渲染的完整闭环，Agent 越用越强。
+
+### Added
+
+- **modules/experience.py（新文件）**：
+  - `ExperienceCase`：一次任务经验（task/content/result/outcome/duration_seconds/
+    tags/source_memory_ids/agent_id/created_at）
+  - `SkillStore`：experience_cases + experience_skills 两表持久化；
+    record_case / list_cases / delete_case / save_skills（按 name UPSERT 合并
+    来源）/ distill / match_skills / render_skill / stats；重启自动恢复内存态
+- **core/mindforge.py facade**：`record_experience`（审计 experience_record）/
+  `distill_skills`（审计 experience_distill）/ `skill_match` / `skill_render` /
+  `skill_stats` / `skill_list` / `skill_cases` / `skill_case_delete`
+- **CLI**：`experience` 子命令（record / distill / match / render / stats / list /
+  cases / delete），支持 --task/--content/--outcome/--tags/--param 等参数
+- **REST**：`POST /api/experience`、`POST /api/skills/distill`、
+  `GET /api/skills/stats`、`GET /api/skills/match?query=`、`GET /api/skills?limit=`、
+  `GET /api/skills/render?name=&param=k:v`、`GET /api/experience/cases`
+- **MCP**：`memory_experience_record` / `memory_skill_distill` /
+  `memory_skill_match` / `memory_skill_render` / `memory_skill_stats`
+  （工具数 43 → 48）
+- **审计白名单**：`experience_record` / `experience_distill`
+
+### Tests
+
+- 新增 `tests/test_v580_experience.py`（12 项）：案例记录/校验/审计、删除、
+  蒸馏落库、重启恢复、无成功案例不蒸馏、匹配/渲染、CLI、REST、MCP 48 工具、
+  handler 冒烟。
+- 全量 **885 项全部通过**（873 基线 + 12 新增）；文档一致性守卫 PASS。
+
 ## [5.7.9] - 2026-09-24
+
 
 知识图谱自动管道：从「有结构没闭环」到「写入即建图、重启可恢复、接口可查询」。
 此前图谱引擎仅存在内存态 + 手工调用；本版本补齐持久化加载、add 自动抽取、

@@ -33,7 +33,7 @@ except ImportError:
     except (ImportError, ValueError):
         # 兜底值：仅当 core/version 完全不可导入时启用。发版时必须与
         # core/version.py 的 __version__ 一起更新（见发版清单），否则漂移。
-        __version__ = "5.7.9"
+        __version__ = "5.8.0"
 
 
 def _import_mindforge():
@@ -682,6 +682,64 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
             },
         },
     },
+    {
+        "name": "memory_experience_record",
+        "description": "记录一次任务经验（v5.8.0）：Agent 把成功任务存为 Case，供后续蒸馏为可复用技能。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["task"],
+            "properties": {
+                "task": {"type": "string", "description": "任务描述"},
+                "content": {"type": "string", "description": "过程/步骤内容"},
+                "result": {"type": "string", "description": "结果"},
+                "outcome": {"type": "string", "enum": ["success", "partial", "failure"], "default": "success"},
+                "duration_seconds": {"type": "number", "description": "耗时秒"},
+                "tags": {"type": "array", "items": {"type": "string"}, "description": "标签"},
+                "source_memory_ids": {"type": "array", "items": {"type": "string"}, "description": "来源记忆 ID"},
+                "agent_id": {"type": "string", "description": "Agent ID（写入审计）"},
+            },
+        },
+    },
+    {
+        "name": "memory_skill_distill",
+        "description": "从成功案例蒸馏技能模板并持久化（v5.8.0）。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "min_cluster_size": {"type": "integer", "minimum": 1, "maximum": 20, "default": 2},
+                "max_skills": {"type": "integer", "minimum": 1, "maximum": 500, "default": 50},
+            },
+        },
+    },
+    {
+        "name": "memory_skill_match",
+        "description": "按新任务匹配已存技能（v5.8.0，触发词/标签/bigram 三重评分）。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["query"],
+            "properties": {
+                "query": {"type": "string", "description": "任务描述/查询"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 5},
+            },
+        },
+    },
+    {
+        "name": "memory_skill_render",
+        "description": "用参数渲染技能为可执行流程（v5.8.0）。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+                "name": {"type": "string", "description": "技能名"},
+                "params": {"type": "object", "description": "槽位参数 key=value 映射"},
+            },
+        },
+    },
+    {
+        "name": "memory_skill_stats",
+        "description": "经验统计（v5.8.0）：案例数/技能数/结果分布。",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
 ]
 
 
@@ -1260,6 +1318,66 @@ def h_memory_connector_ingest(mf, args):
     return {"ok": True, "stats": stats}
 
 
+def h_experience_record(mf, args):
+    err = _require_args(args, "task")
+    if err:
+        return err
+    try:
+        case = mf.record_experience(
+            task=str(args["task"]), content=args.get("content", ""),
+            result=args.get("result", ""),
+            outcome=str(args.get("outcome", "success") or "success"),
+            duration_seconds=float(args.get("duration_seconds", 0.0) or 0.0),
+            tags=args.get("tags"), source_memory_ids=args.get("source_memory_ids"),
+            agent_id=str(args.get("agent_id", "") or ""))
+        return {"ok": True, "case": case}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_skill_distill(mf, args):
+    try:
+        stats = mf.distill_skills(
+            min_cluster_size=int(args.get("min_cluster_size", 2) or 2),
+            max_skills=int(args.get("max_skills", 50) or 50))
+        return {"ok": True, **stats}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_skill_match(mf, args):
+    err = _require_args(args, "query")
+    if err:
+        return err
+    try:
+        return {"ok": True, "query": args["query"],
+                "skills": mf.skill_match(str(args["query"]),
+                                          limit=int(args.get("limit", 5) or 5))}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_skill_render(mf, args):
+    err = _require_args(args, "name")
+    if err:
+        return err
+    try:
+        params = args.get("params") or {}
+        out = mf.skill_render(str(args["name"]), **params)
+        if out is None:
+            return {"ok": False, "error": f"skill not found: {args['name']}"}
+        return {"ok": True, "rendered": out}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_skill_stats(mf, args):
+    try:
+        return {"ok": True, "stats": mf.skill_stats()}
+    except Exception as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
 def h_graph_stats(mf, args):
     try:
         return {"ok": True, "stats": mf.graph_stats()}
@@ -1349,6 +1467,12 @@ HANDLERS: Dict[str, Any] = {
     "memory_graph_stats": h_graph_stats,
     "memory_graph_related": h_graph_related,
     "memory_graph_extract": h_graph_extract,
+    # v5.8.0 新增：程序性记忆 / 经验蒸馏
+    "memory_experience_record": h_experience_record,
+    "memory_skill_distill": h_skill_distill,
+    "memory_skill_match": h_skill_match,
+    "memory_skill_render": h_skill_render,
+    "memory_skill_stats": h_skill_stats,
 }
 
 

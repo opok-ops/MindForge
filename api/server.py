@@ -780,6 +780,47 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                     self._send_json(st)
                 except Exception as e:
                     self._send_json({"error": str(e)}, 500)
+            elif path == "/api/skills/stats":
+                self._send_json(self.mindforge.skill_stats())
+            elif path == "/api/skills/match":
+                query = qs.get("query", [""])[0]
+                if not query:
+                    self._send_json({"error": "Missing 'query' param"}, 400)
+                    return
+                try:
+                    limit = int(qs.get("limit", ["5"])[0] or 5)
+                except ValueError:
+                    limit = 5
+                self._send_json({"query": query,
+                                 "skills": self.mindforge.skill_match(query, limit=limit)})
+            elif path == "/api/skills":
+                try:
+                    limit = int(qs.get("limit", ["50"])[0] or 50)
+                except ValueError:
+                    limit = 50
+                self._send_json({"skills": self.mindforge.skill_list(limit=limit)})
+            elif path == "/api/skills/render":
+                name = qs.get("name", [""])[0]
+                if not name:
+                    self._send_json({"error": "Missing 'name' param"}, 400)
+                    return
+                params = {}
+                for p in qs.get("param", []):
+                    if ":" in p:
+                        k, v = p.split(":", 1)
+                        params[k] = v
+                out = self.mindforge.skill_render(name, **params)
+                if out is None:
+                    self._send_json({"error": f"skill not found: {name}"}, 404)
+                    return
+                self._send_json({"name": name, "rendered": out})
+            elif path == "/api/experience/cases":
+                try:
+                    limit = int(qs.get("limit", ["20"])[0] or 20)
+                except ValueError:
+                    limit = 20
+                self._send_json({"cases": self.mindforge.skill_cases(
+                    limit=limit, outcome=qs.get("outcome", [""])[0])})
             elif path == "/api/graph/stats":
                 self._send_json(self.mindforge.graph_stats())
             elif path == "/api/graph/related":
@@ -902,6 +943,39 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                 result = self.mindforge.reconcile_conflicts(
                     memory_ids=memory_ids, auto=auto)
                 self._send_json({"status": "ok", **result})
+            elif path == "/api/experience":
+                task = body.get("task", "")
+                if not isinstance(task, str) or not task.strip():
+                    self._send_json({"error": "Field 'task' must be a non-empty string"}, 400)
+                    return
+                content = body.get("content", "")
+                result = body.get("result", "")
+                outcome = body.get("outcome", "success")
+                tags = body.get("tags")
+                source_ids = body.get("source_memory_ids")
+                if tags is not None and not isinstance(tags, list):
+                    self._send_json({"error": "'tags' must be a list"}, 400)
+                    return
+                if source_ids is not None and not isinstance(source_ids, list):
+                    self._send_json({"error": "'source_memory_ids' must be a list"}, 400)
+                    return
+                try:
+                    case = self.mindforge.record_experience(
+                        task=task, content=content, result=result, outcome=outcome,
+                        duration_seconds=float(body.get("duration_seconds", 0.0) or 0.0),
+                        tags=tags, source_memory_ids=source_ids,
+                        agent_id=str(body.get("agent_id", "") or ""))
+                except (ValueError, TypeError) as ve:
+                    self._send_json({"error": str(ve)}, 400)
+                    return
+                self._send_json(case, 201)
+            elif path == "/api/skills/distill":
+                try:
+                    mc = int(body.get("min_cluster_size", 2) or 2)
+                except (ValueError, TypeError):
+                    mc = 2
+                self._send_json({"status": "ok",
+                                 **self.mindforge.distill_skills(min_cluster_size=mc)})
             elif path == "/api/graph/extract":
                 mid = body.get("memory_id", "")
                 if mid is not None and not isinstance(mid, str):

@@ -3,7 +3,29 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [5.8.2] - 2026-09-25
+
+发布修复：测试端口动态化 + 版本号对齐（修复 v5.8.1/v5.8.2 挂 5.8.0 版本号的历史瑕疵）。
+
+### Fixed
+
+- tests/test_v576、test_v577、test_v578、test_v579、test_v580 写死端口 18876-18880 起真服务器，端口被占即假失败 → 改为 socket 动态分配空闲端口（与 v5.8.1 中 test_v546 同款修复）
+- 版本号 5.8.0 → 5.8.2 全量对齐（core/version.py、pyproject.toml、CLI/MCP __version__、README/官网），守卫脚本新增「version.py == 最近 git tag」断言，杜绝再次挂错版本号
+- 全量 885 项全部通过；一致性守卫 PASS
+
+## [5.8.1] - 2026-09-25
+
+P1 修复：跨版本 import 崩溃。
+
+### Fixed
+
+- core/mindforge.py `graph_related` 返回注解 `List[Tuple[str, str, float]]` 缺少 `Tuple` 导入，Python 3.9-3.13 急切注解求值下 `import core.mindforge` 即 NameError（3.14 惰性注解掩盖）；补 `Tuple` 导入
+- 删除 v5.7.9 图谱方法重复块（81 行完全相同拷贝，后一份静默覆盖前一份）
+- tests/test_v546_features.py 写死端口 18799 → socket 动态分配
+- 验证：全库 35 模块 473 处注解急切求值扫描零 NameError；全量 885 项通过
+
 ## [5.8.0] - 2026-09-24
+
 
 程序性记忆 / 经验蒸馏（Cases → Skills 自进化）：补齐「声明性事实记忆 + 程序性技能
 记忆」双记忆的最后一块拼图。此前 skill_extractor 只能从记忆「抽取展示」技能模板，

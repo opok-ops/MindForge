@@ -185,6 +185,27 @@ else:
     else:
         ok("「最新」标记落在最高版本 v%s" % (entries[0][0] if entries else "?"))
 
+# ---------- 6. 版本号 vs git tag ----------
+print("[6] 版本号 vs git tag")
+expected = os.environ.get("MF_EXPECTED_VERSION", "")
+if not expected:
+    ref = os.environ.get("GITHUB_REF_NAME", "")
+    if ref.startswith("v"):
+        expected = ref[1:]
+if not expected:
+    try:
+        out = subprocess.run(["git", "describe", "--tags", "--abbrev=0"],
+                             cwd=ROOT, capture_output=True, text=True, timeout=30)
+        tag = (out.stdout or "").strip()
+        if tag.startswith("v"):
+            expected = tag[1:]
+    except Exception:
+        expected = ""
+if expected:
+    check("version.py __version__ vs 最近 git tag（剥 v 前缀）", VERSION, expected)
+else:
+    print("  SKIP  版本号 vs git tag 比对（无 tag / 非 git 环境）")
+
 # ---------- 汇总 ----------
 print()
 if FAILS:

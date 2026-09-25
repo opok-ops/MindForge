@@ -3,7 +3,7 @@ MindForge 主入口类
 统一的 API 接口，集成所有核心功能
 """
 
-from typing import Optional, List, Dict, Any, Callable
+from typing import Optional, List, Dict, Any, Callable, Tuple
 from pathlib import Path
 from datetime import datetime, timezone
 import json
@@ -484,91 +484,11 @@ class MindForge:
     # ------------------------------------------------------------------
     # v5.7.9 知识图谱自动管道
     # ------------------------------------------------------------------
-    @property
-    def _knowledge_graph(self):
-        """惰性加载知识图谱（持久化 + 自动恢复内存态）"""
-        if self._kg is None:
-            from modules.knowledge_graph import KnowledgeGraph
-            self._kg = KnowledgeGraph(storage=self._storage, auto_load=True)
-        return self._kg
-
-    def extract_graph(self, memory_id: str = "", content: str = "") -> Dict[str, Any]:
-        """显式触发知识图谱抽取（v5.7.9）。
-
-        - memory_id 指定：从存储读取该记忆内容并抽取入图（STRICT 隐私跳过）；
-        - content 非空且 memory_id 为空：对给定文本抽取（memory_id 置空）；
-        - 两者均空：对全库记忆增量抽取（同进程防抖，不重复建关系）。
-        """
-        kg = self._knowledge_graph
-        stats: Dict[str, Any] = {"entities_added": 0, "relations_added": 0, "memory_processed": 0}
-        if memory_id:
-            entry = self._storage.get_memory(memory_id)
-            if entry is None:
-                raise ValueError(f"记忆不存在: {memory_id}")
-            if str(getattr(entry, "privacy", "")) in ("PrivacyLevel.STRICT", "STRICT"):
-                return {**stats, "skipped": "strict_privacy", "memory_id": memory_id}
-            entities, relations = kg.process_memory(memory_id, entry.content)
-            stats["entities_added"] = len(entities)
-            stats["relations_added"] = len(relations)
-            stats["memory_processed"] = 1
-            self._storage._add_audit("graph_extract", memory_id, "", "",
-                                     "", {"note": "knowledge graph extract"})
-        elif content:
-            entities, relations = kg.process_memory("", content)
-            stats["entities_added"] = len(entities)
-            stats["relations_added"] = len(relations)
-            stats["memory_processed"] = 1
-        else:
-            conn = self._storage._get_conn()
-            rows = conn.execute(
-                "SELECT id, content FROM memories "
-                "WHERE content IS NOT NULL AND content != '' "
-                "ORDER BY created_at"
-            ).fetchall()
-            for mid, mcontent in rows:
-                try:
-                    m_entry = self._storage.get_memory(mid)
-                    if m_entry is not None and str(getattr(m_entry, "privacy", "")) in ("PrivacyLevel.STRICT", "STRICT"):
-                        continue
-                    entities, relations = kg.process_memory(mid, mcontent or "")
-                    stats["entities_added"] += len(entities)
-                    stats["relations_added"] += len(relations)
-                    stats["memory_processed"] += 1
-                    if entities or relations:
-                        self._storage._add_audit("graph_extract", mid, "", "",
-                                                 "", {"note": "knowledge graph bulk extract"})
-                except Exception as _kg_row_err:
-                    logger.warning("图谱批量抽取失败 memory=%s: %s", mid, _kg_row_err)
-        return stats
-
-    def graph_stats(self) -> Dict[str, Any]:
-        """知识图谱统计（v5.7.9，含持久化恢复）"""
-        return self._knowledge_graph.get_entity_stats()
-
-    def graph_related(self, entity: str, depth: int = 2, max_results: int = 20) -> List[Tuple[str, str, float]]:
-        """查询与实体相关的实体（BFS，v5.7.9）"""
-        return self._knowledge_graph.get_related_entities(entity, depth=depth, max_results=max_results)
-
-    def graph_path(self, from_name: str, to_name: str, max_depth: int = 3) -> Optional[Dict[str, Any]]:
-        """查询两实体间路径（v5.7.9）"""
-        path = self._knowledge_graph.find_path(from_name, to_name, max_depth=max_depth)
-        if path is None:
-            return None
-        return {"entities": list(path.entities), "relations": list(path.relations),
-                "total_weight": float(path.total_weight)}
-
-    def graph_entities(self, limit: int = 50) -> List[Dict[str, Any]]:
-        """列出图谱实体（v5.7.9）"""
-        kg = self._knowledge_graph
-        out = []
-        for e in list(kg.entities.values())[:limit]:
-            out.append({"id": e.id, "name": e.name, "entity_type": e.entity_type,
-                        "created_at": e.created_at})
-        return out
 
     # ------------------------------------------------------------------
     # v5.7.9 知识图谱自动管道
     # ------------------------------------------------------------------
+
     @property
     def _knowledge_graph(self):
         """惰性加载知识图谱（持久化 + 自动恢复内存态）"""

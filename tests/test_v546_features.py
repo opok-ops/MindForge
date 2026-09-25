@@ -11,6 +11,7 @@ import sys
 import threading
 import time
 import urllib.request
+import socket
 
 import pytest
 
@@ -196,7 +197,9 @@ class TestRestAPI:
         mf = MindForge(db_path=str(tmp_path / "apimem.db"), encrypted=False)
         mf.add("API 测试记忆", layer=MemoryLayer.LONG_TERM)
 
-        port = 18799
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as _sock:
+            _sock.bind(("127.0.0.1", 0))
+            port = _sock.getsockname()[1]
         srv = threading.Thread(
             target=start_api_server,
             kwargs={"mindforge_instance": mf, "host": "127.0.0.1", "port": port},

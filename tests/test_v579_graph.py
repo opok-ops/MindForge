@@ -11,6 +11,7 @@
 覆盖：自动抽取 / 持久化 / 显式抽取 / STRICT 隐私跳过 / 关系与路径 / CLI / API / MCP / 白名单。
 """
 
+import socket
 import contextlib
 import io
 import json
@@ -246,7 +247,9 @@ class TestAPI(unittest.TestCase):
         from api.server import start_api_server
         os.environ["MINDFORGE_ALLOW_NOAUTH"] = "1"
         mf, tmp = _make_mf()
-        port = 18879
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as _sock:
+            _sock.bind(("127.0.0.1", 0))
+            port = _sock.getsockname()[1]
         srv = threading.Thread(
             target=start_api_server,
             kwargs={"mindforge_instance": mf, "host": "127.0.0.1", "port": port},

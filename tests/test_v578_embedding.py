@@ -15,6 +15,7 @@ import os
 import shutil
 import sys
 import tempfile
+import socket
 import threading
 import time
 import unittest
@@ -174,7 +175,9 @@ class TestAPI(unittest.TestCase):
         mf, tmp = _make_mf()
         try:
             mf.add("API 嵌入状态内容")
-            port = 18878
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as _sock:
+                _sock.bind(("127.0.0.1", 0))
+                port = _sock.getsockname()[1]
             srv = threading.Thread(
                 target=start_api_server,
                 kwargs={"mindforge_instance": mf, "host": "127.0.0.1", "port": port},

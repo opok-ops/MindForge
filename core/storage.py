@@ -2047,7 +2047,7 @@ class StorageEngine:
 
         return {
             "generated_at": time.time(),
-            "db_path": str(getattr(self, "db_path", "")),
+            "db_path": os.path.basename(str(getattr(self, "db_path", ""))),
             "encrypted_at_rest": bool(self.encrypted),
             "data_categories": {
                 "memories": _count("memories"),

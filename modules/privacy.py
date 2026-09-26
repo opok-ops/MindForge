@@ -16,6 +16,10 @@ from typing import List, Dict, Optional, Tuple, Any
 
 from core.storage import StorageEngine, MemoryEntry
 from core.types import PrivacyLevel
+import base64
+import secrets
+import struct
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +114,8 @@ class PrivacyEngine:
         # v5.7.3 安全加固：2FA 失败计数与锁定截止时间（仅内存，重启即失效）
         self._2fa_fail_counts: Dict[str, int] = {}
         self._2fa_locked_until: Dict[str, float] = {}
+        # v5.8.3：标准 TOTP（RFC 6238）密钥内存缓存（加密落库，见 totp_secrets 表）
+        self._totp_secrets: Dict[str, str] = {}
         # v5.4.2 安全修复：持久化 grants 和 2FA tokens 到 SQLite，重启不丢失
         self._init_persistence()
         self._load_persisted_data()
@@ -512,6 +518,127 @@ class PrivacyEngine:
                 self._2FA_LOCK_SECONDS,
             )
         return False
+
+
+
+    # ===================== v5.8.3 标准 TOTP（RFC 6238）=====================
+    def register_totp_secret(self, actor: str,
+                             secret_b32: Optional[str] = None) -> Optional[str]:
+        """注册标准 TOTP 共享密钥（v5.8.3，RFC 6238）。
+
+        修复 P3-1：此前 register_second_factor 存的是 sha256(token)，验证时
+        对传入 code 做同值哈希比较——若上层把长期共享密钥当 code 传，2FA
+        即退化为静态口令。本方法按 RFC 6238 语义：注册只存 base32 密钥，
+        验证对时间派生码（verify_totp_code）比较。
+
+        Args:
+            actor: 用户/Agent ID
+            secret_b32: 可选 base32 密钥；缺省生成随机 20 字节密钥
+
+        Returns:
+            base32 密钥（用于配置 Authenticator），失败返回 None
+        """
+        if not actor:
+            return None
+        if secret_b32 is None:
+            secret_b32 = base64.b32encode(secrets.token_bytes(20)).decode()
+        secret_b32 = secret_b32.upper().strip()
+        try:
+            base64.b32decode(secret_b32, casefold=True)
+        except Exception:
+            return None
+        blob = None
+        if self.storage.encryption is not None:
+            try:
+                blob = self.storage.encryption.encrypt(secret_b32)
+            except Exception:
+                blob = None
+        self._totp_secrets[actor] = secret_b32
+        if blob is not None:
+            try:
+                conn = self.storage._get_conn()
+                conn.execute(
+                    "CREATE TABLE IF NOT EXISTS totp_secrets ("
+                    "actor TEXT PRIMARY KEY, secret_enc TEXT NOT NULL, "
+                    "created_at REAL)")
+                conn.execute(
+                    "INSERT OR REPLACE INTO totp_secrets "
+                    "(actor, secret_enc, created_at) VALUES (?, ?, ?)",
+                    (actor, json.dumps(blob.to_dict()), time.time()))
+                conn.commit()
+            except sqlite3.Error as e:
+                logger.error("TOTP 密钥持久化失败: %s", e)
+        return secret_b32
+
+    def verify_totp_code(self, actor: str, code: str,
+                         window: int = 1) -> bool:
+        """验证 TOTP 6 位码（v5.8.3，RFC 6238：HMAC-SHA1，30s 步长 ±window）。
+
+        复用 2FA 会话窗口 / 失败锁定机制（与 verify_second_factor_with_code 一致）。
+        """
+        if not actor or not code:
+            return False
+        now = time.monotonic()
+        locked_until = self._2fa_locked_until.get(actor, 0.0)
+        if now < locked_until:
+            return False
+        secret = self._totp_secrets.get(actor)
+        if secret is None:
+            secret = self._load_totp_secret(actor)
+            if secret is None:
+                return False
+        if self._verify_totp(secret, code, window):
+            self._2fa_fail_counts.pop(actor, None)
+            self._verified_2fa_sessions[actor] = now
+            return True
+        failures = self._2fa_fail_counts.get(actor, 0) + 1
+        self._2fa_fail_counts[actor] = failures
+        if failures >= self._2FA_MAX_FAILURES:
+            self._2fa_locked_until[actor] = now + self._2FA_LOCK_SECONDS
+            self._2fa_fail_counts.pop(actor, None)
+        return False
+
+    @staticmethod
+    def _totp_value(secret_b32: str, at_time: float, step: int = 30,
+                    digits: int = 6) -> str:
+        """RFC 6238 TOTP 派生码：HMAC-SHA1(secret, counter) 动态截断取 6 位。"""
+        counter = int(at_time // step)
+        msg = struct.pack(">Q", counter)
+        digest = hmac.new(base64.b32decode(secret_b32, casefold=True), msg,
+                          hashlib.sha1).digest()
+        offset = digest[-1] & 0x0F
+        code = (struct.unpack(">I", digest[offset:offset + 4])[0]
+                & 0x7FFFFFFF) % (10 ** digits)
+        return str(code).zfill(digits)
+
+    def _verify_totp(self, secret_b32: str, code: str, window: int) -> bool:
+        now = time.time()
+        for w in range(-window, window + 1):
+            if hmac.compare_digest(
+                    self._totp_value(secret_b32, now + w * 30), str(code)):
+                return True
+        return False
+
+    def _load_totp_secret(self, actor: str) -> Optional[str]:
+        """从 SQLite 读取并解密 TOTP 密钥（v5.8.3）。"""
+        try:
+            conn = self.storage._get_conn()
+            row = conn.execute(
+                "SELECT secret_enc FROM totp_secrets WHERE actor = ?",
+                (actor,)).fetchone()
+        except sqlite3.Error:
+            return None
+        if row is None or not row[0] or self.storage.encryption is None:
+            return None
+        try:
+            from core.encryption import EncryptedBlob
+            blob = EncryptedBlob.from_dict(json.loads(row[0]))
+            secret = self.storage.encryption.decrypt(blob)
+            self._totp_secrets[actor] = secret
+            return secret
+        except Exception as e:
+            logger.error("TOTP 密钥解密失败: %s", e)
+            return None
 
     def generate_compliance_report(self) -> dict:
         """生成合规报告"""

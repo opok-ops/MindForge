@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import re
 import socket
+import ipaddress
 import urllib.parse
+import urllib.request
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Type
 
@@ -134,21 +136,76 @@ class FileConnector(BaseConnector):
 
 
 def _is_private_ip(host: str) -> bool:
-    """基础 SSRF 防护：拒绝内网 / 回环 / 链路本地地址。"""
+    """SSRF 防护：拒绝内网/回环/链路本地/保留/组播/未指定地址（v5.8.3 P1-1）。
+
+    用 ipaddress 标准属性判定替代字符串前缀黑名单，覆盖此前可稳定绕过的：
+      - 十进制整数 / 八进制编码 IP（getaddrinfo 解析后即真实内网地址）
+      - IPv4-mapped IPv6（::ffff:a9fe:a9fe 解包后按 IPv4 判定）
+      - CGNAT 100.64.0.0/10（Python<3.13 的 is_private 不含该段）
+      - 0.0.0.0（Linux 上 connect 它即访问 127.0.0.1）
+      - IPv6 链路本地 fe80::/10 与 ULA fc00::/7（除 ::1 外的内网 IPv6）
+    """
     try:
         infos = socket.getaddrinfo(host, None)
     except Exception:
         return True  # 解析失败按不安全处理（fail-closed）
     for info in infos:
-        ip = info[4][0]
-        if ip == "::1" or ip.startswith("127.") or ip.startswith("10.") \
-                or ip.startswith("192.168.") or ip.startswith("169.254."):
+        raw = info[4][0]
+        try:
+            ip = ipaddress.ip_address(raw)
+        except ValueError:
             return True
-        parts = ip.split(".")
-        if len(parts) == 4 and parts[0] == "172" and parts[1].isdigit() \
-                and 16 <= int(parts[1]) <= 31:
+        # IPv4-mapped IPv6：解包后按 IPv4 判定（::ffff:169.254.169.254）
+        if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+            ip = ip.ipv4_mapped
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_multicast or ip.is_reserved or ip.is_unspecified):
+            return True
+        # CGNAT 100.64.0.0/10：低版本 is_private 不含，显式补判
+        if ip in ipaddress.ip_network("100.64.0.0/10"):
             return True
     return False
+
+
+def _read_limited(resp, max_bytes: int = 5 * 1024 * 1024) -> bytes:
+    """流式分块读取远端响应，累计超过 max_bytes 即中止（v5.8.3 P2-1）。
+
+    此前 resp.read() 无上限：攻击者可返回超大 body 造成进程内存膨胀，
+    入库截断（100000 字符）发生在完整读入内存之后。现在超限直接拒绝。
+    """
+    chunks = []
+    total = 0
+    while True:
+        chunk = resp.read(65536)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise ValueError(
+                f"响应体超过 {max_bytes} 字节上限，已中止读取（防内存放大）")
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """重定向逐跳 SSRF 复核（v5.8.3 P1-2）。
+
+    默认 HTTPRedirectHandler 自动跟随 3xx 且不重新校验目标地址，攻击者
+    可用公网 URL 302 到内网（如 http://169.254.169.254/latest/meta-data/）。
+    本 handler 对每个跳转目标重新做 scheme/host 校验，并限制最大跳转数。
+    """
+
+    max_redirections = 3
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        parsed = urllib.parse.urlparse(newurl)
+        if parsed.scheme not in ("http", "https"):
+            return None  # 拒绝跟随到非 http(s) 协议
+        newhost = parsed.hostname or ""
+        if _is_private_ip(newhost):
+            raise ValueError(
+                f"拒绝重定向到内网/回环地址: {newhost}（SSRF 防护）")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
 @register_connector
@@ -165,11 +222,12 @@ class UrlConnector(BaseConnector):
         host = parsed.hostname or ""
         if _is_private_ip(host):
             raise ValueError(f"拒绝访问内网/回环地址: {host}（SSRF 防护）")
+        opener = urllib.request.build_opener(_SafeRedirectHandler())
         req = urllib.request.Request(
             source, headers={"User-Agent": "MindForge-Connector/5.7.7"})
-        with urllib.request.urlopen(req, timeout=kwargs.get("timeout", 15)) as resp:
+        with opener.open(req, timeout=kwargs.get("timeout", 15)) as resp:
             content_type = resp.headers.get("Content-Type", "")
-            data = resp.read()
+            data = _read_limited(resp)
         if "json" in content_type or source.rstrip("/").endswith(".json"):
             raise ValueError(
                 "URL 返回 JSON：请先下载后使用 json 连接器导入")

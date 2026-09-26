@@ -352,13 +352,12 @@ class FederatedMemory:
         if not self._verify_signature(memory_data, signature, from_peer):
             return False
 
-        # 重放防护：签名通道强制；未签名通道尽力而为
+        # 重放防护：签名通道强制；未签名旧链路按内容哈希去重（v5.8.3 P2-2）
         if signed:
             if not self._replay_check(from_peer, memory_data, strict=True):
                 return False
-        elif isinstance(memory_data, dict) and ("_ts" in memory_data or "_mid" in memory_data):
-            if not self._replay_check(from_peer, memory_data, strict=False):
-                return False
+        elif not self._replay_check(from_peer, memory_data, strict=False):
+            return False
 
         # v5.4.2 修复：队列大小上限，超限拒绝新消息
         # P3-05 修复：容量检查与入队必须原子，否则并发 peer 可越过上限。
@@ -385,7 +384,18 @@ class FederatedMemory:
         mid = data.get("_mid")
         now = time.time()
         if ts is None or mid is None:
-            return not strict
+            if strict:
+                return False
+            # v5.8.3 P2-2：未签名旧链路（无 _ts/_mid）不再直接放行——
+            # 以内容哈希为伪 mid 做去重，同一消息无法无限重放入队。
+            try:
+                content_digest = hashlib.sha256(
+                    json.dumps(data, sort_keys=True, ensure_ascii=False,
+                               default=str).encode("utf-8")).hexdigest()
+            except (TypeError, ValueError):
+                content_digest = repr(data)
+            mid = "sha256:" + content_digest
+            ts = now
         try:
             ts = float(ts)
         except (TypeError, ValueError):

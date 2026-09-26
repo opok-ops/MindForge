@@ -1,3 +1,25 @@
+## [5.8.3] - 2026-09-26
+
+安全修复版：修复外部安全审计（7 项发现中的 6 项确认问题）。
+
+### Security
+- P1-1 SSRF 前缀黑名单绕过：`_is_private_ip` 改用 ipaddress 标准属性判定，
+  拒绝十进制/八进制编码 IP、IPv4-mapped IPv6（解包）、CGNAT 100.64.0.0/10、
+  0.0.0.0、IPv6 链路本地 fe80::/10 与 ULA fc00::/7（此前全部可稳定绕过，可打云元数据）。
+- P1-2 开放重定向绕过 SSRF：URL 连接器新增 `_SafeRedirectHandler`，
+  每个 3xx 跳转目标重新执行 scheme/host 校验（≤3 跳），302 到内网直接拒绝。
+- P2-1 响应读取无上限：`_read_limited` 流式分块读取，累计超 5MB 中止（防内存放大）。
+- P2-2 未签名链路无信封消息可重放：未签名旧链路（allow_unsigned_peers）也按内容哈希
+  去重，同一消息无法无限重放入队（默认 fail-closed 语义不变）。
+- P3-1 2FA 非标准 TOTP 语义：新增 RFC 6238 标准 TOTP（register_totp_secret /
+  verify_totp_code，HMAC-SHA1、30s 步长、±1 窗口），密钥 AES-256-GCM 加密落库可恢复。
+- P3-2 gdpr_report 泄露绝对路径：db_path 仅返回 basename。
+
+### Changed
+- 测试：新增 tests/test_v583_security.py 18 项回归（P1-1/P1-2/P2-1/P2-2/P3-1/P3-2），
+  全量 903 项通过（902 passed + 1 skipped）。
+- 已知限制：P3-3（超限 body 的 413 Broken pipe 客户端体验）审计方确认安全无害，保持现状。
+
 # Changelog
 
 All notable changes to MindForge will be documented in this file.

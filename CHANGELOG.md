@@ -1,3 +1,16 @@
+## [5.8.4] - 2026-09-26
+
+### 新增：LangGraph / CrewAI 框架适配器（P1，扩大接入面）
+
+- **adapters/langgraph_store.py**：MindForgeStore 实现 LangGraph BaseStore 协议——
+  put/get/search/delete/list 五方法；namespace tuple 映射为 category、key 映射为
+  tag、value 序列化为 JSON；零硬依赖（未装 langgraph 时基类回退 object，安装后自动继承）。
+- **adapters/crewai_memory.py**：CrewAIMemory 实现 CrewAI Memory 协议——
+  save/search/reset；reset 仅清空本 namespace，不影响其他应用数据。
+- 两个适配器统一走 `search().chunks`（唯一返回解密明文的 facade 路径），
+  加密模式下读取语义正确。
+- tests/test_v584_adapters.py +8 项；全量 911 项通过（910 passed + 1 skipped）。
+
 ## [5.8.3] - 2026-09-26
 
 安全修复版：修复外部安全审计（7 项发现中的 6 项确认问题）。

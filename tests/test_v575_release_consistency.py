@@ -38,8 +38,8 @@ class TestVersionTruth(unittest.TestCase):
     """版本号真值必须收敛在 core/version.py，且各处投影一致。"""
 
     def test_core_version_is_580(self):
-        self.assertEqual(core_version.__version__, "5.8.3")
-        self.assertEqual(core_version.VERSION_INFO, (5, 8, 3))
+        self.assertEqual(core_version.__version__, "5.8.4")
+        self.assertEqual(core_version.VERSION_INFO, (5, 8, 4))
 
     def test_pyproject_matches_core_version(self):
         m = re.search(r'^version\s*=\s*"([^"]+)"', _read("pyproject.toml"), re.M)

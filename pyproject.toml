@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "MindForge"
-version = "5.8.3"
+version = "5.8.4"
 description = "AI Agent 终身记忆系统 - 四层记忆架构 · 知识图谱 · 多模态支持"
 readme = {file = "README.md", content-type = "text/markdown"}
 license = {text = "MIT"}

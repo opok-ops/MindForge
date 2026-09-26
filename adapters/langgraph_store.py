@@ -79,11 +79,20 @@ class MindForgeStore(_BaseStore):
         )
 
     def get(self, namespace: Tuple[str, ...], key: str) -> Optional[Dict[str, Any]]:
-        """按 namespace+key 精确读取（返回解密后的 value dict）。"""
+        """按 namespace+key 精确读取（返回解密后的 value dict）。
+
+        v5.8.8 加固：先用 search_by_tag 精确定位 memory_id，再在 search().chunks
+        里按 memory_id 过滤，避免同 namespace 下 key 前缀相似时误命中
+        （如 mf_key:prefs 串到 mf_key:prefs_backup）。
+        """
         category = _ns_str(namespace) or self.default_category
-        rr = self.mf.search(self._key_tag(key), max_results=3,
+        mid = self._resolve_id(namespace, key)
+        rr = self.mf.search(self._key_tag(key), max_results=5,
                             categories=[category])
         for c in (rr.chunks or []):
+            cid = getattr(c, "memory_id", "") or ""
+            if mid and cid and cid != mid:
+                continue
             if getattr(c, "content", ""):
                 try:
                     obj = json.loads(c.content)

@@ -1,3 +1,12 @@
+## [5.8.8] - 2026-09-26
+
+### 修复：审计观察项收尾
+
+- **locomeval_eval 临时目录泄漏**：run_eval() 加 try/finally，跑完 rmtree 清理临时数据库目录（即使异常也清理）。
+- **langgraph_store.get() 前缀误命中**：改为先 search_by_tag 精确定位 memory_id，再在 search().chunks 里按 id 过滤，
+  避免同 namespace 下 key 前缀相似（如 `prefs` 与 `prefs_backup`）时误命中。
+- 补 test_get_no_prefix_cross_hit 回归测试；全量 924 项通过（923 passed + 1 skipped）。
+
 ## [5.8.7] - 2026-09-26
 
 ### 修复：v5.8.4 适配器两个加密库下的 bug

@@ -152,7 +152,16 @@ def judge_llm(query_item: Dict[str, Any], chunks: List[Any]) -> Dict[str, Any]:
 # ---------- 主流程 ----------
 def run_eval(k: int = DEFAULT_K, judge: str = "keyword",
              seed: int = 42, limit: Optional[int] = None) -> Dict[str, Any]:
+    import shutil
     tmpdir = tempfile.mkdtemp(prefix="mf_loco_eval_")
+    try:
+        return _run_eval_inner(tmpdir, k=k, judge=judge, seed=seed, limit=limit)
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def _run_eval_inner(tmpdir: str, k: int, judge: str,
+                    seed: int, limit: Optional[int]) -> Dict[str, Any]:
     mf = build_mf(tmpdir, encrypted=True, seed=seed)
     n_sessions = load_sessions(mf)
 

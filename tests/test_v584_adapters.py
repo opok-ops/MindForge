@@ -82,6 +82,13 @@ class TestLangGraphStoreAdapter(unittest.TestCase):
         vals = sorted(i["value"].get("v") for i in items)
         self.assertEqual(vals, ["ONE", "TWO"])
 
+    def test_get_no_prefix_cross_hit(self):
+        """v5.8.8 加固：同 namespace 下 key 前缀相似时 get 不得串。"""
+        self.store.put(("ns", "z"), "prefs", {"v": "MAIN"})
+        self.store.put(("ns", "z"), "prefs_backup", {"v": "BACKUP"})
+        self.assertEqual(self.store.get(("ns", "z"), "prefs")["value"], {"v": "MAIN"})
+        self.assertEqual(self.store.get(("ns", "z"), "prefs_backup")["value"], {"v": "BACKUP"})
+
 
 class TestCrewAIMemoryAdapter(unittest.TestCase):
     """CrewAIMemory：save/search/reset 语义"""

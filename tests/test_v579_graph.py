@@ -297,7 +297,7 @@ class TestMCP(unittest.TestCase):
     def test_mcp_tool_schemas(self):
         from mcp.server import TOOL_SCHEMAS, HANDLERS
         names = [t["name"] for t in TOOL_SCHEMAS]
-        self.assertEqual(len(names), 48)
+        self.assertEqual(len(names), 56)
         self.assertIn("memory_graph_stats", names)
         self.assertIn("memory_graph_related", names)
         self.assertIn("memory_graph_extract", names)

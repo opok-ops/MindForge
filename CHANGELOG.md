@@ -1,3 +1,13 @@
+## [5.8.6] - 2026-09-26
+
+### 新增：联邦共享 MCP Server（P1）
+
+- mcp/server.py 新增 8 个联邦工具（48→56）：fed_peer_register/remove/list、
+  fed_memory_share/revoke/list_shared、fed_search、fed_stats，
+  把 modules/federated.py 的对等节点管理与跨节点共享/检索暴露给 MCP 客户端。
+- schema/handler 一一对应，参数校验 fail-closed；未配置对端公钥时签名验签按既有安全模型拒绝。
+- tests/test_v586_federated_mcp.py +7；全量 922 项通过（921 passed + 1 skipped）。
+
 ## [5.8.5] - 2026-09-26
 
 ### 新增：LoCoMo/LongMemEval 对话记忆评测脚手架（P0）

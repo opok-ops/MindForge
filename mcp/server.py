@@ -33,7 +33,7 @@ except ImportError:
     except (ImportError, ValueError):
         # 兜底值：仅当 core/version 完全不可导入时启用。发版时必须与
         # core/version.py 的 __version__ 一起更新（见发版清单），否则漂移。
-        __version__ = "5.8.5"
+        __version__ = "5.8.6"
 
 
 def _import_mindforge():
@@ -740,6 +740,99 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
         "description": "经验统计（v5.8.0）：案例数/技能数/结果分布。",
         "inputSchema": {"type": "object", "properties": {}},
     },
+    {
+        "name": "fed_peer_register",
+        "description": "注册联邦对等节点（v5.8.6）。Ed25519 签名+防重放。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["peer_id", "name"],
+            "properties": {
+                "peer_id": {"type": "string"},
+                "name": {"type": "string"},
+                "trust_level": {"type": "number"},
+                "shared_categories": {"type": "array", "items": {"type": "string"}}
+            }
+        },
+    },
+    {
+        "name": "fed_peer_remove",
+        "description": "移除联邦对等节点（v5.8.6）。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["peer_id"],
+            "properties": {
+                "peer_id": {"type": "string"}
+            }
+        },
+    },
+    {
+        "name": "fed_peer_list",
+        "description": "列出联邦对等节点及状态（v5.8.6）。",
+        "inputSchema": {
+            "type": "object",
+            "required": [],
+            "properties": {}
+        },
+    },
+    {
+        "name": "fed_memory_share",
+        "description": "把记忆共享给一组对等节点（v5.8.6）。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["memory_id", "peer_ids"],
+            "properties": {
+                "memory_id": {"type": "string"},
+                "peer_ids": {"type": "array", "items": {"type": "string"}},
+                "access_policy": {"type": "string"},
+                "expires_hours": {"type": "number"}
+            }
+        },
+    },
+    {
+        "name": "fed_memory_revoke",
+        "description": "撤销记忆的联邦共享（v5.8.6）。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["memory_id"],
+            "properties": {
+                "memory_id": {"type": "string"},
+                "peer_ids": {"type": "array", "items": {"type": "string"}}
+            }
+        },
+    },
+    {
+        "name": "fed_memory_list_shared",
+        "description": "列出已共享的记忆（v5.8.6）。",
+        "inputSchema": {
+            "type": "object",
+            "required": [],
+            "properties": {
+                "peer_id": {"type": "string"}
+            }
+        },
+    },
+    {
+        "name": "fed_search",
+        "description": "跨联邦节点检索记忆（v5.8.6）。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["query"],
+            "properties": {
+                "query": {"type": "string"},
+                "peer_ids": {"type": "array", "items": {"type": "string"}},
+                "max_per_peer": {"type": "integer"}
+            }
+        },
+    },
+    {
+        "name": "fed_stats",
+        "description": "联邦共享统计（v5.8.6）。",
+        "inputSchema": {
+            "type": "object",
+            "required": [],
+            "properties": {}
+        },
+    },
 ]
 
 
@@ -1415,6 +1508,67 @@ def h_conflict_reconcile(mf, args):
     return {"ok": True, **result}
 
 
+
+# ---------------------------------------------------------------------------
+# v5.8.6 新增：联邦共享 MCP 工具（对等节点管理 + 跨节点共享/检索）
+# ---------------------------------------------------------------------------
+def h_fed_peer_register(mf, args):
+    err = _require_args(args, "peer_id", "name")
+    if err:
+        return err
+    return _clean(mf.federated.register_peer(
+        str(args["peer_id"]), str(args["name"]),
+        trust_level=float(args.get('trust_level', 0.5)),
+        shared_categories=args.get('shared_categories')))
+
+
+def h_fed_peer_remove(mf, args):
+    err = _require_args(args, "peer_id")
+    if err:
+        return err
+    return _clean(mf.federated.remove_peer(str(args["peer_id"])))
+
+
+def h_fed_peer_list(mf, _args):
+    return _clean(mf.federated.get_peers())
+
+
+def h_fed_memory_share(mf, args):
+    err = _require_args(args, "memory_id", "peer_ids")
+    if err:
+        return err
+    return _clean(mf.federated.share_memory(
+        str(args["memory_id"]), list(args["peer_ids"]),
+        access_policy=str(args.get('access_policy', 'read_only')),
+        expires_hours=args.get('expires_hours')))
+
+
+def h_fed_memory_revoke(mf, args):
+    err = _require_args(args, "memory_id")
+    if err:
+        return err
+    return _clean(mf.federated.revoke_share(
+        str(args["memory_id"]), args.get("peer_ids")))
+
+
+def h_fed_memory_list_shared(mf, args):
+    return _clean(mf.federated.get_shared_memories(
+        peer_id=args.get('peer_id')))
+
+
+def h_fed_search(mf, args):
+    err = _require_args(args, "query")
+    if err:
+        return err
+    return _clean(mf.federated.federated_search(
+        str(args["query"]),
+        peer_ids=args.get('peer_ids'),
+        max_per_peer=_safe_int(args.get('max_per_peer', 5), 5, 1, 50)))
+
+
+def h_fed_stats(mf, _args):
+    return _clean(mf.federated.compute_federated_stats())
+
 HANDLERS: Dict[str, Any] = {
     "memory_add": h_memory_add,
     "memory_search": h_memory_search,
@@ -1473,6 +1627,15 @@ HANDLERS: Dict[str, Any] = {
     "memory_skill_match": h_skill_match,
     "memory_skill_render": h_skill_render,
     "memory_skill_stats": h_skill_stats,
+    # v5.8.6 新增：联邦共享 MCP
+    "fed_peer_register": h_fed_peer_register,
+    "fed_peer_remove": h_fed_peer_remove,
+    "fed_peer_list": h_fed_peer_list,
+    "fed_memory_share": h_fed_memory_share,
+    "fed_memory_revoke": h_fed_memory_revoke,
+    "fed_memory_list_shared": h_fed_memory_list_shared,
+    "fed_search": h_fed_search,
+    "fed_stats": h_fed_stats,
 }
 
 

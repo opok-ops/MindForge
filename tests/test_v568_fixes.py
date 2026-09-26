@@ -38,7 +38,7 @@ import core.version as core_version
 
 
 _REPO = Path(__file__).resolve().parent.parent
-_EXPECTED_VERSION = "5.8.5"
+_EXPECTED_VERSION = "5.8.6"
 
 # 本轮修复涉及的、必须与 core/version.py 保持一致的源码文件
 _VERSION_TRUTH_FILES = (

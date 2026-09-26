@@ -1,3 +1,14 @@
+## [5.8.5] - 2026-09-26
+
+### 新增：LoCoMo/LongMemEval 对话记忆评测脚手架（P0）
+
+- **benchmarks/locomeval_eval.py**：长对话 → 多跳/时序问答的可复现评测管道。
+  内置 12 条冒烟样本（singlehop/multihop/temporal 三类），keyword 确定性裁判，
+  指标 Recall@K / MRR@K / latency p50/p95，输出 JSON 报告含环境与数据集版本声明。
+- 当前基线：Recall@5 = 0.75（9/12），暴露 3 条检索差距（如"食物过敏"被"猫毛过敏"挤占 top-K）——
+  后续扩充 500 条查询集与优化召回时以此为对照基线。
+- tests/test_v585_benchmark.py +4；全量 915 项通过（914 passed + 1 skipped）。
+
 ## [5.8.4] - 2026-09-26
 
 ### 新增：LangGraph / CrewAI 框架适配器（P1，扩大接入面）

@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [master]
+    tags: ['v*']
   pull_request:
     branches: [master]
 
@@ -118,6 +119,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          # 完整历史 + tags：守卫第 6 节「version.py == 最近 git tag」依赖
+          # git describe 定位最近 tag；浅克隆（默认 fetch-depth=1）无 tag，
+          # 断言会落入 SKIP 分支形同虚设（v5.8.1/v5.8.2 挂 5.8.0 版本号的教训）。
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v6

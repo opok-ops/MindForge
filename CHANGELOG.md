@@ -1,3 +1,12 @@
+## [5.8.7] - 2026-09-26
+
+### 修复：v5.8.4 适配器两个加密库下的 bug
+
+- **langgraph_store.list/search(query=None)**：加密库下 list() 返回的 MemoryEntry.content 为空（解密只发生在 search().chunks），
+  原实现直接读 r.content 导致 list 返回空 value。改为从 tags 反解 mf_key:{key} 后逐个走 get() 解密。
+- **crewai_memory.reset()**：原实现 list(limit=500) 只删第一批，>500 条残留。改为循环删直到空（100 轮安全上限）。
+- 补 test_list_decrypts_in_encrypted_mode 回归测试；全量 923 项通过（922 passed + 1 skipped）。
+
 ## [5.8.6] - 2026-09-26
 
 ### 新增：联邦共享 MCP Server（P1）

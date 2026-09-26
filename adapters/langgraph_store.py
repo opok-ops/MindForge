@@ -106,24 +106,38 @@ class MindForgeStore(_BaseStore):
                                 categories=[category] if category else None)
             chunks = list(rr.chunks or [])
         else:
+            # list() 返回的 MemoryEntry.content 在加密模式下为空，
+            # 需从 tags 反解 mf_key:{key}，再走 get() 拿解密 value。
             try:
                 rows = self.mf.list(category=category, limit=limit) or []
             except AttributeError:
                 rows = []
-            chunks = [{"content": r.content,
-                       "memory_id": getattr(r, "id", "")} for r in rows]
+            chunks = []
+            for r in rows:
+                key = ""
+                for t in (getattr(r, "tags", []) or []):
+                    if str(t).startswith(KeyTagPrefix):
+                        key = str(t)[len(KeyTagPrefix):]
+                        break
+                chunks.append({"content": "", "key": key,
+                               "memory_id": getattr(r, "id", "")})
         out: List[Dict[str, Any]] = []
         for c in chunks:
+            key = c.get("key", "") if isinstance(c, dict) else ""
+            if key:
+                item = self.get(namespace_prefix, key)
+                if item is not None:
+                    c["content"] = json.dumps(item["value"], ensure_ascii=False)
             content = c.get("content", "") if isinstance(c, dict) else getattr(c, "content", "")
             try:
-                value = json.loads(content)
+                value = json.loads(content) if content else {}
                 if not isinstance(value, dict):
                     value = {"value": content}
             except (ValueError, TypeError):
-                value = {"value": content}
+                value = {"value": content} if content else {}
             out.append({
                 "namespace": list(namespace_prefix) if namespace_prefix else [],
-                "key": "",
+                "key": key,
                 "value": value,
                 "memory_id": c.get("memory_id", "") if isinstance(c, dict) else getattr(c, "memory_id", ""),
             })

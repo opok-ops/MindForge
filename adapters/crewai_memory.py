@@ -64,9 +64,13 @@ class CrewAIMemory(_CrewMemory):
         return results
 
     def reset(self) -> None:
-        """清空本 namespace 的全部记忆（不影响其他应用）。"""
-        for h in (self.mf.list(category=self.namespace, limit=500) or []):
-            self.mf.delete(getattr(h, "id", ""))
+        """清空本 namespace 的全部记忆（不影响其他应用）。循环删直到空。"""
+        for _ in range(100):  # 安全上限，防意外死循环
+            rows = self.mf.list(category=self.namespace, limit=500) or []
+            if not rows:
+                return
+            for h in rows:
+                self.mf.delete(getattr(h, "id", ""))
 
 
 __all__ = ["CrewAIMemory", "_CREWAI_AVAILABLE"]

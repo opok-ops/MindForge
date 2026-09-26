@@ -74,6 +74,14 @@ class TestLangGraphStoreAdapter(unittest.TestCase):
         self.assertEqual(item_a["value"], {"v": "AAA"})
         self.assertEqual(item_b["value"], {"v": "BBB"})
 
+    def test_list_decrypts_in_encrypted_mode(self):
+        """v5.8.6 审计修复：list() 在加密库下必须返回解密 value。"""
+        self.store.put(("ns", "x"), "k1", {"v": "ONE"})
+        self.store.put(("ns", "x"), "k2", {"v": "TWO"})
+        items = self.store.list(("ns", "x"), limit=10)
+        vals = sorted(i["value"].get("v") for i in items)
+        self.assertEqual(vals, ["ONE", "TWO"])
+
 
 class TestCrewAIMemoryAdapter(unittest.TestCase):
     """CrewAIMemory：save/search/reset 语义"""

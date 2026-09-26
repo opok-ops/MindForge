@@ -39,7 +39,7 @@ MindForge-mcp = "mcp.server:main"
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-cov"]
-embedding = ["sentence-transformers>=2.2.0"]
+embedding = ["sentence-transformers>=2.7.0"]
 
 [tool.setuptools]
 py-modules = ["MindForge"]

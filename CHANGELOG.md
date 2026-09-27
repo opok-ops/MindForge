@@ -1,3 +1,12 @@
+## [5.8.10] - 2026-09-27
+
+### 修复：HTTPS 固定 IP 直连 context 回退 + 文档数字对齐
+
+- `_FixedIPHTTPSConnection.connect()` 改用 `self._context or create_default_context()`，
+  尊重调用方传入的 SSL context（此前硬编码新建，忽略自定义 context）。
+- CHANGELOG v5.8.9 测试数对齐到 926（collected 口径）。
+- 全量 926 项通过（925 passed + 1 skipped）。
+
 ## [5.8.9] - 2026-09-27
 
 ### 修复：BaseStore 抽象方法缺失 + URL 连接器 DNS rebinding TOCTOU
@@ -9,7 +18,7 @@
   再解析一次，两次解析之间 DNS 记录可切换（rebinding）。改为：解析一次、校验全部 A/AAAA 记录均为公网、
   用校验过的 IP 直连（自定义 HTTP/HTTPSConnection，TCP 连 IP，TLS SNI/证书校验仍用原域名，Host header 保留原 host）。
   重定向逐跳仍走同一套校验。
-- 全量 925 项通过（924 passed + 1 skipped）。
+- 全量 926 项通过（925 passed + 1 skipped）。
 
 ## [5.8.8] - 2026-09-26
 

@@ -216,7 +216,7 @@ class _FixedIPHTTPSConnection(http.client.HTTPSConnection):
             self.sock = sock
             self._tunnel()
         else:
-            ctx = ssl.create_default_context()
+            ctx = getattr(self, "_context", None) or ssl.create_default_context()
             self.sock = ctx.wrap_socket(sock, server_hostname=self.host)
 
 

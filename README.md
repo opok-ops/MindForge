@@ -2,7 +2,7 @@
 
 **A local-first, production-grade memory system for AI agents.**
 
-> **Maintainer** — **Xiao Gu (小顾)**, born in 2008 · GitHub: [opok-ops](https://github.com/opok-ops) · 抖音: [shidianduo3116](https://v.douyin.com/ZIsw2VpuT9o/) · 小红书: [4406811524](https://xhslink.cn/o/3m71WBRPD17) · Feedback: [2638895480@qq.com](mailto:2638895480@qq.com)
+> **Maintainer** — **Xiao Gu (小顾)**, born in 2008 · GitHub: [opok-ops](https://github.com/opok-ops) · 抖音: [22099080988](https://www.douyin.com/user/22099080988) · 小红书: [4406811524](https://xhslink.cn/o/3m71WBRPD17) · Feedback: [2638895480@qq.com](mailto:2638895480@qq.com)
 
 MindForge gives AI agents a persistent, structured long-term memory: a four-tier lifecycle model, knowledge graphs, hybrid retrieval, end-to-end encryption, and MCP / CLI / REST interfaces. All data stays on your machine.
 

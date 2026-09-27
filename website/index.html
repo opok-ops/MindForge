@@ -918,28 +918,99 @@
 
     <div class="cl-list">
       <article class="cl-item is-latest glass reveal">
-        <div class="cl-meta"><span class="cl-ver">v5.8.8</span><span class="cl-date">2026-09-26</span><span class="c"><b>安全修复版</b></span></div>
-          <h4>安全审计 7 项发现中的 6 项确认问题修复</h4>
-          <ul>
-            <li><b>P1 SSRF 双漏洞</b>：前缀黑名单改 ipaddress 标准判定（十进制/八进制/mapped-IPv6/CGNAT/0.0.0.0/内网 IPv6 全拦）+ 重定向逐跳复核（302 打内网直接拒绝）。</li>
-            <li><b>P2</b>：响应体 5MB 分块上限（防内存放大）；未签名链路内容哈希去重（防无信封重放）。</li>
-            <li><b>P3</b>：RFC 6238 标准 TOTP（密钥加密落库）；gdpr_report 仅返回 basename。</li>
-            <li><b>测试</b>：新增 18 项安全回归，全量 924 项通过。</li>
-          </ul>
-        <div class="cl-meta"><span class="cl-ver">v5.8.2</span><span class="cl-date">2026-09-25</span><span class="cl-kind cl-kind-latest">最新</span></div>
+        <div class="cl-meta"><span class="cl-ver">v5.8.8</span><span class="cl-date">2026-09-26</span><span class="cl-kind cl-kind-latest">最新</span></div>
         <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
         <div class="cl-body">
-          <h4>发布修复：版本号对齐 + 测试端口动态化</h4>
+          <h4>审计观察项收尾：临时目录清理 + 适配器 get 前缀精确化</h4>
           <ul>
-            <li><b>版本号对齐</b>：v5.8.1/v5.8.2 此前挂在 5.8.0 版本号上（守卫只查一致性不查 git tag），现全量 bump 至 <b>5.8.2</b> 并新增 tag-version 守卫断言。</li>
-            <li><b>测试端口动态化</b>：test_v576/577/578/579/580 写死端口 18876-18880 → socket 动态分配，消除端口占用假失败。</li>
-            <li><b>测试</b>：全量 924 项通过，一致性守卫 PASS。</li>
+            <li><b>评测脚手架临时目录泄漏</b>：<code>run_eval()</code> 加 try/finally，跑完即 <code>rmtree</code> 临时数据库目录（异常也清理）。</li>
+            <li><b>langgraph get() 前缀误命中</b>：改为先 <code>search_by_tag</code> 精确定位 memory_id，再在 chunks 里按 id 过滤，避免同 namespace 下 <code>prefs</code> 串到 <code>prefs_backup</code>。</li>
+            <li><b>测试</b>：补 test_get_no_prefix_cross_hit 回归，全量 924 项通过。</li>
           </ul>
         </div>
       </article>
 
       <article class="cl-item glass reveal">
-        <div class="cl-meta"><span class="cl-ver">v5.8.1</span><span class="cl-date">2026-09-25</span><span class="cl-kind">P1 修复</span></div>
+        <div class="cl-meta"><span class="cl-ver">v5.8.7</span><span class="cl-date">2026-09-26</span><span class="cl-kind">P1 修复</span></div>
+        <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
+        <div class="cl-body">
+          <h4>v5.8.4 适配器两个加密库下的 bug 修复</h4>
+          <ul>
+            <li><b>langgraph list() 空 value</b>：加密库下 <code>list().content</code> 为空（解密只在 <code>search().chunks</code>），改为从 tags 反解 <code>mf_key:{key}</code> 后逐个走 get() 解密。</li>
+            <li><b>crewai reset() 残留</b>：原 list(limit=500) 只删第一批，改为循环删直到空（100 轮安全上限）。</li>
+            <li><b>测试</b>：补 test_list_decrypts_in_encrypted_mode，全量 923 项通过。</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="cl-item glass reveal">
+        <div class="cl-meta"><span class="cl-ver">v5.8.6</span><span class="cl-date">2026-09-26</span><span class="cl-kind">联邦 MCP</span></div>
+        <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
+        <div class="cl-body">
+          <h4>联邦共享 MCP Server（P1）：MCP 工具 48 → 56</h4>
+          <ul>
+            <li><b>8 个联邦工具</b>：<code>fed_peer_register/remove/list</code>、<code>fed_memory_share/revoke/list_shared</code>、<code>fed_search</code>、<code>fed_stats</code>，把 Ed25519 对等节点管理与跨节点共享/检索暴露给 MCP 客户端。</li>
+            <li><b>安全</b>：schema/handler 一一对应，参数校验 fail-closed；与既有 48 工具同级 Bearer 鉴权；无真实对端时安全返回空。</li>
+            <li><b>测试</b>：新增 7 项联邦 MCP 回归，全量 922 项通过。</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="cl-item glass reveal">
+        <div class="cl-meta"><span class="cl-ver">v5.8.5</span><span class="cl-date">2026-09-26</span><span class="cl-kind">评测脚手架</span></div>
+        <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
+        <div class="cl-body">
+          <h4>LoCoMo/LongMemEval 对话记忆评测脚手架（P0）</h4>
+          <ul>
+            <li><b>可复现评测管道</b>：长对话 → 多跳/时序问答，内置 12 条冒烟样本（singlehop/multihop/temporal），keyword 确定性裁判，输出 Recall@K / MRR@K / latency p50/p95。</li>
+            <li><b>基线</b>：Recall@5 = 0.75（9/12），暴露 3 条检索差距；后续扩充 500 条查询集以此为对照基线。</li>
+            <li><b>测试</b>：新增 4 项评测脚手架回归，全量 915 项通过。</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="cl-item glass reveal">
+        <div class="cl-meta"><span class="cl-ver">v5.8.4</span><span class="cl-date">2026-09-26</span><span class="cl-kind">框架适配器</span></div>
+        <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
+        <div class="cl-body">
+          <h4>LangGraph / CrewAI 框架适配器（P1）</h4>
+          <ul>
+            <li><b>MindForgeStore</b>：实现 LangGraph <code>BaseStore</code> 协议（put/get/search/delete/list），namespace tuple → category、key → tag、value → JSON；零硬依赖。</li>
+            <li><b>CrewAIMemory</b>：实现 CrewAI Memory 协议（save/search/reset），reset 仅清空本 namespace。</li>
+            <li><b>测试</b>：新增 8 项适配器回归，全量 911 项通过。</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="cl-item glass reveal">
+        <div class="cl-meta"><span class="cl-ver">v5.8.3</span><span class="cl-date">2026-09-26</span><span class="cl-kind">安全修复</span></div>
+        <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
+        <div class="cl-body">
+          <h4>安全审计 7 项发现中的 6 项确认问题修复</h4>
+          <ul>
+            <li><b>P1 SSRF 双漏洞</b>：前缀黑名单改 <code>ipaddress</code> 标准判定（十进制/八进制/mapped-IPv6/CGNAT/0.0.0.0/内网 IPv6 全拦）+ 重定向逐跳复核（302 打内网直接拒绝）。</li>
+            <li><b>P2</b>：响应体 5MB 分块上限（防内存放大）；未签名链路内容哈希去重（防无信封重放）。</li>
+            <li><b>P3</b>：RFC 6238 标准 TOTP（密钥加密落库）；gdpr_report 仅返回 basename。</li>
+            <li><b>测试</b>：新增 18 项安全回归，全量 903 项通过。</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="cl-item glass reveal">
+        <div class="cl-meta"><span class="cl-ver">v5.8.2</span><span class="cl-date">2026-09-25</span><span class="cl-kind">发布修复</span></div>
+        <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
+        <div class="cl-body">
+          <h4>发布修复：版本号对齐 + 测试端口动态化</h4>
+          <ul>
+            <li><b>版本号对齐</b>：v5.8.1/v5.8.2 此前挂在 5.8.0 版本号上，现全量 bump 至 <b>5.8.2</b> 并新增 tag-version 守卫断言。</li>
+            <li><b>测试端口动态化</b>：test_v576/577/578/579/580 写死端口 → socket 动态分配，消除端口占用假失败。</li>
+            <li><b>测试</b>：全量 885 项通过，一致性守卫 PASS。</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="cl-item glass reveal">
+      <div class="cl-meta"><span class="cl-ver">v5.8.1</span><span class="cl-date">2026-09-25</span><span class="cl-kind">P1 修复</span></div>
         <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
         <div class="cl-body">
           <h4>P1：import Tuple + 删除重复图谱块 + 测试端口动态化</h4>

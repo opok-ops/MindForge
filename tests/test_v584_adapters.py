@@ -89,6 +89,29 @@ class TestLangGraphStoreAdapter(unittest.TestCase):
         self.assertEqual(self.store.get(("ns", "z"), "prefs")["value"], {"v": "MAIN"})
         self.assertEqual(self.store.get(("ns", "z"), "prefs_backup")["value"], {"v": "BACKUP"})
 
+    def test_batch_put(self):
+        """v5.8.9：BaseStore.batch 抽象方法必须存在并批量写入。"""
+        items = [
+            (("ns", "b"), "k1", {"a": 1}),
+            (("ns", "b"), "k2", {"b": 2}),
+            (("ns", "b"), "k3", {"c": 3}),
+        ]
+        self.store.batch(items)
+        self.assertEqual(self.store.get(("ns", "b"), "k1")["value"], {"a": 1})
+        self.assertEqual(self.store.get(("ns", "b"), "k2")["value"], {"b": 2})
+        self.assertEqual(self.store.get(("ns", "b"), "k3")["value"], {"c": 3})
+
+    def test_abatch_async_put(self):
+        """v5.8.9：BaseStore.abatch 异步批量写入。"""
+        import asyncio
+        items = [
+            (("ns", "a"), "ak1", {"x": 10}),
+            (("ns", "a"), "ak2", {"y": 20}),
+        ]
+        asyncio.run(self.store.abatch(items))
+        self.assertEqual(self.store.get(("ns", "a"), "ak1")["value"], {"x": 10})
+        self.assertEqual(self.store.get(("ns", "a"), "ak2")["value"], {"y": 20})
+
 
 class TestCrewAIMemoryAdapter(unittest.TestCase):
     """CrewAIMemory：save/search/reset 语义"""

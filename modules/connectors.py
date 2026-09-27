@@ -11,9 +11,11 @@ Markdown / 文本按段落摄取，URL 摄取带基础 SSRF 防护。
 
 from __future__ import annotations
 
+import http.client
 import re
 import socket
 import ipaddress
+import ssl
 import urllib.parse
 import urllib.request
 from abc import ABC, abstractmethod
@@ -187,6 +189,80 @@ def _read_limited(resp, max_bytes: int = 5 * 1024 * 1024) -> bytes:
     return b"".join(chunks)
 
 
+class _FixedIPHTTPConnection(http.client.HTTPConnection):
+    """connect 时用预解析并校验过的 IP 直连，Host header 仍用原域名（v5.8.9 防 DNS rebinding）。"""
+    def __init__(self, host, port=None, timeout=15, fixed_ip=None, **kw):
+        super().__init__(host, port=port, timeout=timeout, **kw)
+        self._fixed_ip = fixed_ip
+
+    def connect(self):
+        sock = socket.create_connection((self._fixed_ip or self.host, self.port),
+                                       timeout=self.timeout)
+        self.sock = sock
+        if self._tunnel_host:
+            self._tunnel()
+
+
+class _FixedIPHTTPSConnection(http.client.HTTPSConnection):
+    """HTTPS 固定 IP 直连：TCP 连 IP，TLS SNI/证书校验仍用原域名。"""
+    def __init__(self, host, port=None, timeout=15, fixed_ip=None, **kw):
+        super().__init__(host, port=port, timeout=timeout, **kw)
+        self._fixed_ip = fixed_ip
+
+    def connect(self):
+        sock = socket.create_connection((self._fixed_ip or self.host, self.port),
+                                       timeout=self.timeout)
+        if self._tunnel_host:
+            self.sock = sock
+            self._tunnel()
+        else:
+            ctx = ssl.create_default_context()
+            self.sock = ctx.wrap_socket(sock, server_hostname=self.host)
+
+
+class _FixedIPHTTPHandler(urllib.request.HTTPHandler):
+    def __init__(self, fixed_ip):
+        super().__init__()
+        self._fixed_ip = fixed_ip
+
+    def http_open(self, req):
+        return self.do_open(
+            lambda host, **kw: _FixedIPHTTPConnection(host, fixed_ip=self._fixed_ip, **kw), req)
+
+
+class _FixedIPHTTPSHandler(urllib.request.HTTPSHandler):
+    def __init__(self, fixed_ip):
+        super().__init__()
+        self._fixed_ip = fixed_ip
+
+    def https_open(self, req):
+        return self.do_open(
+            lambda host, **kw: _FixedIPHTTPSConnection(host, fixed_ip=self._fixed_ip, **kw), req)
+
+
+def _resolve_safe_ip(host: str) -> Optional[str]:
+    """解析 host，校验所有 A/AAAA 记录均为公网，返回第一个可用 IP。"""
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except Exception:
+        return None
+    for info in infos:
+        raw = info[4][0]
+        try:
+            ip = ipaddress.ip_address(raw)
+        except ValueError:
+            return None
+        if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+            ip = ip.ipv4_mapped
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_multicast or ip.is_reserved or ip.is_unspecified):
+            return None
+        if ip in ipaddress.ip_network("100.64.0.0/10"):
+            return None
+        return raw
+    return None
+
+
 class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
     """重定向逐跳 SSRF 复核（v5.8.3 P1-2）。
 
@@ -222,9 +298,17 @@ class UrlConnector(BaseConnector):
         host = parsed.hostname or ""
         if _is_private_ip(host):
             raise ValueError(f"拒绝访问内网/回环地址: {host}（SSRF 防护）")
-        opener = urllib.request.build_opener(_SafeRedirectHandler())
+        # v5.8.9：解析一次、校验全部 IP、用校验过的 IP 直连，消除检查与连接之间的 DNS rebinding TOCTOU
+        fixed_ip = _resolve_safe_ip(host)
+        if fixed_ip is None:
+            raise ValueError(f"无法解析或解析到内网地址: {host}（SSRF 防护）")
+        opener = urllib.request.build_opener(
+            _SafeRedirectHandler(),
+            _FixedIPHTTPHandler(fixed_ip),
+            _FixedIPHTTPSHandler(fixed_ip),
+        )
         req = urllib.request.Request(
-            source, headers={"User-Agent": "MindForge-Connector/5.7.7"})
+            source, headers={"User-Agent": "MindForge-Connector/5.8.9"})
         with opener.open(req, timeout=kwargs.get("timeout", 15)) as resp:
             content_type = resp.headers.get("Content-Type", "")
             data = _read_limited(resp)

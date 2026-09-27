@@ -21,6 +21,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -160,6 +161,47 @@ class MindForgeStore(_BaseStore):
     def list(self, prefix: Tuple[str, ...] = (),
              limit: int = 10, offset: int = 0) -> List[Dict[str, Any]]:
         return self.search(prefix, query=None, limit=limit, offset=offset)
+
+    # ---------- v5.8.9：BaseStore 抽象方法 batch/abatch（缺则实例化即崩） ----------
+    @staticmethod
+    def _unpack_item(item: Any) -> Tuple[Tuple[str, ...], str, Dict[str, Any], Optional[Dict]]:
+        """兼容 (ns,key,value) / (ns,key,value,index) / dict{namespace,key,value,index} 三种形状。"""
+        if isinstance(item, dict):
+            ns = tuple(item.get("namespace") or ())
+            return (ns, str(item["key"]), item.get("value") or {}, item.get("index"))
+        ns, key, value = item[0], item[1], item[2]
+        index = item[3] if len(item) > 3 else None
+        return (tuple(ns) if not isinstance(ns, tuple) else ns, str(key), value or {}, index)
+
+    def batch(self, items: List[Any]) -> List[Any]:
+        """批量写入（BaseStore 抽象方法）。逐条 put，返回各 put 结果。"""
+        out = []
+        for it in items:
+            ns, key, value, index = self._unpack_item(it)
+            out.append(self.put(ns, key, value, index=index))
+        return out
+
+    async def abatch(self, items: List[Any]) -> List[Any]:
+        """异步批量写入。MindForge 是同步库，扔到线程池执行。"""
+        return await asyncio.to_thread(self.batch, items)
+
+    # ---------- 异步镜像（BaseStore 默认会调，但显式实现更稳） ----------
+    async def aget(self, namespace, key):
+        return await asyncio.to_thread(self.get, namespace, key)
+
+    async def aput(self, namespace, key, value, index=None):
+        return await asyncio.to_thread(self.put, namespace, key, value, index)
+
+    async def asearch(self, namespace_prefix, query=None, filter=None,
+                      limit=10, offset=0):
+        return await asyncio.to_thread(
+            self.search, namespace_prefix, query, filter, limit, offset)
+
+    async def adelete(self, namespace, key):
+        return await asyncio.to_thread(self.delete, namespace, key)
+
+    async def alist(self, prefix=(), limit=10, offset=0):
+        return await asyncio.to_thread(self.list, prefix, limit, offset)
 
 
 __all__ = ["MindForgeStore", "_LANGGRAPH_AVAILABLE"]

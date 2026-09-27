@@ -1,3 +1,16 @@
+## [5.8.9] - 2026-09-27
+
+### 修复：BaseStore 抽象方法缺失 + URL 连接器 DNS rebinding TOCTOU
+
+- **langgraph_store batch/abatch 缺失（P1）**：BaseStore 协议要求 `batch(items)` / `abatch(items)`，
+  未实现时 langgraph 环境下实例化 MindForgeStore 即 TypeError。补 batch/abatch + aget/aput/asearch/adelete/alist
+  异步镜像（asyncio.to_thread 包装同步版）。补 test_batch_put / test_abatch_async_put。
+- **URL 连接器 DNS rebinding TOCTOU（P2）**：原流程先 `_is_private_ip(host)` 解析校验，opener 连接时
+  再解析一次，两次解析之间 DNS 记录可切换（rebinding）。改为：解析一次、校验全部 A/AAAA 记录均为公网、
+  用校验过的 IP 直连（自定义 HTTP/HTTPSConnection，TCP 连 IP，TLS SNI/证书校验仍用原域名，Host header 保留原 host）。
+  重定向逐跳仍走同一套校验。
+- 全量 925 项通过（924 passed + 1 skipped）。
+
 ## [5.8.8] - 2026-09-26
 
 ### 修复：审计观察项收尾

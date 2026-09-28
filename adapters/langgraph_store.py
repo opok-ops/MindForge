@@ -173,12 +173,37 @@ class MindForgeStore(_BaseStore):
         index = item[3] if len(item) > 3 else None
         return (tuple(ns) if not isinstance(ns, tuple) else ns, str(key), value or {}, index)
 
+    @staticmethod
+    def _op_name(op: Any) -> str:
+        """取 Op 类型名（GetOp/PutOp/SearchOp/ListNamespacesOp），非 Op 返回空串。"""
+        return type(op).__name__
+
     def batch(self, items: List[Any]) -> List[Any]:
-        """批量写入（BaseStore 抽象方法）。逐条 put，返回各 put 结果。"""
-        out = []
+        """BaseStore.batch：按 Op 类型分发，不能无脑当 PutOp（v5.8.11 修 P1）。
+
+        旧实现把每个 item 都当 PutOp 解包并 put()，遇到 GetOp(ns, key, refresh_ttl=True)
+        时会把 refresh_ttl 当 value 写入，覆盖原有数据（鱼刃审计发现）。
+        """
+        out: List[Any] = []
         for it in items:
-            ns, key, value, index = self._unpack_item(it)
-            out.append(self.put(ns, key, value, index=index))
+            op = self._op_name(it)
+            if op == "GetOp":
+                out.append(self.get(it.namespace, it.key))
+            elif op == "SearchOp":
+                out.append(self.search(
+                    it.namespace_prefix,
+                    query=getattr(it, "query", None),
+                    filter=getattr(it, "filter", None),
+                    limit=getattr(it, "limit", 10),
+                    offset=getattr(it, "offset", 0),
+                ))
+            elif op == "ListNamespacesOp":
+                out.append([])
+            elif op == "PutOp" or isinstance(it, (tuple, list)) or isinstance(it, dict):
+                ns, key, value, index = self._unpack_item(it)
+                out.append(self.put(ns, key, value, index=index))
+            else:
+                out.append(None)
         return out
 
     async def abatch(self, items: List[Any]) -> List[Any]:

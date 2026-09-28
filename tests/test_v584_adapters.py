@@ -112,6 +112,21 @@ class TestLangGraphStoreAdapter(unittest.TestCase):
         self.assertEqual(self.store.get(("ns", "a"), "ak1")["value"], {"x": 10})
         self.assertEqual(self.store.get(("ns", "a"), "ak2")["value"], {"y": 20})
 
+    def test_batch_getop_does_not_overwrite(self):
+        """v5.8.11 P1 回归：batch([GetOp(...)]) 不得把 refresh_ttl 当 value 写入。"""
+        from collections import namedtuple
+        GetOp = namedtuple("GetOp", ["namespace", "key", "refresh_ttl"])
+        # 先写入真实数据
+        self.store.put(("ns", "g"), "real", {"data": "secret"})
+        # batch 里传一个 GetOp（模拟 LangGraph 内部调用）
+        results = self.store.batch([GetOp(namespace=("ns", "g"), key="real", refresh_ttl=True)])
+        # GetOp 应走 get()，不应覆盖原数据
+        item = self.store.get(("ns", "g"), "real")
+        self.assertIsNotNone(item)
+        self.assertEqual(item["value"], {"data": "secret"})
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["value"], {"data": "secret"})
+
 
 class TestCrewAIMemoryAdapter(unittest.TestCase):
     """CrewAIMemory：save/search/reset 语义"""

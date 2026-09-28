@@ -1,3 +1,17 @@
+## [5.8.11] - 2026-09-28
+
+### 修复：LangGraph batch() 未按 Op 类型分发，GetOp 覆盖数据（P1，鱼刃审计）
+
+- `MindForgeStore.batch()` 旧实现把每个 item 都当 PutOp 解包并 `put()`，
+  遇到 LangGraph 内部传入的 `GetOp(namespace, key, refresh_ttl=True)` 时，
+  会把 `refresh_ttl=True` 当 value 写入，覆盖原有数据。
+- 修复：按 `type(it).__name__` 分发——
+  `GetOp → get()`、`SearchOp → search()`、`ListNamespacesOp → []`、
+  `PutOp/tuple/dict → put()`。
+- 补回归测试 `test_batch_getop_does_not_overwrite`：写入 `{"data":"secret"}`
+  后经 `batch([GetOp(...)])` 调用，原数据不被覆盖。
+- 全量 927 项通过（926 passed + 1 skipped）。
+
 ## [5.8.10] - 2026-09-27
 
 ### 修复：HTTPS 固定 IP 直连 context 回退 + 文档数字对齐

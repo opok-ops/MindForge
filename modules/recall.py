@@ -8,10 +8,10 @@ import time
 from dataclasses import dataclass
 from typing import List, Optional, Any
 
-from core.storage import StorageEngine, MemoryEntry
-from core.indexer import IndexEngine
-from core.query import QueryEngine, MemoryChunk, RecallResult
-from core.types import Importance, MemoryLayer
+from mindforge.core.storage import StorageEngine, MemoryEntry
+from mindforge.core.indexer import IndexEngine
+from mindforge.core.query import QueryEngine, MemoryChunk, RecallResult
+from mindforge.core.types import Importance, MemoryLayer
 
 
 @dataclass
@@ -227,9 +227,6 @@ class RecallEngine:
             else:
                 remaining = max_tokens - total_tokens
                 if remaining > 50:
-                    # v5.5.8 修复：原写法 `truncated = chunk` 只是别名而非拷贝，
-                    # 随后的赋值会原地修改调用方持有的 MemoryChunk，
-                    # 导致记忆内容被永久截断（缓存/复用场景尤其危险）。
                     truncated = copy.copy(chunk)
                     truncated.content = chunk.content[:remaining * 4]
                     selected.append(truncated)
@@ -249,7 +246,6 @@ class RecallEngine:
             config=RecallConfig(max_results=limit),
         )
 
-        # v5.4.7 修复 M-6：避免重复查询同一条记忆
         entries = []
         seen_ids = set()
         for c in result.chunks:
@@ -258,8 +254,6 @@ class RecallEngine:
                 if entry and entry.source_session in ("", session_id):
                     entries.append(entry)
                     seen_ids.add(c.memory_id)
-        # 会话上下文即使未命中当前查询，也应保留在会话召回结果中；
-        # 不把其他会话的记忆混入该上下文。
         for entry in session_memories:
             if entry.id not in seen_ids:
                 entries.append(entry)

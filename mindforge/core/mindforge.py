@@ -35,7 +35,7 @@ from .indexer import IndexEngine
 from .query import QueryEngine
 from .embedding import EmbeddingEngine
 
-# v5.6.2 收敛：版本号唯一真值在 core/version.py，
+# v5.6.2 收敛：版本号唯一真值在 mindforge/core/version.py，
 # 此前此处带一份硬编码兜底，发版漏改会导致与顶层包版本漂移
 from .version import __version__
 
@@ -306,8 +306,8 @@ class MindForge:
         #    P1 修复：**先重加密数据库，成功后再换密钥文件和引擎**。
         #    原顺序（先换密钥再重加密）有数据丢失风险：若重加密中途崩溃，
         #    数据库事务回滚（旧密文）但密钥文件已是新的 → 重启后全量解密失败。
-        from core.encryption import EncryptionEngine, PBKDF2_ITERATIONS_CURRENT
-        from core.encryption import _set_global_engine, _verify_key_password
+        from mindforge.core.encryption import EncryptionEngine, PBKDF2_ITERATIONS_CURRENT
+        from mindforge.core.encryption import _set_global_engine, _verify_key_password
 
         old_engine = self._encryption  # 当前引擎就是旧引擎
 
@@ -343,7 +343,7 @@ class MindForge:
         #    此时数据库已是新密文，切换密钥后两边一致；
         #    若切换中途崩溃，重启时用新 key 文件初始化 → 新密钥解新密文，正确。
         _write_key_file = __import__("core.encryption", fromlist=["_write_key_file"])._write_key_file
-        from core.encryption import KDFParams, KDF_ALGORITHM
+        from mindforge.core.encryption import KDFParams, KDF_ALGORITHM
         backup_path = Path(self.config.key_file).with_suffix(
             Path(self.config.key_file).suffix + ".bak"
         )
@@ -493,7 +493,7 @@ class MindForge:
     def _knowledge_graph(self):
         """惰性加载知识图谱（持久化 + 自动恢复内存态）"""
         if self._kg is None:
-            from modules.knowledge_graph import KnowledgeGraph
+            from mindforge.modules.knowledge_graph import KnowledgeGraph
             self._kg = KnowledgeGraph(storage=self._storage, auto_load=True)
         return self._kg
 
@@ -987,7 +987,7 @@ class MindForge:
             connector: 连接器名（json / csv / markdown / file / url）
             source: 数据源（文件路径或 URL）
         """
-        from modules.connectors import get_connector, list_connector_names
+        from mindforge.modules.connectors import get_connector, list_connector_names
         cls = get_connector(connector)
         if cls is None:
             raise ValueError(
@@ -2056,7 +2056,7 @@ class MindForge:
     def privacy_engine(self):
         """v5.6.2 安全修复：懒加载隐私引擎，集成访问控制到核心 API"""
         if self._privacy_engine is None:
-            from modules.privacy import PrivacyEngine
+            from mindforge.modules.privacy import PrivacyEngine
             self._privacy_engine = PrivacyEngine(self._storage)
         return self._privacy_engine
 
@@ -2500,7 +2500,7 @@ class MindForge:
             # 发布事件（惰性初始化 EventBus）
             try:
                 if self._event_bus is None:
-                    from modules.event_bus import EventBus
+                    from mindforge.modules.event_bus import EventBus
                     self._event_bus = EventBus()
                 self._event_bus.publish("memory_updated", {
                     "memory_id": target_id,
@@ -4033,7 +4033,7 @@ class MindForge:
         提供记忆巩固（短期→长期）、遗忘曲线计算等功能。
         """
         if self._evolution is None:
-            from modules.evolution import MemoryEvolution
+            from mindforge.modules.evolution import MemoryEvolution
             self._evolution = MemoryEvolution(self._storage)
         return self._evolution
 
@@ -5076,7 +5076,7 @@ class MindForge:
         隐私护栏（PRIVATE/STRICT 禁止共享）与冲突解决（last-write-wins）。
         """
         if self._multi_agent is None:
-            from modules.multi_agent import MultiAgentMemoryManager
+            from mindforge.modules.multi_agent import MultiAgentMemoryManager
             self._multi_agent = MultiAgentMemoryManager(self._storage)
         return self._multi_agent
 
@@ -5090,7 +5090,7 @@ class MindForge:
         allow/deny 规则，支持优先级、信任阈值与过期时间；默认拒绝。
         """
         if self._federated_acl is None:
-            from modules.federated_acl import FederatedACLManager
+            from mindforge.modules.federated_acl import FederatedACLManager
             self._federated_acl = FederatedACLManager(self._storage)
         return self._federated_acl
 
@@ -5102,7 +5102,7 @@ class MindForge:
         lww（版本+时间戳决胜）/ keep_both（分支保留）/ 人工挂起。
         """
         if self._share_conflict is None:
-            from modules.share_conflict import SharedConflictResolver
+            from mindforge.modules.share_conflict import SharedConflictResolver
             self._share_conflict = SharedConflictResolver(self._storage)
         return self._share_conflict
 
@@ -5115,7 +5115,7 @@ class MindForge:
         自动检测共享记忆冲突。
         """
         if self._federated is None:
-            from modules.federated import FederatedMemory
+            from mindforge.modules.federated import FederatedMemory
             self._federated = FederatedMemory(
                 storage=self._storage,
                 acl=self.federated_acl,
@@ -5131,7 +5131,7 @@ class MindForge:
 
         三层路由：规则正则 → 关键词加权 → （可选）LLM 兜底。
         """
-        from modules.intent_router import IntentRouter
+        from mindforge.modules.intent_router import IntentRouter
         if self._intent_router is None:
             self._intent_router = IntentRouter()
         result = self._intent_router.classify((text or "")[:4096], force_override=force)
@@ -5145,7 +5145,7 @@ class MindForge:
                        limit: int = 500,
                        apply_decay: bool = False) -> Dict[str, Any]:
         """扫描记忆中的矛盾（反义词/属性值/时间线）并可自动衰减（v5.3.9 新增）"""
-        from modules.conflict_detector import ConflictDetector
+        from mindforge.modules.conflict_detector import ConflictDetector
         entries = self._storage.list_memories(
             category=category, limit=max(1, min(5000, int(limit))), offset=0,
         )
@@ -5192,7 +5192,7 @@ class MindForge:
                        limit: int = 2000,
                        min_cluster_size: int = 2) -> Dict[str, Any]:
         """从记忆中抽取可复用的技能模板（v5.3.9 新增）"""
-        from modules.skill_extractor import SkillExtractor
+        from mindforge.modules.skill_extractor import SkillExtractor
         entries = self._storage.list_memories(
             category=category, limit=max(1, min(10000, int(limit))), offset=0,
         )
@@ -5218,7 +5218,7 @@ class MindForge:
     def _skill_store(self):
         """惰性加载经验存储（案例 + 技能模板，持久化恢复）"""
         if self._skill_store_obj is None:
-            from modules.experience import SkillStore
+            from mindforge.modules.experience import SkillStore
             self._skill_store_obj = SkillStore(storage=self._storage)
         return self._skill_store_obj
 
@@ -5281,7 +5281,7 @@ class MindForge:
                         expand: bool = True,
                         rerank: bool = True) -> Dict[str, Any]:
         """混合检索增强版：查询扩展 + 三路召回 + Cross-Encoder 重排（v5.3.9 新增）"""
-        from modules.hybrid_search import QueryExpander, CrossEncoderReranker
+        from mindforge.modules.hybrid_search import QueryExpander, CrossEncoderReranker
 
         q = (query or "")[:2048]
         expansion = None
@@ -5350,7 +5350,7 @@ class MindForge:
 
         messages: [{id, role, content, timestamp}]
         """
-        from modules.session_focus import SessionFocus
+        from mindforge.modules.session_focus import SessionFocus
         engine = SessionFocus(max_messages_per_window=max(5, int(window_size)))
         summary = engine.summarize(messages or [], window_size=max(5, int(window_size)))
         out = summary.to_dict()

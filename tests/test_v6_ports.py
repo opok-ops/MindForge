@@ -17,7 +17,7 @@ import shutil
 import tempfile
 import unittest
 
-from modules.v6 import (
+from mindforge.modules.v6 import (
     V6_TARGET_VERSION,
     V6Capability,
     V6Port,
@@ -126,7 +126,7 @@ class TestV6Registry(unittest.TestCase):
     """
 
     def setUp(self):
-        import modules.v6 as v6mod
+        import mindforge.modules.v6 as v6mod
 
         self.v6mod = v6mod
         self._saved = dict(v6mod._V6_PORT_REGISTRY)
@@ -183,7 +183,7 @@ class TestMultiAgentAdapter(unittest.TestCase):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def _make(self):
-        from core.mindforge import MindForge
+        from mindforge.core.mindforge import MindForge
 
         return MindForge(db_path=self.db_path, encrypted=False)
 
@@ -241,22 +241,22 @@ class TestVersionSingleSource(unittest.TestCase):
     """版本号单一真值：core.version ↔ 各处引用一致"""
 
     def test_top_level_version_matches_core_version(self):
-        from core.version import __version__ as v_core
+        from mindforge.core.version import __version__ as v_core
 
-        import MindForge as mf_pkg
+        import mindforge as mf_pkg
 
         self.assertEqual(mf_pkg.__version__, v_core)
 
     def test_storage_and_mindforge_versions_match(self):
-        from core.mindforge import __version__ as v_mf
-        from core.storage import __version__ as v_storage
-        from core.version import __version__ as v_core
+        from mindforge.core.mindforge import __version__ as v_mf
+        from mindforge.core.storage import __version__ as v_storage
+        from mindforge.core.version import __version__ as v_core
 
         self.assertEqual(v_storage, v_core)
         self.assertEqual(v_mf, v_core)
 
     def test_version_info_tuple_consistent(self):
-        from core.version import VERSION_INFO, get_version, get_version_info
+        from mindforge.core.version import VERSION_INFO, get_version, get_version_info
 
         v = get_version()
         parts = tuple(int(x) for x in v.split("."))

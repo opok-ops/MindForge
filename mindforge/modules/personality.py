@@ -10,7 +10,7 @@ import sqlite3  # v5.4.7 修复 C-4：异常处理中引用 sqlite3.OperationalE
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any, Tuple
 
-from core.storage import StorageEngine
+from mindforge.core.storage import StorageEngine
 
 
 @dataclass

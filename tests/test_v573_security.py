@@ -27,14 +27,14 @@ from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from core.types import PrivacyLevel  # noqa: E402
+from mindforge.core.types import PrivacyLevel  # noqa: E402
 
 
 class _StorageCase(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="mf_v573_")
         self.db = os.path.join(self.tmp, "test.db")
-        from core.storage import StorageEngine
+        from mindforge.core.storage import StorageEngine
 
         self.storage = StorageEngine(db_path=self.db, encrypted=False)
 
@@ -49,7 +49,7 @@ class _StorageCase(unittest.TestCase):
 # ---------------- S1：INTERNAL 空 source 不再恒等匹配 ----------------
 class TestInternalEmptySource(_StorageCase):
     def test_anonymous_cannot_access_owner_internal(self):
-        from modules.privacy import PrivacyEngine, PrivacyLevel
+        from mindforge.modules.privacy import PrivacyEngine, PrivacyLevel
 
         # jane 的 INTERNAL 记忆：显式身份（含远程 anonymous）必须精确匹配来源
         entry = self.storage.add_memory(
@@ -72,7 +72,7 @@ class TestInternalEmptySource(_StorageCase):
         self.assertTrue(ok)
 
     def test_empty_source_internal_not_readable_by_anyone(self):
-        from modules.privacy import PrivacyEngine, PrivacyLevel
+        from mindforge.modules.privacy import PrivacyEngine, PrivacyLevel
 
         entry = self.storage.add_memory(content="c", source_agent="", source_session="")
         entry.privacy = PrivacyLevel.INTERNAL
@@ -88,7 +88,7 @@ class TestInternalEmptySource(_StorageCase):
         self.assertTrue(ok)
 
     def test_same_source_still_allowed(self):
-        from modules.privacy import PrivacyEngine, PrivacyLevel
+        from mindforge.modules.privacy import PrivacyEngine, PrivacyLevel
 
         entry = self.storage.add_memory(
             content="c", source_agent="jane", source_session="s1"
@@ -105,7 +105,7 @@ class TestInternalEmptySource(_StorageCase):
 class TestTwoFactorRateLimit(_StorageCase):
     def setUp(self):
         super().setUp()
-        from modules.privacy import PrivacyEngine
+        from mindforge.modules.privacy import PrivacyEngine
 
         self.pe = PrivacyEngine(self.storage)
         self.pe.register_second_factor("alice", "secret-token")
@@ -134,7 +134,7 @@ class TestTwoFactorRateLimit(_StorageCase):
 # ---------------- S3：_extract_actor fail-closed ----------------
 class TestExtractActorFailClosed(unittest.TestCase):
     def setUp(self):
-        from api.server import MindForgeAPIHandler
+        from mindforge.api.server import MindForgeAPIHandler
 
         self.H = MindForgeAPIHandler
 
@@ -169,7 +169,7 @@ class TestExtractActorFailClosed(unittest.TestCase):
 # ---------------- S4：legacy 密钥文件不自动升级 ----------------
 class TestLegacyKeyFileNoAutoUpgrade(unittest.TestCase):
     def test_legacy_key_not_rewritten_on_init(self):
-        from core import encryption
+        from mindforge.core import encryption
 
         tmp = tempfile.mkdtemp(prefix="mf_key_")
         key_path = os.path.join(tmp, ".key")
@@ -205,11 +205,11 @@ class TestLegacyKeyFileNoAutoUpgrade(unittest.TestCase):
 # ---------------- S5：rekey 清理 MINDFORGE_PASSWORD ----------------
 class TestRekeyEnvCleanup(unittest.TestCase):
     def test_env_password_removed_after_failure(self):
-        import cli.main as cm
+        import mindforge.cli.main as cm
 
         tmp = tempfile.mkdtemp(prefix="mf_rekey_")
         try:
-            from core.encryption import KDFParams
+            from mindforge.core.encryption import KDFParams
 
             key_file = os.path.join(tmp, ".key")
             with open(key_file, "w", encoding="utf-8") as f:
@@ -224,7 +224,7 @@ class TestRekeyEnvCleanup(unittest.TestCase):
                 mock.patch.object(cm, "_get_memory", fake_get_memory),
                 mock.patch.object(cm, "print"),
                 mock.patch(
-                    "core.encryption.get_key_params",
+                    "mindforge.core.encryption.get_key_params",
                     return_value=KDFParams(iterations=1000),
                 ),
                 mock.patch.object(cm, "c", side_effect=lambda s, *a, **k: s),
@@ -250,12 +250,12 @@ class TestRekeyEnvCleanup(unittest.TestCase):
 # ---------------- S7：访问日志剥离 query ----------------
 class TestLogMessageSanitized(unittest.TestCase):
     def test_query_string_stripped(self):
-        from api.server import MindForgeAPIHandler
+        from mindforge.api.server import MindForgeAPIHandler
 
         h = MindForgeAPIHandler.__new__(MindForgeAPIHandler)
         h.client_address = ("127.0.0.1", 0)
         records = []
-        with mock.patch("api.server.logger") as lg:
+        with mock.patch("mindforge.api.server.logger") as lg:
             lg.info = lambda fmt, *a: records.append((fmt, a))
             h.log_message(
                 "%s - %s",
@@ -279,9 +279,9 @@ class TestApiWritePathIdentity(unittest.TestCase):
     """
 
     def setUp(self):
-        from api.server import MindForgeAPIHandler
-        from core.mindforge import MindForge
-        from core.types import PrivacyLevel
+        from mindforge.api.server import MindForgeAPIHandler
+        from mindforge.core.mindforge import MindForge
+        from mindforge.core.types import PrivacyLevel
 
         self.tmp = tempfile.mkdtemp(prefix="mf_v573_api_")
         self.mf = MindForge(db_path=os.path.join(self.tmp, "t.db"), encrypted=False)

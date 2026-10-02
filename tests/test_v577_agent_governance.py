@@ -25,8 +25,8 @@ import urllib.request
 
 _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-from core.mindforge import MindForge  # noqa: E402
-from core.types import MemoryConfig  # noqa: E402
+from mindforge.core.mindforge import MindForge  # noqa: E402
+from mindforge.core.types import MemoryConfig  # noqa: E402
 
 
 def _make_mf(encrypted=False):
@@ -203,7 +203,7 @@ class TestConnectors(unittest.TestCase):
     """多源连接器框架：注册表 + 内置连接器 + SSRF 防护"""
 
     def test_builtin_connectors_registered(self):
-        from modules.connectors import list_connector_names, list_connectors
+        from mindforge.modules.connectors import list_connector_names, list_connectors
         names = list_connector_names()
         for n in ("json", "csv", "markdown", "file", "url"):
             self.assertIn(n, names)
@@ -269,7 +269,7 @@ class TestCLI(unittest.TestCase):
     """CLI：agent-pin / memory-forget / memory-decay-boost / connector / conflict-reconcile"""
 
     def setUp(self):
-        from cli.main import main
+        from mindforge.cli.main import main
         self.main = main
         self.tmp = tempfile.mkdtemp(prefix="mf_v577_cli_", dir=_REPO)
         os.environ["MINDFORGE_DB"] = os.path.join(self.tmp, "cli.db")
@@ -323,7 +323,7 @@ class TestMCP(unittest.TestCase):
     def test_tools_list_count_and_new_tools(self):
         import sys
         sys.path.insert(0, _REPO)
-        from mcp.server import _handle_tools_list, _handle_tools_call
+        from mindforge.mcp.server import _handle_tools_list, _handle_tools_call
         tools = _handle_tools_list({})["tools"]
         names = [t["name"] for t in tools]
         self.assertEqual(len(tools), 56)
@@ -361,7 +361,7 @@ class TestAPI(unittest.TestCase):
     """REST API：POST /api/agent/forget + GET /api/connectors + POST /api/conflicts/reconcile"""
 
     def test_governance_and_reconcile_endpoints(self):
-        from api.server import start_api_server
+        from mindforge.api.server import start_api_server
         os.environ["MINDFORGE_ALLOW_NOAUTH"] = "1"
         mf, tmp = _make_mf()
         try:

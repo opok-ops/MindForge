@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core import MindForge, PrivacyLevel, Importance, MemoryLayer
+from mindforge.core import MindForge, PrivacyLevel, Importance, MemoryLayer
 
 
 def basic_usage():
@@ -84,7 +84,7 @@ def knowledge_graph_example():
     print("知识图谱示例")
     print("=" * 60)
 
-    from modules import KnowledgeGraph
+    from mindforge.modules import KnowledgeGraph
 
     kg = KnowledgeGraph()
 
@@ -121,7 +121,7 @@ def personality_example(memory):
     print("人格化引擎示例")
     print("=" * 60)
 
-    from modules import PersonalityEngine
+    from mindforge.modules import PersonalityEngine
 
     pe = PersonalityEngine(memory.storage)
 

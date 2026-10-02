@@ -23,9 +23,9 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
-from core.storage import StorageEngine, MemoryEntry
-from core.types import MemoryLayer, Importance
-from modules.memory_decay import (
+from mindforge.core.storage import StorageEngine, MemoryEntry
+from mindforge.core.types import MemoryLayer, Importance
+from mindforge.modules.memory_decay import (
     MemoryDecayEngine, DecayConfig, DecayPolicy,
 )
 

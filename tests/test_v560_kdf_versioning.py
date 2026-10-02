@@ -41,7 +41,7 @@ class TestKDFParams(unittest.TestCase):
 
     def test_default_values(self):
         """默认值应为当前推荐参数"""
-        from core.encryption import KDFParams, PBKDF2_ITERATIONS_CURRENT, KDF_ALGORITHM
+        from mindforge.core.encryption import KDFParams, PBKDF2_ITERATIONS_CURRENT, KDF_ALGORITHM
         params = KDFParams()
         self.assertEqual(params.algorithm, KDF_ALGORITHM)
         self.assertEqual(params.iterations, PBKDF2_ITERATIONS_CURRENT)
@@ -49,7 +49,7 @@ class TestKDFParams(unittest.TestCase):
 
     def test_to_dict_from_dict_roundtrip(self):
         """序列化 / 反序列化往返一致"""
-        from core.encryption import KDFParams
+        from mindforge.core.encryption import KDFParams
         params = KDFParams(algorithm="PBKDF2-SHA256", iterations=123456, salt_length=32)
         d = params.to_dict()
         self.assertEqual(d["algorithm"], "PBKDF2-SHA256")
@@ -63,7 +63,7 @@ class TestKDFParams(unittest.TestCase):
 
     def test_from_dict_legacy_format(self):
         """向后兼容：只有 iterations 字段的旧格式"""
-        from core.encryption import KDFParams, PBKDF2_ITERATIONS_LEGACY, KDF_ALGORITHM
+        from mindforge.core.encryption import KDFParams, PBKDF2_ITERATIONS_LEGACY, KDF_ALGORITHM
         # v5.5.x 及之前的密钥文件只有 iterations
         legacy_data = {"iterations": 60000}
         params = KDFParams.from_dict(legacy_data)
@@ -73,7 +73,7 @@ class TestKDFParams(unittest.TestCase):
 
     def test_from_dict_empty_defaults_to_legacy(self):
         """完全空的 dict 应使用 legacy 迭代次数（安全兜底）"""
-        from core.encryption import KDFParams, PBKDF2_ITERATIONS_LEGACY
+        from mindforge.core.encryption import KDFParams, PBKDF2_ITERATIONS_LEGACY
         params = KDFParams.from_dict({})
         self.assertEqual(params.iterations, PBKDF2_ITERATIONS_LEGACY)
 
@@ -84,14 +84,14 @@ class TestEncryptionEngineKDF(unittest.TestCase):
 
     def test_from_password_carries_kdf_params(self):
         """from_password 创建的引擎应携带 KDF 参数"""
-        from core.encryption import EncryptionEngine, PBKDF2_ITERATIONS_CURRENT
+        from mindforge.core.encryption import EncryptionEngine, PBKDF2_ITERATIONS_CURRENT
         engine, salt = EncryptionEngine.from_password("testpass")
         self.assertIsNotNone(engine.kdf_params)
         self.assertEqual(engine.kdf_params.iterations, PBKDF2_ITERATIONS_CURRENT)
 
     def test_legacy_iterations_engine(self):
         """使用 legacy 迭代次数创建的引擎参数正确"""
-        from core.encryption import EncryptionEngine, PBKDF2_ITERATIONS_LEGACY
+        from mindforge.core.encryption import EncryptionEngine, PBKDF2_ITERATIONS_LEGACY
         engine, salt = EncryptionEngine.from_password(
             "testpass", iterations=PBKDF2_ITERATIONS_LEGACY
         )
@@ -99,7 +99,7 @@ class TestEncryptionEngineKDF(unittest.TestCase):
 
     def test_encrypt_stamps_kdf_params_on_blob(self):
         """加密生成的 blob 应携带引擎的 KDF 参数"""
-        from core.encryption import EncryptionEngine, PBKDF2_ITERATIONS_LEGACY
+        from mindforge.core.encryption import EncryptionEngine, PBKDF2_ITERATIONS_LEGACY
         engine, _ = EncryptionEngine.from_password(
             "testpass", iterations=PBKDF2_ITERATIONS_LEGACY
         )
@@ -109,7 +109,7 @@ class TestEncryptionEngineKDF(unittest.TestCase):
 
     def test_different_iterations_produce_different_keys(self):
         """不同迭代次数应派生不同的密钥（不能互相解密）"""
-        from core.encryption import (
+        from mindforge.core.encryption import (
             EncryptionEngine, PBKDF2_ITERATIONS_CURRENT,
             PBKDF2_ITERATIONS_LEGACY, SecurityError
         )
@@ -130,7 +130,7 @@ class TestEncryptionEngineKDF(unittest.TestCase):
 
     def test_blob_to_dict_from_dict_preserves_kdf_params(self):
         """EncryptedBlob 序列化反序列化保留 kdf_params"""
-        from core.encryption import EncryptionEngine
+        from mindforge.core.encryption import EncryptionEngine
         engine, _ = EncryptionEngine.from_password("testpass")
         blob = engine.encrypt("test content")
         self.assertIsNotNone(blob.kdf_params)
@@ -145,7 +145,7 @@ class TestEncryptionEngineKDF(unittest.TestCase):
 
     def test_legacy_blob_without_kdf_params(self):
         """旧格式 blob（无 kdf_params 字段）仍可正常解密"""
-        from core.encryption import EncryptionEngine, EncryptedBlob
+        from mindforge.core.encryption import EncryptionEngine, EncryptedBlob
         engine, _ = EncryptionEngine.from_password("testpass")
         blob = engine.encrypt("legacy format test")
 
@@ -173,7 +173,7 @@ class TestKeyFileOperations(unittest.TestCase):
 
     def test_init_engine_creates_current_params(self):
         """新创建的密钥文件使用当前推荐迭代次数"""
-        from core.encryption import init_engine, get_key_params, PBKDF2_ITERATIONS_CURRENT
+        from mindforge.core.encryption import init_engine, get_key_params, PBKDF2_ITERATIONS_CURRENT
         engine = init_engine("mypassword", self.key_file)
         self.assertIsNotNone(engine)
 
@@ -183,7 +183,7 @@ class TestKeyFileOperations(unittest.TestCase):
 
     def test_init_engine_reads_legacy_key_file(self):
         """能读取 legacy 格式的密钥文件并使用其迭代次数"""
-        from core.encryption import (
+        from mindforge.core.encryption import (
             init_engine, get_key_params, PBKDF2_ITERATIONS_LEGACY,
             EncryptionEngine, KDF_ALGORITHM
         )
@@ -218,7 +218,7 @@ class TestKeyFileOperations(unittest.TestCase):
 
     def test_rekey_engine_upgrades_iterations(self):
         """rekey_engine 可将 legacy 迭代次数升级到当前推荐值"""
-        from core.encryption import (
+        from mindforge.core.encryption import (
             init_engine, rekey_engine, get_key_params,
             PBKDF2_ITERATIONS_CURRENT, PBKDF2_ITERATIONS_LEGACY,
             EncryptionEngine, KDF_ALGORITHM,
@@ -254,7 +254,7 @@ class TestKeyFileOperations(unittest.TestCase):
         self.assertTrue(os.path.exists(self.key_file + ".bak"))
 
         # 旧引擎加密的数据新引擎无法解密（密钥已变更）
-        from core.encryption import SecurityError
+        from mindforge.core.encryption import SecurityError
         blob = old_engine.encrypt("before rekey")
         with self.assertRaises(SecurityError):
             new_engine.decrypt(blob)
@@ -266,7 +266,7 @@ class TestKeyFileOperations(unittest.TestCase):
 
     def test_rekey_engine_wrong_old_password_fails(self):
         """旧密码错误时 rekey 应失败"""
-        from core.encryption import init_engine, rekey_engine, SecurityError
+        from mindforge.core.encryption import init_engine, rekey_engine, SecurityError
         init_engine("correctpassword", self.key_file)
 
         with self.assertRaises(SecurityError):
@@ -274,7 +274,7 @@ class TestKeyFileOperations(unittest.TestCase):
 
     def test_rekey_engine_no_key_file_fails(self):
         """密钥文件不存在时 rekey 应失败"""
-        from core.encryption import rekey_engine, SecurityError
+        from mindforge.core.encryption import rekey_engine, SecurityError
         with self.assertRaises(SecurityError):
             rekey_engine("old", "new", key_file=self.key_file)
 
@@ -293,8 +293,8 @@ class TestStorageRekey(unittest.TestCase):
 
     def test_rekey_memories_reencrypts_all(self):
         """rekey_memories 能重加密所有加密记忆"""
-        from core.storage import StorageEngine
-        from core.encryption import (
+        from mindforge.core.storage import StorageEngine
+        from mindforge.core.encryption import (
             EncryptionEngine, PBKDF2_ITERATIONS_LEGACY,
             PBKDF2_ITERATIONS_CURRENT,
         )
@@ -338,7 +338,7 @@ class TestStorageRekey(unittest.TestCase):
         storage2.close()
 
         # 验证：旧引擎无法解密新数据
-        from core.encryption import SecurityError
+        from mindforge.core.encryption import SecurityError
         storage_old = StorageEngine(db_path=self.db_path, encryption=old_engine, encrypted=True)
         results_old = storage_old.list_memories(limit=1)
         if results_old:
@@ -350,8 +350,8 @@ class TestStorageRekey(unittest.TestCase):
 
     def test_rekey_memories_empty_database(self):
         """无加密记忆时 rekey_memories 返回 0 且不报错"""
-        from core.storage import StorageEngine
-        from core.encryption import EncryptionEngine
+        from mindforge.core.storage import StorageEngine
+        from mindforge.core.encryption import EncryptionEngine
 
         engine1, _ = EncryptionEngine.from_password("pass1")
         engine2, _ = EncryptionEngine.from_password("pass2")
@@ -363,8 +363,8 @@ class TestStorageRekey(unittest.TestCase):
 
     def test_rekey_memories_unencrypted_database(self):
         """非加密数据库 rekey_memories 返回 0"""
-        from core.storage import StorageEngine
-        from core.encryption import EncryptionEngine
+        from mindforge.core.storage import StorageEngine
+        from mindforge.core.encryption import EncryptionEngine
 
         engine1, _ = EncryptionEngine.from_password("pass1")
         engine2, _ = EncryptionEngine.from_password("pass2")

@@ -29,9 +29,9 @@ import urllib.request
 _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _REPO)
 
-from core.mindforge import MindForge  # noqa: E402
-from core.types import MemoryConfig, PrivacyLevel  # noqa: E402
-from modules.knowledge_graph import KnowledgeGraph  # noqa: E402
+from mindforge.core.mindforge import MindForge  # noqa: E402
+from mindforge.core.types import MemoryConfig, PrivacyLevel  # noqa: E402
+from mindforge.modules.knowledge_graph import KnowledgeGraph  # noqa: E402
 
 
 def _make_mf(encrypted=False, **cfg_extra):
@@ -219,7 +219,7 @@ class TestCLI(unittest.TestCase):
             e = mf.add("python 使用 mysql 数据库")
             mf.extract_graph(memory_id=e.id)
             mf.close()
-            from cli.main import cmd_graph
+            from mindforge.cli.main import cmd_graph
             dbp = os.path.join(tmp, "m.db")
             kp = os.path.join(tmp, "k.key")
             buf = io.StringIO()
@@ -244,7 +244,7 @@ class TestAPI(unittest.TestCase):
     """REST API：graph 端点"""
 
     def _start(self):
-        from api.server import start_api_server
+        from mindforge.api.server import start_api_server
         os.environ["MINDFORGE_ALLOW_NOAUTH"] = "1"
         mf, tmp = _make_mf()
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as _sock:
@@ -295,7 +295,7 @@ class TestMCP(unittest.TestCase):
     """MCP：48 工具（43 基线 + 5 个 v5.8.0 经验工具）+ 3 个图谱工具 + handlers"""
 
     def test_mcp_tool_schemas(self):
-        from mcp.server import TOOL_SCHEMAS, HANDLERS
+        from mindforge.mcp.server import TOOL_SCHEMAS, HANDLERS
         names = [t["name"] for t in TOOL_SCHEMAS]
         self.assertEqual(len(names), 56)
         self.assertIn("memory_graph_stats", names)
@@ -305,7 +305,7 @@ class TestMCP(unittest.TestCase):
             self.assertIn(n, HANDLERS)
 
     def test_mcp_handler_smoke(self):
-        from mcp.server import HANDLERS
+        from mindforge.mcp.server import HANDLERS
         mf, tmp = _make_mf()
         try:
             mf.add("python 使用 mysql")

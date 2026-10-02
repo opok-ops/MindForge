@@ -44,7 +44,7 @@ def _free_port():
 # 1) API 限流器：冷 IP 清理 + 跟踪 IP 数上限
 # ---------------------------------------------------------------------------
 def test_rate_limiter_prunes_idle_and_caps_tracked_ips():
-    from api.server import _RateLimiter
+    from mindforge.api.server import _RateLimiter
 
     rl = _RateLimiter(max_requests=3, window_seconds=60)
 
@@ -74,8 +74,8 @@ def test_rate_limiter_prunes_idle_and_caps_tracked_ips():
 # 2) API content 类型校验（端到端）
 # ---------------------------------------------------------------------------
 def test_api_rejects_non_string_content():
-    from api.server import start_api_server
-    from MindForge import MindForge
+    from mindforge.api.server import start_api_server
+    from mindforge import MindForge
 
     tmp = tempfile.mkdtemp(prefix="mf_api_test_")
     db_path = os.path.join(tmp, "m.db")
@@ -123,7 +123,7 @@ def test_api_rejects_non_string_content():
 # 3) 加密密钥文件：POSIX 权限 0o600 + 密码校验
 # ---------------------------------------------------------------------------
 def test_encryption_key_file_perm_and_password_verify(tmp_path):
-    from core.encryption import (
+    from mindforge.core.encryption import (
         EncryptionEngine,
         _write_key_file,
         _verify_key_password,
@@ -152,7 +152,7 @@ def test_encryption_key_file_perm_and_password_verify(tmp_path):
 
 def test_encryption_roundtrip_tamper_detection(tmp_path):
     """密文被篡改时解密必须失败（GCM 认证加密的完整性保证）。"""
-    from core.encryption import EncryptionEngine
+    from mindforge.core.encryption import EncryptionEngine
 
     engine, _ = EncryptionEngine.from_password("TopSecretPass!", b"1" * 16)
     blob = engine.encrypt("sensitive-data")
@@ -168,7 +168,7 @@ def test_encryption_roundtrip_tamper_detection(tmp_path):
         algorithm=blob.algorithm,
         kdf_params=blob.kdf_params,
     )
-    from core.encryption import SecurityError
+    from mindforge.core.encryption import SecurityError
     with pytest.raises(SecurityError):
         engine.decrypt(tampered)
 
@@ -187,7 +187,7 @@ def test_baidu_push_endpoint_is_https():
 # 5) from_config：明文落盘告警
 # ---------------------------------------------------------------------------
 def test_from_config_warns_when_unencrypted(tmp_path, caplog):
-    from MindForge import MindForge
+    from mindforge import MindForge
 
     cfg = tmp_path / "config.json"
     cfg.write_text(

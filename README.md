@@ -8,7 +8,7 @@ MindForge gives AI agents a persistent, structured long-term memory: a four-tier
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-5.8.12-green.svg)](https://github.com/opok-ops/MindForge/releases)
+[![Version](https://img.shields.io/badge/version-5.8.13-green.svg)](https://github.com/opok-ops/MindForge/releases)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
 [![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
@@ -43,7 +43,7 @@ pip install -e .
 ```
 
 ```python
-from MindForge import MindForge
+from mindforge import MindForge
 
 m = MindForge(db_path="./data/memory.db", encrypted=False)
 m.add("User prefers type-hinted Python code", category="preferences", importance="HIGH")
@@ -99,7 +99,7 @@ MindForge stats
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│           MindForge v5.8.12            │
+│           MindForge v5.8.13            │
 │  Cognitive Layer  Personality · KnowledgeGraph       │
 │                   MemoryEvolution · FederatedMemory  │
 ├──────────────────────────────────────────────────────┤

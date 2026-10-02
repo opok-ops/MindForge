@@ -22,10 +22,10 @@ import threading
 import time
 import unittest
 
-from core.storage import StorageEngine
-from core.encryption import EncryptionEngine
-from core.indexer import IndexEngine
-from core.query import QueryEngine
+from mindforge.core.storage import StorageEngine
+from mindforge.core.encryption import EncryptionEngine
+from mindforge.core.indexer import IndexEngine
+from mindforge.core.query import QueryEngine
 
 PASSWORD = "v566-test-password-123"
 
@@ -149,7 +149,7 @@ class TestFederatedSharedMemoryLockRace(unittest.TestCase):
         self.tmp = tempfile.mkdtemp(prefix="mf_v566_fed_")
         db = os.path.join(self.tmp, "fed.db")
         self.storage = StorageEngine(db_path=db, encrypted=False)
-        from modules.federated import FederatedMemory
+        from mindforge.modules.federated import FederatedMemory
         self.fed = FederatedMemory(storage=self.storage, local_peer_id="local")
         self.fed.register_peer("p", "P", trust_level=0.9,
                                public_key=self.fed.local_public_key)

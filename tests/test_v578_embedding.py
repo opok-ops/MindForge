@@ -25,9 +25,9 @@ _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _REPO)
 sys.path.insert(0, os.path.join(_REPO, "benchmarks"))
 
-from core.embedding import EmbeddingEngine, FakeBackend, create_backend  # noqa: E402
-from core.mindforge import MindForge  # noqa: E402
-from core.types import MemoryConfig  # noqa: E402
+from mindforge.core.embedding import EmbeddingEngine, FakeBackend, create_backend  # noqa: E402
+from mindforge.core.mindforge import MindForge  # noqa: E402
+from mindforge.core.types import MemoryConfig  # noqa: E402
 
 _SAVED_ENV = {}
 
@@ -76,7 +76,7 @@ class TestFakeBackend(unittest.TestCase):
         self.assertIsNone(b.encode_batch([]))
 
     def test_registry_and_factory(self):
-        from core.embedding import _BACKEND_REGISTRY
+        from mindforge.core.embedding import _BACKEND_REGISTRY
         self.assertIn("fake", _BACKEND_REGISTRY)
         b = create_backend("fake", seed=11, dimension=128)
         self.assertIsInstance(b, FakeBackend)
@@ -168,7 +168,7 @@ class TestAPI(unittest.TestCase):
     """REST API：GET /api/embedding/status"""
 
     def test_embedding_status_endpoint(self):
-        from api.server import start_api_server
+        from mindforge.api.server import start_api_server
         _reset_engine()
         os.environ["MINDFORGE_ALLOW_NOAUTH"] = "1"
         os.environ["MINDFORGE_EMBEDDING_BACKEND"] = "fake"
@@ -203,7 +203,7 @@ class TestCLI(unittest.TestCase):
     def test_cli_embedding_status(self):
         _reset_engine()
         os.environ["MINDFORGE_EMBEDDING_BACKEND"] = "fake"
-        from cli.main import cmd_embedding_status, _get_memory
+        from mindforge.cli.main import cmd_embedding_status, _get_memory
         mf, tmp = _make_mf()
         try:
             mf.add("CLI 嵌入状态内容")

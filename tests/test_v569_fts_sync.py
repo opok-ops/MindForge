@@ -20,7 +20,7 @@ import tempfile
 import time
 import unittest
 
-from core.storage import StorageEngine
+from mindforge.core.storage import StorageEngine
 
 
 class _FtsSyncCase(unittest.TestCase):

@@ -8,7 +8,7 @@ MindForge 为 AI Agent 提供持久、结构化的长期记忆：四层记忆生
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-5.8.12-green.svg)](https://github.com/opok-ops/MindForge/releases)
+[![Version](https://img.shields.io/badge/version-5.8.13-green.svg)](https://github.com/opok-ops/MindForge/releases)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
 [![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
@@ -43,7 +43,7 @@ pip install -e .
 ```
 
 ```python
-from MindForge import MindForge
+from mindforge import MindForge
 
 m = MindForge(db_path="./data/memory.db", encrypted=False)
 m.add("用户偏好带类型提示的 Python 代码", category="preferences", importance="HIGH")
@@ -139,7 +139,7 @@ MindForge stats
 **Claude Code**
 
 ```python
-from MindForge.adapters import ClaudeCodeAdapter
+from mindforge.adapters import ClaudeCodeAdapter
 
 adapter = ClaudeCodeAdapter.from_env()
 adapter.remember("用户偏好简洁代码风格", ["preferences"])

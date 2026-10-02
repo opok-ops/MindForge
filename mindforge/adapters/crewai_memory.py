@@ -3,7 +3,7 @@
 
 把 MindForge 包装为 CrewAI 生态的长期记忆后端（Memory 接口）：
 
-    from adapters.crewai_memory import CrewAIMemory
+    from mindforge.adapters.crewai_memory import CrewAIMemory
 
     memory = CrewAIMemory(mindforge, namespace="crew_travel")
     memory.save("用户偏好靠窗座位", metadata={"trip": "tokyo"})

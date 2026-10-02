@@ -34,15 +34,15 @@ import tokenize
 import unittest
 from pathlib import Path
 
-import core.version as core_version
+import mindforge.core.version as core_version
 
 
 _REPO = Path(__file__).resolve().parent.parent
-_EXPECTED_VERSION = "5.8.12"
+_EXPECTED_VERSION = "5.8.13"
 
-# 本轮修复涉及的、必须与 core/version.py 保持一致的源码文件
+# 本轮修复涉及的、必须与 mindforge/core/version.py 保持一致的源码文件
 _VERSION_TRUTH_FILES = (
-    "core/version.py",
+    "mindforge/core/version.py",
     "pyproject.toml",
 )
 
@@ -99,7 +99,7 @@ def _run_cli(args, env_extra=None, cwd=None):
     if env_extra:
         env.update(env_extra)
     proc = subprocess.run(
-        [sys.executable, "-m", "cli.main"] + list(args),
+        [sys.executable, "-m", "mindforge.cli.main"] + list(args),
         cwd=str(cwd or _REPO),
         env=env,
         capture_output=True,
@@ -124,18 +124,22 @@ class TestVersionTruth(unittest.TestCase):
 
     def test_pyproject_matches_truth(self):
         text = (_REPO / "pyproject.toml").read_text(encoding="utf-8")
-        m = re.search(r'^\s*version\s*=\s*["\']([^"\']+)["\']', text, re.M)
-        self.assertIsNotNone(m, "pyproject.toml 应有 project.version")
-        self.assertEqual(m.group(1), core_version.__version__)
+        m = re.search(r'attr\s*=\s*"mindforge\.core\.version\.__version__"', text)
+        self.assertIsNotNone(m, "pyproject.toml 应声明 dynamic version attr 指向唯一真值")
+        m2 = re.search(r'^dynamic\s*=\s*\["version"\]\s*$', text, re.M)
+        self.assertIsNotNone(m2, "pyproject.toml 应声明 dynamic = [\"version\"]")
 
     def test_cli_and_mcp_fallback_match_truth(self):
-        """claude/mcp 的最后兜底 __version__ 不得落后于真值。"""
-        for rel in ("cli/main.py", "mcp/server.py"):
+        """cli/mcp 必须从唯一真值导入 __version__，不得再含兜底字面量。"""
+        for rel in ("mindforge/cli/main.py", "mindforge/mcp/server.py"):
             text = (_REPO / rel).read_text(encoding="utf-8")
             lits = re.findall(r'__version__\s*=\s*["\']([^"\']+)["\']', text)
-            self.assertTrue(lits, f"{rel} 应含兜底 __version__ 字面量")
-            for lit in lits:
-                self.assertEqual(lit, core_version.__version__, f"{rel} 版本漂移")
+            self.assertFalse(lits, f"{rel} 不应再含兜底 __version__ 字面量：{lits}")
+            self.assertIn(
+                "from mindforge.core.version import __version__",
+                text,
+                f"{rel} 应从唯一真值导入 __version__",
+            )
 
     def test_version_payloads_reference_truth_source(self):
         """P2-01：导出/上报 payload 中的版本字段必须引用真值，不得硬编码。
@@ -145,9 +149,9 @@ class TestVersionTruth(unittest.TestCase):
         不在校验范围内。
         """
         cases = {
-            "modules/event_bus.py": ('"version": _MF_VERSION', '"5.4.9"'),
-            "adapters/openclaw_adapter.py": ('"version": _MF_VERSION', '"5.0.1"'),
-            "cli/main.py": ('"version": __version__', '"5.1.5"'),
+            "mindforge/modules/event_bus.py": ('"version": _MF_VERSION', '"5.4.9"'),
+            "mindforge/adapters/openclaw_adapter.py": ('"version": _MF_VERSION', '"5.0.1"'),
+            "mindforge/cli/main.py": ('"version": __version__', '"5.1.5"'),
         }
         for rel, (must, stale) in cases.items():
             code = _code_text(rel)
@@ -155,23 +159,23 @@ class TestVersionTruth(unittest.TestCase):
             self.assertNotIn(stale, code, f"{rel} 的 version payload 仍硬编码 {stale}")
 
     def test_event_bus_user_agent_references_truth(self):
-        code = _code_text("modules/event_bus.py")
+        code = _code_text("mindforge/modules/event_bus.py")
         self.assertIn("MindForge/{_MF_VERSION}", code, "event_bus UA 未引用真值")
         self.assertNotIn("MindForge/5.4", code, "event_bus UA 仍硬编码 5.4")
 
     def test_url_importer_user_agent_references_truth(self):
-        code = _code_text("cli/main.py")
+        code = _code_text("mindforge/cli/main.py")
         self.assertIn("MindForge/{__version__} URL Importer", code)
         self.assertNotIn('"MindForge/5.4 URL Importer"', code)
 
     def test_event_bus_uses_version_truth(self):
-        import modules.event_bus as event_bus
+        import mindforge.modules.event_bus as event_bus
 
         self.assertTrue(hasattr(event_bus, "_MF_VERSION"), "event_bus 应导入版本真值")
         self.assertEqual(event_bus._MF_VERSION, core_version.__version__)
 
     def test_openclaw_adapter_uses_version_truth(self):
-        import adapters.openclaw_adapter as openclaw
+        import mindforge.adapters.openclaw_adapter as openclaw
 
         self.assertEqual(
             getattr(openclaw, "_MF_VERSION", None), core_version.__version__
@@ -184,7 +188,7 @@ class TestVersionTruth(unittest.TestCase):
 class TestStaticStructure(unittest.TestCase):
     def test_cli_has_module_level_import_os(self):
         """P0-01：init 加密分支在模块级用 os.environ，缺模块级 import 必崩。"""
-        src = (_REPO / "cli/main.py").read_text(encoding="utf-8")
+        src = (_REPO / "mindforge/cli/main.py").read_text(encoding="utf-8")
         tree = ast.parse(src)
         has_top_import = any(
             isinstance(node, ast.Import)
@@ -231,16 +235,16 @@ class TestStaticStructure(unittest.TestCase):
 
     def test_no_undefined_build_config_call(self):
         """P0-02：cmd_rekey 曾调用从未定义的 _build_config。"""
-        code = _code_text("cli/main.py")
+        code = _code_text("mindforge/cli/main.py")
         self.assertNotIn("_build_config", code)
 
     def test_rekey_imports_encryption_absolutely(self):
-        code = _code_text("cli/main.py")
-        self.assertIn("from core.encryption import", code)
+        code = _code_text("mindforge/cli/main.py")
+        self.assertIn("from mindforge.core.encryption import", code)
 
     def test_single_module_level_cmd_backup(self):
         """P1-02：旧简版 cmd_backup 不得再覆盖 v5.6.0 版本。"""
-        tree = ast.parse((_REPO / "cli/main.py").read_text(encoding="utf-8"))
+        tree = ast.parse((_REPO / "mindforge/cli/main.py").read_text(encoding="utf-8"))
         names = [
             node.name
             for node in tree.body
@@ -252,7 +256,7 @@ class TestStaticStructure(unittest.TestCase):
 
     def test_dispatch_table_has_no_duplicate_keys(self):
         """P1-03：commands 字典出现重复键会让前者被静默丢弃。"""
-        tree = ast.parse((_REPO / "cli/main.py").read_text(encoding="utf-8"))
+        tree = ast.parse((_REPO / "mindforge/cli/main.py").read_text(encoding="utf-8"))
         found = []
         for node in ast.walk(tree):
             if not isinstance(node, ast.FunctionDef):
@@ -276,7 +280,7 @@ class TestStaticStructure(unittest.TestCase):
 
     def test_dispatch_entry_commands_are_defined(self):
         """分发表的每个 value 都必须是模块内真实存在的函数名。"""
-        tree = ast.parse((_REPO / "cli/main.py").read_text(encoding="utf-8"))
+        tree = ast.parse((_REPO / "mindforge/cli/main.py").read_text(encoding="utf-8"))
         defined = {
             node.name
             for node in tree.body
@@ -298,7 +302,7 @@ class TestStaticStructure(unittest.TestCase):
 
     def test_restore_backup_has_local_import_os(self):
         """P0-04：restore_backup 的 POSIX 分支调用 os.chmod，需可用的 os。"""
-        src = (_REPO / "core/mindforge.py").read_text(encoding="utf-8")
+        src = (_REPO / "mindforge/core/mindforge.py").read_text(encoding="utf-8")
         tree = ast.parse(src)
         target = None
         for node in ast.walk(tree):
@@ -325,7 +329,7 @@ class TestStaticStructure(unittest.TestCase):
 
     def test_hybrid_search_uppercase_branch_not_identity(self):
         """P2-02：`s if chunk.isupper() else s` 恒等，修复后应为 s.upper()。"""
-        code = _code_text("modules/hybrid_search.py")
+        code = _code_text("mindforge/modules/hybrid_search.py")
         self.assertNotIn("s if chunk.isupper() else s", code)
         self.assertIn("s.upper() if chunk.isupper() else s", code)
 
@@ -338,9 +342,9 @@ class TestAdaptersImportable(unittest.TestCase):
         import importlib
 
         for mod in (
-            "adapters.claude_adapter",
-            "adapters.generic_api",
-            "adapters.openclaw_adapter",
+            "mindforge.adapters.claude_adapter",
+            "mindforge.adapters.generic_api",
+            "mindforge.adapters.openclaw_adapter",
         ):
             try:
                 importlib.import_module(mod)
@@ -353,7 +357,7 @@ class TestAdaptersImportable(unittest.TestCase):
 # --------------------------------------------------------------------------
 class TestQueryExpanderCasePreservation(unittest.TestCase):
     def test_uppercase_token_gets_uppercase_synonym(self):
-        from modules.hybrid_search import QueryExpander
+        from mindforge.modules.hybrid_search import QueryExpander
 
         expander = QueryExpander(
             synonyms={"alpha": ["beta"]},
@@ -367,7 +371,7 @@ class TestQueryExpanderCasePreservation(unittest.TestCase):
         self.assertNotIn("beta", result.rewrites, f"全大写原词被降为小写：{result.rewrites}")
 
     def test_lowercase_token_gets_lowercase_synonym(self):
-        from modules.hybrid_search import QueryExpander
+        from mindforge.modules.hybrid_search import QueryExpander
 
         expander = QueryExpander(
             synonyms={"alpha": ["beta"]},

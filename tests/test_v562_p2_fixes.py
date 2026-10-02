@@ -35,26 +35,26 @@ class TestExpandQueryLengthLimit(unittest.TestCase):
 
     def test_normal_query_unchanged(self):
         """正常长度查询不受影响"""
-        from core.query import QueryEngine
+        from mindforge.core.query import QueryEngine
         result = QueryEngine.expand_query("python 编程", max_expansions=2)
         self.assertIn("python 编程", result)
 
     def test_empty_query_handled(self):
         """空查询不崩溃"""
-        from core.query import QueryEngine
+        from mindforge.core.query import QueryEngine
         self.assertEqual(QueryEngine.expand_query(""), [])
         self.assertEqual(QueryEngine.expand_query("   "), ["   "])
 
     def test_very_long_query_truncated(self):
         """超长查询被截断到 1000 字符以内"""
-        from core.query import QueryEngine
+        from mindforge.core.query import QueryEngine
         long_query = "a" * 5000
         result = QueryEngine.expand_query(long_query)
         self.assertTrue(len(result[0]) <= 1000)
 
     def test_extremely_long_input_no_crash(self):
         """极端长输入不触发内存/CPU耗尽"""
-        from core.query import QueryEngine
+        from mindforge.core.query import QueryEngine
         huge_query = "测试词" * 100000  # 约 30 万字符
         start = time.time()
         result = QueryEngine.expand_query(huge_query)
@@ -71,7 +71,7 @@ class TestRateLimitCleanupLogic(unittest.TestCase):
 
     def test_window_cleanup_removes_expired(self):
         """过期记录被正确清理，窗口内只剩有效记录"""
-        from core.storage import _RateLimiter
+        from mindforge.core.storage import _RateLimiter
         limiter = _RateLimiter()
 
         key = "test-ip"
@@ -101,8 +101,8 @@ class TestComplianceStatus(unittest.TestCase):
 
     def test_no_private_memories_is_pass(self):
         """0 条私有记忆 → PASS"""
-        from modules.privacy import PrivacyEngine
-        from core.storage import StorageEngine
+        from mindforge.modules.privacy import PrivacyEngine
+        from mindforge.core.storage import StorageEngine
         storage = StorageEngine(db_path=self.db_path)
         engine = PrivacyEngine(storage)
         report = engine.generate_compliance_report()
@@ -111,9 +111,9 @@ class TestComplianceStatus(unittest.TestCase):
 
     def test_with_private_memories_is_review(self):
         """有私有记忆 → REVIEW（而非恒 PASS）"""
-        from modules.privacy import PrivacyEngine
-        from core.storage import StorageEngine
-        from core.types import PrivacyLevel
+        from mindforge.modules.privacy import PrivacyEngine
+        from mindforge.core.storage import StorageEngine
+        from mindforge.core.types import PrivacyLevel
         storage = StorageEngine(db_path=self.db_path)
         storage.add_memory(content="private memory", privacy=PrivacyLevel.PRIVATE)
         engine = PrivacyEngine(storage)
@@ -137,15 +137,15 @@ class TestFederatedFailClosed(unittest.TestCase):
 
     def test_no_storage_returns_false(self):
         """storage=None 时应返回 False，而非 True"""
-        from modules.federated import FederatedMemory
+        from mindforge.modules.federated import FederatedMemory
         manager = FederatedMemory(storage=None, local_peer_id="peer-a")
         result = manager._verify_memory_exists("any-id")
         self.assertFalse(result, "无 storage 时应 fail-closed 返回 False")
 
     def test_with_storage_nonexistent_id(self):
         """有 storage 但 ID 不存在 → False"""
-        from modules.federated import FederatedMemory
-        from core.storage import StorageEngine
+        from mindforge.modules.federated import FederatedMemory
+        from mindforge.core.storage import StorageEngine
         storage = StorageEngine(db_path=self.db_path)
         manager = FederatedMemory(storage=storage, local_peer_id="peer-a")
         self.assertFalse(manager._verify_memory_exists("nonexistent-id"))
@@ -153,8 +153,8 @@ class TestFederatedFailClosed(unittest.TestCase):
 
     def test_with_storage_existing_id(self):
         """有 storage 且 ID 存在 → True"""
-        from modules.federated import FederatedMemory
-        from core.storage import StorageEngine
+        from mindforge.modules.federated import FederatedMemory
+        from mindforge.core.storage import StorageEngine
         storage = StorageEngine(db_path=self.db_path)
         entry = storage.add_memory(content="test")
         manager = FederatedMemory(storage=storage, local_peer_id="peer-a")
@@ -232,8 +232,8 @@ class Test2FATokenNotInPlaintext(unittest.TestCase):
 
     def test_register_stores_hash_not_plaintext(self):
         """注册后 _second_factor_token_hashes 存的是 hash，不是明文"""
-        from modules.privacy import PrivacyEngine
-        from core.storage import StorageEngine
+        from mindforge.modules.privacy import PrivacyEngine
+        from mindforge.core.storage import StorageEngine
         storage = StorageEngine(db_path=self.db_path)
         engine = PrivacyEngine(storage)
 
@@ -251,8 +251,8 @@ class Test2FATokenNotInPlaintext(unittest.TestCase):
 
     def test_persisted_token_is_hash(self):
         """持久化到 SQLite 的也是 hash，不是明文"""
-        from modules.privacy import PrivacyEngine
-        from core.storage import StorageEngine
+        from mindforge.modules.privacy import PrivacyEngine
+        from mindforge.core.storage import StorageEngine
         storage = StorageEngine(db_path=self.db_path)
         engine = PrivacyEngine(storage)
 
@@ -275,8 +275,8 @@ class Test2FATokenNotInPlaintext(unittest.TestCase):
 
     def test_verify_with_code_uses_hash_comparison(self):
         """verify_second_factor_with_code 与 hash 比对"""
-        from modules.privacy import PrivacyEngine
-        from core.storage import StorageEngine
+        from mindforge.modules.privacy import PrivacyEngine
+        from mindforge.core.storage import StorageEngine
         storage = StorageEngine(db_path=self.db_path)
         engine = PrivacyEngine(storage)
 
@@ -306,7 +306,7 @@ class TestGetLoginFallback(unittest.TestCase):
 
     def test_init_engine_handles_getlogin_failure(self):
         """getlogin() 抛 OSError 时 init_engine 仍能正常创建密钥"""
-        from core.encryption import init_engine, get_engine
+        from mindforge.core.encryption import init_engine, get_engine
 
         key_path = os.path.join(self.tmp_dir, ".key")
 
@@ -333,14 +333,14 @@ class TestBatchAddPathValidation(unittest.TestCase):
 
     def test_path_traversal_rejected(self):
         """路径遍历输入被 _safe_path 拒绝"""
-        from core.mindforge import _safe_path
+        from mindforge.core.mindforge import _safe_path
         traversal = os.path.join(self.tmp_dir, "..", "evil.json")
         with self.assertRaises((ValueError, OSError)):
             _safe_path(traversal, must_exist=False, allowed_exts={".json"})
 
     def test_disallowed_extension_rejected(self):
         """非白名单扩展名被拒绝"""
-        from core.mindforge import _safe_path
+        from mindforge.core.mindforge import _safe_path
         bad_path = os.path.join(self.tmp_dir, "evil.exe")
         Path(bad_path).write_text("test")
         with self.assertRaises(ValueError):
@@ -349,7 +349,7 @@ class TestBatchAddPathValidation(unittest.TestCase):
 
     def test_allowed_extension_accepted(self):
         """白名单扩展名正常通过"""
-        from core.mindforge import _safe_path
+        from mindforge.core.mindforge import _safe_path
         good_path = os.path.join(self.tmp_dir, "notes.json")
         Path(good_path).write_text('[]')
         result = _safe_path(good_path, must_exist=True,

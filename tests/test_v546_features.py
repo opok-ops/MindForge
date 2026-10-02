@@ -18,7 +18,7 @@ import pytest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from core.embedding import (
+from mindforge.core.embedding import (
     EmbeddingEngine,
     create_backend,
     EmbeddingBackend,
@@ -27,8 +27,8 @@ from core.embedding import (
     OllamaBackend,
     HTTPBackend,
 )
-from core.mindforge import MindForge
-from core.types import Importance, MemoryLayer
+from mindforge.core.mindforge import MindForge
+from mindforge.core.types import Importance, MemoryLayer
 
 
 # ---------- 1. cosine_similarity 修复（v5.4.6 必改） ----------
@@ -189,7 +189,7 @@ class TestIncrementalEmbeddings:
 
 class TestRestAPI:
     def test_stats_and_health_endpoints(self, tmp_path, monkeypatch):
-        from api.server import start_api_server
+        from mindforge.api.server import start_api_server
 
         # fail-closed 默认需认证；测试环境显式开启无认证
         monkeypatch.setenv("MINDFORGE_ALLOW_NOAUTH", "1")

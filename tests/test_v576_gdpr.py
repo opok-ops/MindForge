@@ -17,8 +17,8 @@ import unittest
 
 _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-from core.mindforge import MindForge  # noqa: E402
-from core.types import MemoryConfig, PrivacyLevel  # noqa: E402
+from mindforge.core.mindforge import MindForge  # noqa: E402
+from mindforge.core.types import MemoryConfig, PrivacyLevel  # noqa: E402
 
 
 def _make_mf(encrypted=False):
@@ -138,7 +138,7 @@ class TestGdprErase(unittest.TestCase):
 
 class TestGdprCli(unittest.TestCase):
     def setUp(self):
-        from cli.main import main
+        from mindforge.cli.main import main
         self.main = main
         self.tmp = tempfile.mkdtemp(prefix="mf_v576_gdprcli_", dir=_REPO)
         os.environ["MINDFORGE_DB"] = os.path.join(self.tmp, "cli.db")

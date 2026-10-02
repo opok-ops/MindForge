@@ -50,17 +50,22 @@ def check(name, got, want):
 
 # ---------- 1. 版本真值 ----------
 print("[1] 版本真值")
-ver_src = read("core/version.py")
+ver_src = read("mindforge/core/version.py")
 m = re.search(r'__version__\s*(?::\s*str\s*)?=\s*["\']([\d.]+)["\']', ver_src)
 if not m:
-    fail("core/version.py 中找不到 __version__")
+    fail("mindforge/core/version.py 中找不到 __version__")
     sys.exit(1)
 VERSION = m.group(1)
-ok("core/version.py __version__ = %s" % VERSION)
+ok("mindforge/core/version.py __version__ = %s" % VERSION)
 
+# pyproject 版本改为 dynamic，唯一真值仍在 version.py：
+# [tool.setuptools.dynamic] version = {attr = "mindforge.core.version.__version__"}
 pyproject = read("pyproject.toml")
-m = re.search(r'^\[project\][\s\S]*?^version\s*=\s*"([^"]+)"', pyproject, re.M)
-check("pyproject.toml project.version", m.group(1) if m else None, VERSION)
+m = re.search(r'^dynamic\s*=\s*\["version"\]\s*$', pyproject, re.M)
+check("pyproject.toml 声明 dynamic version", bool(m), True)
+m = re.search(r'version\s*=\s*\{attr\s*=\s*"([^"]+)"\}', pyproject)
+check("pyproject.toml dynamic attr",
+      m.group(1) if m else None, "mindforge.core.version.__version__")
 
 # VERSION_INFO 应与之对应
 m = re.search(r'VERSION_INFO\s*(?::[^=]+)?=\s*\(([^)]*)\)', ver_src)
@@ -187,24 +192,18 @@ else:
 
 # ---------- 6. 版本号 vs git tag ----------
 print("[6] 版本号 vs git tag")
+# 仅在发版上下文（MF_EXPECTED_VERSION 或 tag 触发）下与 git tag 强比对。
+# master 常规推送处于「版本号已 bump、tag 尚未创建」的窗口期，
+# 此时 git describe 会取到上一个 tag，必然不相等，因此跳过避免误报。
 expected = os.environ.get("MF_EXPECTED_VERSION", "")
 if not expected:
     ref = os.environ.get("GITHUB_REF_NAME", "")
     if ref.startswith("v"):
         expected = ref[1:]
-if not expected:
-    try:
-        out = subprocess.run(["git", "describe", "--tags", "--abbrev=0"],
-                             cwd=ROOT, capture_output=True, text=True, timeout=30)
-        tag = (out.stdout or "").strip()
-        if tag.startswith("v"):
-            expected = tag[1:]
-    except Exception:
-        expected = ""
 if expected:
-    check("version.py __version__ vs 最近 git tag（剥 v 前缀）", VERSION, expected)
+    check("version.py __version__ vs 期望版本（剥 v 前缀）", VERSION, expected)
 else:
-    print("  SKIP  版本号 vs git tag 比对（无 tag / 非 git 环境）")
+    print("  SKIP  版本号 vs git tag 比对（仅 tag/显式期望版本时执行）")
 
 # ---------- 汇总 ----------
 print()

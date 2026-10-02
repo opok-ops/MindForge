@@ -24,8 +24,8 @@ import tempfile
 import time
 import unittest
 
-from core.storage import StorageEngine, MemoryEntry
-from core.types import MemoryLayer, Importance
+from mindforge.core.storage import StorageEngine, MemoryEntry
+from mindforge.core.types import MemoryLayer, Importance
 
 # 确保项目根目录可导入（pytest 从仓库根运行时无需）
 import sys
@@ -143,7 +143,7 @@ class TestReviewSystem(_StoreCase):
 # ============================================================
 class TestCategorizerSmoke(unittest.TestCase):
     def setUp(self):
-        from modules.categorizer import TaxonomyManager
+        from mindforge.modules.categorizer import TaxonomyManager
         self.tm = TaxonomyManager()
 
     def test_suggest_category_normal_and_empty(self):
@@ -175,7 +175,7 @@ class TestCategorizerSmoke(unittest.TestCase):
 class TestEvolutionSmoke(_StoreCase):
     def setUp(self):
         super().setUp()
-        from modules.evolution import MemoryEvolution, ForgettingCurve
+        from mindforge.modules.evolution import MemoryEvolution, ForgettingCurve
         self.evo = MemoryEvolution(self.storage)
         self.curve = ForgettingCurve()
 
@@ -213,7 +213,7 @@ class TestEvolutionSmoke(_StoreCase):
 class TestIntegratorSmoke(_StoreCase):
     def setUp(self):
         super().setUp()
-        from modules.integrator import MemoryIntegrator
+        from mindforge.modules.integrator import MemoryIntegrator
         self.integrator = MemoryIntegrator(self.storage)
 
     def test_generate_summary_empty_and_normal(self):
@@ -256,7 +256,7 @@ class TestIntegratorSmoke(_StoreCase):
 class TestMultimodalSmoke(_StoreCase):
     def setUp(self):
         super().setUp()
-        from modules.multimodal import (
+        from mindforge.modules.multimodal import (
             MultimodalMemory, MultimodalContent, MultimodalType,
         )
         self.mm = MultimodalMemory(self.storage)
@@ -279,7 +279,7 @@ class TestMultimodalSmoke(_StoreCase):
         self.assertEqual(aud.content_type, self.Type.AUDIO)
         self.assertIn("你好", aud.text_representation)
         # 超大输入拒绝
-        from modules.multimodal import MultimodalMemory as MM
+        from mindforge.modules.multimodal import MultimodalMemory as MM
         with self.assertRaises(ValueError):
             MM().create_image_memory(b"x" * (50 * 1024 * 1024 + 1))
 
@@ -491,8 +491,8 @@ class TestStorageToolMethods(_StoreCase):
 class TestMindforgeMeta(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="mf_v570_mf_")
-        from MindForge import MindForge
-        from core.types import MemoryConfig
+        from mindforge import MindForge
+        from mindforge.core.types import MemoryConfig
         self.MindForge = MindForge
         self.mf = MindForge(config=MemoryConfig(
             db_path=os.path.join(self.tmp, "meta.db"), encrypted=False))
@@ -516,7 +516,7 @@ class TestMindforgeMeta(unittest.TestCase):
     def test_config_summary_and_privacy(self):
         summary = self.mf.config_summary()
         self.assertIsInstance(summary, dict)
-        from modules.privacy import PrivacyEngine
+        from mindforge.modules.privacy import PrivacyEngine
         self.assertIsInstance(self.mf.privacy_engine, PrivacyEngine)
 
     def test_get_encryption_info_unencrypted(self):

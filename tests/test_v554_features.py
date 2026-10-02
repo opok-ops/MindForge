@@ -9,7 +9,7 @@ import time
 import tempfile
 import pytest
 
-from MindForge import MindForge
+from mindforge import MindForge
 
 
 @pytest.fixture
@@ -63,7 +63,7 @@ class TestMemoryMerge:
 
     def test_merge_importance_takes_higher(self, mf):
         """重要性取较高值"""
-        from core.types import Importance
+        from mindforge.core.types import Importance
         e1 = mf.add("低重要度", importance=Importance.LOW)
         e2 = mf.add("高重要度", importance=Importance.HIGH)
         result = mf.merge_memories(e1.id, e2.id)
@@ -184,7 +184,7 @@ class TestRecentlyAccessed:
 
     def test_recently_accessed_by_layer(self, mf):
         """按层级筛选"""
-        from core.types import MemoryLayer
+        from mindforge.core.types import MemoryLayer
         e1 = mf.add("短期记忆")
         e2 = mf.add("长期记忆")
         # 直接通过 SQL 更新层级（storage 层没有单独的 update_layer 方法）
@@ -236,7 +236,7 @@ class TestBulkUpdateByFilter:
 
     def test_bulk_update_category_and_importance(self, mf):
         """批量更新分类和重要性"""
-        from core.types import Importance
+        from mindforge.core.types import Importance
         mf.add("旧分类1", category="oldcat", importance=Importance.LOW)
         mf.add("旧分类2", category="oldcat", importance=Importance.MEDIUM)
         mf.add("其他分类", category="other")

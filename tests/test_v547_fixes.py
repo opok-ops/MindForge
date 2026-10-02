@@ -25,9 +25,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core.indexer import IndexEngine
-from core.storage import StorageEngine
-from core.types import MemoryLayer
+from mindforge.core.indexer import IndexEngine
+from mindforge.core.storage import StorageEngine
+from mindforge.core.types import MemoryLayer
 
 
 class _V547Case(unittest.TestCase):
@@ -54,8 +54,8 @@ class _V547Case(unittest.TestCase):
 class TestEmbeddingStatusWithUnavailableEngine(_V547Case):
     def _make_mindforge(self):
         """构造一个共享同一 DB 的 MindForge 实例（engine 保持不可用）。"""
-        from core.mindforge import MindForge
-        from core.types import MemoryConfig
+        from mindforge.core.mindforge import MindForge
+        from mindforge.core.types import MemoryConfig
 
         config = MemoryConfig(db_path=self.db_path, encrypted=False)
         mf = MindForge(config=config)

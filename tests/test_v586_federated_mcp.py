@@ -14,8 +14,8 @@ if _REPO not in sys.path:
 
 
 def _mk_mf():
-    import core.mindforge as mf
-    from core.types import MemoryConfig
+    import mindforge.core.mindforge as mf
+    from mindforge.core.types import MemoryConfig
     tmp = tempfile.mkdtemp(prefix="mf_v586_", dir=_REPO)
     eng = mf.MindForge(config=MemoryConfig(
         db_path=os.path.join(tmp, "f.db"),
@@ -39,7 +39,7 @@ def _as_list(result):
 
 class TestFederatedMCPTools(unittest.TestCase):
     def setUp(self):
-        from mcp.server import HANDLERS
+        from mindforge.mcp.server import HANDLERS
         self.h = HANDLERS
         self.mf = _mk_mf()
 

@@ -29,7 +29,7 @@ class TestP11SsrfiPBlacklist(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from modules.connectors import _is_private_ip
+        from mindforge.modules.connectors import _is_private_ip
         cls.check = staticmethod(_is_private_ip)
 
     def test_常规内网地址全部拒绝(self):
@@ -60,7 +60,7 @@ class TestP12RedirectSsrfi(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from modules.connectors import _SafeRedirectHandler
+        from mindforge.modules.connectors import _SafeRedirectHandler
         cls.handler = _SafeRedirectHandler()
 
     def _req(self, url):
@@ -117,7 +117,7 @@ class TestP21ResponseLimit(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from modules.connectors import _read_limited
+        from mindforge.modules.connectors import _read_limited
         cls.read_limited = staticmethod(_read_limited)
 
     class _FakeResp:
@@ -146,8 +146,8 @@ class TestP22UnsignedReplay(unittest.TestCase):
     """P2-2：未签名链路无信封消息按内容哈希去重"""
 
     def _mk(self, name):
-        import core.mindforge as mf
-        from core.types import MemoryConfig
+        import mindforge.core.mindforge as mf
+        from mindforge.core.types import MemoryConfig
 
         tmp = _tmp()
         eng = mf.MindForge(config=MemoryConfig(
@@ -181,8 +181,8 @@ class TestP31StandardTotp(unittest.TestCase):
     """P3-1：标准 TOTP（RFC 6238）"""
 
     def _mk(self, name):
-        import core.mindforge as mf
-        from core.types import MemoryConfig
+        import mindforge.core.mindforge as mf
+        from mindforge.core.types import MemoryConfig
 
         tmp = _tmp()
         eng = mf.MindForge(config=MemoryConfig(
@@ -213,8 +213,8 @@ class TestP31StandardTotp(unittest.TestCase):
         self.assertTrue(p.verify_totp_code("carol", next_code))
 
     def test_密钥加密落库可恢复(self):
-        import core.mindforge as mf
-        from core.types import MemoryConfig
+        import mindforge.core.mindforge as mf
+        from mindforge.core.types import MemoryConfig
 
         tmp = _tmp()
         db = os.path.join(tmp, "t4.db")
@@ -241,8 +241,8 @@ class TestP32GdprBasename(unittest.TestCase):
     """P3-2：gdpr_report 不泄露绝对路径"""
 
     def test_db_path仅返回basename(self):
-        import core.mindforge as mf
-        from core.types import MemoryConfig
+        import mindforge.core.mindforge as mf
+        from mindforge.core.types import MemoryConfig
 
         tmp = _tmp()
         eng = mf.MindForge(config=MemoryConfig(

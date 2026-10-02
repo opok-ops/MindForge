@@ -16,8 +16,8 @@ import tempfile
 import time
 import unittest
 
-from core.storage import StorageEngine
-from core.types import MemoryLayer, Importance, DramaGenre, DramaStatus
+from mindforge.core.storage import StorageEngine
+from mindforge.core.types import MemoryLayer, Importance, DramaGenre, DramaStatus
 
 import sys
 from pathlib import Path
@@ -491,7 +491,7 @@ class TestHealthDashboard(_StoreCase):
         self.assertTrue(d["fts"]["enabled"])
 
     def test_mindforge_wrapper(self):
-        from core.mindforge import MindForge
+        from mindforge.core.mindforge import MindForge
         db = os.path.join(self.tmp, "mf.db")
         mf = MindForge(db_path=db, encrypted=False)
         mf.add("包装测试")
@@ -510,7 +510,7 @@ class TestHealthDashboard(_StoreCase):
 # ============================================================
 class TestImportProgressCallback(_StoreCase):
     def test_progress_callback_invoked(self):
-        from core.mindforge import MindForge
+        from mindforge.core.mindforge import MindForge
         db = os.path.join(self.tmp, "imp.db")
         mf = MindForge(db_path=db, encrypted=False)
         p = os.path.join(self.tmp, "imp.json")
@@ -529,7 +529,7 @@ class TestImportProgressCallback(_StoreCase):
         mf.close()
 
     def test_progress_callback_exception_does_not_block(self):
-        from core.mindforge import MindForge
+        from mindforge.core.mindforge import MindForge
         db = os.path.join(self.tmp, "imp2.db")
         mf = MindForge(db_path=db, encrypted=False)
         p = os.path.join(self.tmp, "imp2.json")

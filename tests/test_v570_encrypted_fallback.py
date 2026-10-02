@@ -15,12 +15,12 @@ import sqlite3
 import tempfile
 import unittest
 
-from core.storage import StorageEngine
-from core.encryption import EncryptionEngine
-from core.indexer import IndexEngine
-from core.query import QueryEngine
-from core.mindforge import MindForge
-from core.types import MemoryConfig
+from mindforge.core.storage import StorageEngine
+from mindforge.core.encryption import EncryptionEngine
+from mindforge.core.indexer import IndexEngine
+from mindforge.core.query import QueryEngine
+from mindforge.core.mindforge import MindForge
+from mindforge.core.types import MemoryConfig
 
 PASSWORD = "v570-fallback-password-123"
 

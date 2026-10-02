@@ -83,8 +83,8 @@ def _metrics(hits, relevant_ids, k=10):
 
 
 def run_eval(backend="fake", seed=42, limit=None, verbose=False):
-    from core.mindforge import MindForge
-    from core.types import MemoryConfig
+    from mindforge.core.mindforge import MindForge
+    from mindforge.core.types import MemoryConfig
 
     dataset = EVAL_SET[:limit] if limit else EVAL_SET
     d = tempfile.mkdtemp(prefix="mf_eval_")
@@ -104,7 +104,7 @@ def run_eval(backend="fake", seed=42, limit=None, verbose=False):
         if verbose:
             print("rebuild:", rb)
 
-        from core.query import _vector_degradation_warned
+        from mindforge.core.query import _vector_degradation_warned
         _vector_degradation_warned = True  # 静默降级警告
 
         st = mf._storage

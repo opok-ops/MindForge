@@ -89,8 +89,8 @@ SAMPLE_QUESTIONS: List[Dict[str, Any]] = [
 
 # ---------- 构建 MindForge 实例 ----------
 def build_mf(tmpdir: str, encrypted: bool = True, seed: int = 42):
-    from core.mindforge import MindForge
-    from core.types import MemoryConfig
+    from mindforge.core.mindforge import MindForge
+    from mindforge.core.types import MemoryConfig
 
     random.seed(seed)
     eng = MindForge(config=MemoryConfig(
@@ -231,7 +231,7 @@ def _run_eval_inner(tmpdir: str, k: int, judge: str,
 
 def _mf_version() -> str:
     try:
-        from core.version import __version__
+        from mindforge.core.version import __version__
         return __version__
     except Exception:
         return "unknown"

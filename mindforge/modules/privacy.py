@@ -14,8 +14,8 @@ import threading
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple, Any
 
-from core.storage import StorageEngine, MemoryEntry
-from core.types import PrivacyLevel
+from mindforge.core.storage import StorageEngine, MemoryEntry
+from mindforge.core.types import PrivacyLevel
 import base64
 import secrets
 import struct
@@ -631,7 +631,7 @@ class PrivacyEngine:
         if row is None or not row[0] or self.storage.encryption is None:
             return None
         try:
-            from core.encryption import EncryptedBlob
+            from mindforge.core.encryption import EncryptedBlob
             blob = EncryptedBlob.from_dict(json.loads(row[0]))
             secret = self.storage.encryption.decrypt(blob)
             self._totp_secrets[actor] = secret

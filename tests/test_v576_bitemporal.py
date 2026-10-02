@@ -24,9 +24,9 @@ import urllib.request
 
 _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-from core.mindforge import MindForge  # noqa: E402
-from core.storage import MemoryEntry  # noqa: E402
-from core.types import MemoryConfig, MemoryLayer, MemoryType  # noqa: E402
+from mindforge.core.mindforge import MindForge  # noqa: E402
+from mindforge.core.storage import MemoryEntry  # noqa: E402
+from mindforge.core.types import MemoryConfig, MemoryLayer, MemoryType  # noqa: E402
 
 
 def _make_mf(encrypted=False):
@@ -255,7 +255,7 @@ class TestCLI(unittest.TestCase):
     """CLI：supersede / valid-at / add --valid-*"""
 
     def setUp(self):
-        from cli.main import main
+        from mindforge.cli.main import main
         self.main = main
         self.tmp = tempfile.mkdtemp(prefix="mf_v576_cli_", dir=_REPO)
         os.environ["MINDFORGE_DB"] = os.path.join(self.tmp, "cli.db")
@@ -302,7 +302,7 @@ class TestMCP(unittest.TestCase):
     def test_tools_list_count_and_new_tools(self):
         import sys
         sys.path.insert(0, _REPO)
-        from mcp.server import _handle_tools_list, _handle_tools_call
+        from mindforge.mcp.server import _handle_tools_list, _handle_tools_call
         tools = _handle_tools_list({})["tools"]
         names = [t["name"] for t in tools]
         self.assertEqual(len(tools), 56)
@@ -331,7 +331,7 @@ class TestAPI(unittest.TestCase):
     """REST API：POST/PUT valid_from/valid_to + GET /api/valid-at"""
 
     def test_valid_at_endpoint_and_write_fields(self):
-        from api.server import start_api_server
+        from mindforge.api.server import start_api_server
         os.environ["MINDFORGE_ALLOW_NOAUTH"] = "1"
         mf, tmp = _make_mf()
         try:

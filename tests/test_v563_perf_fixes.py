@@ -18,7 +18,7 @@ import tempfile
 import time
 import unittest
 
-from core.indexer import IndexEngine, VectorIndex
+from mindforge.core.indexer import IndexEngine, VectorIndex
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +122,7 @@ class TestSparseIndexEngine(unittest.TestCase):
 class TestFuzzyGate(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="mf_fuzzy_")
-        from core.storage import StorageEngine
+        from mindforge.core.storage import StorageEngine
         self.se = StorageEngine(
             db_path=os.path.join(self.tmp, "f.db"), encrypted=False)
 
@@ -165,7 +165,7 @@ class TestFuzzyGate(unittest.TestCase):
 class TestReadCacheAndAccessThrottle(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="mf_cache_")
-        from core.storage import StorageEngine
+        from mindforge.core.storage import StorageEngine
         self.db = os.path.join(self.tmp, "c.db")
         self.se = StorageEngine(db_path=self.db, encrypted=False)
 
@@ -207,7 +207,7 @@ class TestReadCacheAndAccessThrottle(unittest.TestCase):
         self.assertIsNone(self.se.get_memory(e.id))
 
     def test_access_count_throttle_and_close_flush(self):
-        from core import storage as storage_mod
+        from mindforge.core import storage as storage_mod
         e = self.se.add_memory(content="访问计数节流测试", category="t")
 
         # 首次读取立即落库

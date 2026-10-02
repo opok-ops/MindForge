@@ -26,7 +26,7 @@ class TestP1WebhookSignatureConsistency(unittest.TestCase):
 
     def test_body_serialized_once(self):
         """验证 body 只序列化一次，签名和发送共用"""
-        from modules.event_bus import EventBus
+        from mindforge.modules.event_bus import EventBus
         source = inspect.getsource(EventBus._deliver_webhook)
         # body 在方法开头序列化
         self.assertIn('body = json.dumps(payload', source)
@@ -42,7 +42,7 @@ class TestP1WebhookSignatureConsistency(unittest.TestCase):
 
     def test_urllib_uses_same_body(self):
         """验证 urllib 降级路径也使用同一 body"""
-        from modules.event_bus import EventBus
+        from mindforge.modules.event_bus import EventBus
         source = inspect.getsource(EventBus._deliver_webhook_urllib)
         # body 作为参数传入，不在内部重新序列化
         self.assertIn('body: bytes', source)
@@ -50,7 +50,7 @@ class TestP1WebhookSignatureConsistency(unittest.TestCase):
 
     def test_signature_matches_body(self):
         """实证：签名计算用同一字节串"""
-        from modules.event_bus import EventBus
+        from mindforge.modules.event_bus import EventBus
 
         bus = EventBus()
         secret = "test_secret"
@@ -81,20 +81,20 @@ class TestP2GetMemoryClearError(unittest.TestCase):
 
     def test_error_message_exists(self):
         """验证 _get_memory 中有密码缺失的错误提示"""
-        from cli.main import _get_memory
+        from mindforge.cli.main import _get_memory
         source = inspect.getsource(_get_memory)
         self.assertIn('MINDFORGE_PASSWORD', source)
         self.assertIn('加密数据库需要密码', source)
 
     def test_error_exits_with_code_1(self):
         """验证无密码时 sys.exit(1) 而非裸 AttributeError"""
-        from cli.main import _get_memory
+        from mindforge.cli.main import _get_memory
         source = inspect.getsource(_get_memory)
         self.assertIn('sys.exit(1)', source)
 
     def test_error_mentions_bridge(self):
         """验证错误提示提到 dsh-mindforge bridge"""
-        from cli.main import _get_memory
+        from mindforge.cli.main import _get_memory
         source = inspect.getsource(_get_memory)
         self.assertIn('bridge', source.lower())
 
@@ -104,14 +104,14 @@ class TestP31ContentLengthDynamic(unittest.TestCase):
 
     def test_content_length_uses_len(self):
         """验证 503 响应中 Content-Length 使用 len() 动态计算"""
-        from api.server import BoundedThreadingHTTPServer
+        from mindforge.api.server import BoundedThreadingHTTPServer
         source = inspect.getsource(BoundedThreadingHTTPServer.process_request)
         self.assertIn('len(body)', source)
         self.assertNotIn('Content-Length: 48', source, "不应硬编码 Content-Length")
 
     def test_body_variable_defined(self):
         """验证 503 body 变量在 sendall 前定义"""
-        from api.server import BoundedThreadingHTTPServer
+        from mindforge.api.server import BoundedThreadingHTTPServer
         source = inspect.getsource(BoundedThreadingHTTPServer.process_request)
         self.assertIn('body = b\'{"error"', source)
 
@@ -121,14 +121,14 @@ class TestP32TimeoutAndRetryLogic(unittest.TestCase):
 
     def test_timeout_respects_config(self):
         """验证 timeout 从 config.timeout 获取，不硬编码"""
-        from modules.event_bus import EventBus
+        from mindforge.modules.event_bus import EventBus
         source = inspect.getsource(EventBus._deliver_webhook)
         self.assertIn('config.timeout', source)
         self.assertNotIn('timeout = (3, 10)', source, "不应硬编码 timeout")
 
     def test_4xx_no_retry(self):
         """验证 4xx 错误不重试"""
-        from modules.event_bus import EventBus
+        from mindforge.modules.event_bus import EventBus
         source = inspect.getsource(EventBus._deliver_webhook)
         self.assertIn('400 <= status < 500', source)
         self.assertIn('break', source)
@@ -139,14 +139,14 @@ class TestP33ExportTruncation(unittest.TestCase):
 
     def test_export_has_truncated_field(self):
         """验证 /api/export 响应中有 truncated 字段"""
-        from api.server import MindForgeAPIHandler
+        from mindforge.api.server import MindForgeAPIHandler
         source = inspect.getsource(MindForgeAPIHandler.do_GET)
         self.assertIn('truncated', source)
         self.assertIn('max_limit', source)
 
     def test_truncated_logic(self):
         """验证截断判断逻辑：达到上限时 truncated=True"""
-        from api.server import MindForgeAPIHandler
+        from mindforge.api.server import MindForgeAPIHandler
         source = inspect.getsource(MindForgeAPIHandler.do_GET)
         self.assertIn('>= max_export_limit', source)
 

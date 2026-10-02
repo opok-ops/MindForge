@@ -25,8 +25,8 @@ from unittest import mock
 
 sys.path.insert(0, str(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from cli.main import cmd_export_json, cmd_import_json
-from core.types import PrivacyLevel
+from mindforge.cli.main import cmd_export_json, cmd_import_json
+from mindforge.core.types import PrivacyLevel
 
 
 def _make_args(**kw):
@@ -52,8 +52,8 @@ class TestEncryptedExportImport(unittest.TestCase):
         self.export_path = os.path.join(self.tmp, "export.json")
 
         # 构造一个含数据的库（非加密运行库）
-        from core.mindforge import MindForge
-        from core.types import MemoryConfig
+        from mindforge.core.mindforge import MindForge
+        from mindforge.core.types import MemoryConfig
 
         config = MemoryConfig(
             db_path=self.db_path, key_file=self.key_file, encrypted=False
@@ -113,7 +113,7 @@ class TestEncryptedExportImport(unittest.TestCase):
         self._export(password=pwd)
 
         import base64
-        from core.encryption import EncryptionEngine, EncryptedBlob
+        from mindforge.core.encryption import EncryptionEngine, EncryptedBlob
 
         with open(self.export_path, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -154,8 +154,8 @@ class TestEncryptedExportImport(unittest.TestCase):
         self.assertIn("解密失败", buf.getvalue())
 
         # 关键：解密失败时不允许以此写入新库（目标库保持 2 条）
-        from core.mindforge import MindForge
-        from core.types import MemoryConfig
+        from mindforge.core.mindforge import MindForge
+        from mindforge.core.types import MemoryConfig
 
         cfg = MemoryConfig(
             db_path=self.db_path, key_file=self.key_file, encrypted=False
@@ -202,8 +202,8 @@ class TestEncryptedExportImport(unittest.TestCase):
             rc = cmd_import_json(args)
         self.assertEqual(rc, 0, buf.getvalue())
 
-        from core.mindforge import MindForge
-        from core.types import MemoryConfig
+        from mindforge.core.mindforge import MindForge
+        from mindforge.core.types import MemoryConfig
 
         cfg = MemoryConfig(
             db_path=new_db,

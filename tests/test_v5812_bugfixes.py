@@ -7,9 +7,9 @@ import unittest
 from collections import namedtuple
 from unittest.mock import patch
 
-from MindForge import MindForge
-from core.types import Importance, PrivacyLevel
-from modules.recall import RecallConfig, RecallEngine
+from mindforge import MindForge
+from mindforge.core.types import Importance, PrivacyLevel
+from mindforge.modules.recall import RecallConfig, RecallEngine
 
 _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -25,7 +25,7 @@ class MindForgeCase(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _handler(self, path, body=None, mindforge=None):
-        from api.server import MindForgeAPIHandler
+        from mindforge.api.server import MindForgeAPIHandler
 
         handler = MindForgeAPIHandler.__new__(MindForgeAPIHandler)
         handler.mindforge = mindforge or self.mf
@@ -156,7 +156,7 @@ class TestRESTRegressions(MindForgeCase):
 
 class TestMCPRegressions(MindForgeCase):
     def test_conflict_reconcile_rejects_string_boolean(self):
-        from mcp.server import h_conflict_reconcile
+        from mindforge.mcp.server import h_conflict_reconcile
 
         with patch.object(self.mf, "reconcile_conflicts") as reconcile:
             result = h_conflict_reconcile(self.mf, {"auto": "false"})
@@ -168,7 +168,7 @@ class TestMCPRegressions(MindForgeCase):
 class TestLangGraphNamespaceRegressions(MindForgeCase):
     def setUp(self):
         super().setUp()
-        from adapters.langgraph_store import MindForgeStore
+        from mindforge.adapters.langgraph_store import MindForgeStore
         self.store = MindForgeStore(self.mf)
 
     def test_prefix_search_returns_descendant_namespaces(self):

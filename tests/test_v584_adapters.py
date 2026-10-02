@@ -19,8 +19,8 @@ def _tmp():
 
 
 def _mk_mf(name, encrypted=True):
-    import core.mindforge as mf
-    from core.types import MemoryConfig
+    import mindforge.core.mindforge as mf
+    from mindforge.core.types import MemoryConfig
 
     tmp = _tmp()
     eng = mf.MindForge(config=MemoryConfig(
@@ -35,7 +35,7 @@ class TestLangGraphStoreAdapter(unittest.TestCase):
     """MindForgeStore：put/get/search/delete 语义"""
 
     def setUp(self):
-        from adapters.langgraph_store import MindForgeStore
+        from mindforge.adapters.langgraph_store import MindForgeStore
         self.mf = _mk_mf("lg")
         self.store = MindForgeStore(self.mf)
 
@@ -132,7 +132,7 @@ class TestCrewAIMemoryAdapter(unittest.TestCase):
     """CrewAIMemory：save/search/reset 语义"""
 
     def setUp(self):
-        from adapters.crewai_memory import CrewAIMemory
+        from mindforge.adapters.crewai_memory import CrewAIMemory
         self.mf = _mk_mf("cr")
         self.mem = CrewAIMemory(self.mf, namespace="crew_travel")
 

@@ -13,7 +13,7 @@ class TestCoreTypes(unittest.TestCase):
     """核心类型测试"""
 
     def test_enums(self):
-        from core.types import PrivacyLevel, Importance, MemoryType, MemoryLayer
+        from mindforge.core.types import PrivacyLevel, Importance, MemoryType, MemoryLayer
 
         self.assertEqual(PrivacyLevel.PUBLIC.value, "PUBLIC")
         self.assertEqual(PrivacyLevel.INTERNAL.value, "INTERNAL")
@@ -36,7 +36,7 @@ class TestCoreTypes(unittest.TestCase):
         self.assertEqual(MemoryLayer.PERMANENT.value, "permanent")
 
     def test_memory_config(self):
-        from core.types import MemoryConfig
+        from mindforge.core.types import MemoryConfig
 
         config = MemoryConfig(db_path="/tmp/test.db")
         self.assertEqual(config.db_path, "/tmp/test.db")
@@ -58,8 +58,8 @@ class TestStorageEngine(unittest.TestCase):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def test_add_and_get_memory(self):
-        from core.storage import StorageEngine
-        from core.types import MemoryLayer, PrivacyLevel, Importance, MemoryType
+        from mindforge.core.storage import StorageEngine
+        from mindforge.core.types import MemoryLayer, PrivacyLevel, Importance, MemoryType
 
         storage = StorageEngine(db_path=self.db_path)
 
@@ -84,8 +84,8 @@ class TestStorageEngine(unittest.TestCase):
         self.assertEqual(retrieved.category, "test")
 
     def test_list_memories(self):
-        from core.storage import StorageEngine
-        from core.types import MemoryLayer
+        from mindforge.core.storage import StorageEngine
+        from mindforge.core.types import MemoryLayer
 
         storage = StorageEngine(db_path=self.db_path)
 
@@ -103,8 +103,8 @@ class TestStorageEngine(unittest.TestCase):
         self.assertEqual(len(test_memories), 3)
 
     def test_update_memory(self):
-        from core.storage import StorageEngine
-        from core.types import MemoryLayer
+        from mindforge.core.storage import StorageEngine
+        from mindforge.core.types import MemoryLayer
 
         storage = StorageEngine(db_path=self.db_path)
 
@@ -127,8 +127,8 @@ class TestStorageEngine(unittest.TestCase):
         self.assertEqual(updated.category, "updated")
 
     def test_delete_memory(self):
-        from core.storage import StorageEngine
-        from core.types import MemoryLayer
+        from mindforge.core.storage import StorageEngine
+        from mindforge.core.types import MemoryLayer
 
         storage = StorageEngine(db_path=self.db_path)
 
@@ -145,8 +145,8 @@ class TestStorageEngine(unittest.TestCase):
         self.assertIsNone(retrieved)
 
     def test_stats(self):
-        from core.storage import StorageEngine
-        from core.types import MemoryLayer
+        from mindforge.core.storage import StorageEngine
+        from mindforge.core.types import MemoryLayer
 
         storage = StorageEngine(db_path=self.db_path)
 
@@ -174,7 +174,7 @@ class TestMindForge(unittest.TestCase):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def test_init(self):
-        from core.mindforge import MindForge
+        from mindforge.core.mindforge import MindForge
 
         cm = MindForge(db_path=self.db_path, encrypted=False)
         self.assertIsNotNone(cm)
@@ -184,7 +184,7 @@ class TestMindForge(unittest.TestCase):
         cm.close()
 
     def test_add_and_search(self):
-        from core.mindforge import MindForge
+        from mindforge.core.mindforge import MindForge
 
         cm = MindForge(db_path=self.db_path, encrypted=False)
 
@@ -205,7 +205,7 @@ class TestMindForge(unittest.TestCase):
         cm.close()
 
     def test_export_import_json(self):
-        from core.mindforge import MindForge
+        from mindforge.core.mindforge import MindForge
         import json
 
         cm = MindForge(db_path=self.db_path, encrypted=False)
@@ -236,7 +236,7 @@ class TestMindForge(unittest.TestCase):
         cm2.close()
 
     def test_export_csv(self):
-        from core.mindforge import MindForge
+        from mindforge.core.mindforge import MindForge
         import csv
 
         cm = MindForge(db_path=self.db_path, encrypted=False)
@@ -262,14 +262,14 @@ class TestKnowledgeGraph(unittest.TestCase):
     """知识图谱测试"""
 
     def test_extract_entities(self):
-        from modules.knowledge_graph import KnowledgeGraph
+        from mindforge.modules.knowledge_graph import KnowledgeGraph
 
         kg = KnowledgeGraph()
         entities = kg.extract_entities("Python 和 PostgreSQL 是常用的开发工具")
         self.assertIsInstance(entities, list)
 
     def test_add_and_get_relations(self):
-        from modules.knowledge_graph import KnowledgeGraph
+        from mindforge.modules.knowledge_graph import KnowledgeGraph
 
         kg = KnowledgeGraph()
         kg.add_relation("Python", "编程开发", "is_a", weight=0.9)
@@ -296,8 +296,8 @@ class TestPersonalityEngine(unittest.TestCase):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def test_learn_and_profile(self):
-        from core.mindforge import MindForge
-        from modules.personality import PersonalityEngine
+        from mindforge.core.mindforge import MindForge
+        from mindforge.modules.personality import PersonalityEngine
 
         cm = MindForge(db_path=self.db_path, encrypted=False)
         pe = PersonalityEngine(cm.storage)
@@ -331,8 +331,8 @@ class TestFTSUpdateSync(unittest.TestCase):
 
     def test_update_content_syncs_fts(self):
         """更新 content 后，FTS 索引应反映新内容而非旧内容"""
-        from core.storage import StorageEngine
-        from core.types import MemoryLayer
+        from mindforge.core.storage import StorageEngine
+        from mindforge.core.types import MemoryLayer
 
         storage = StorageEngine(db_path=self.db_path)
         entry = storage.add_memory(
@@ -360,8 +360,8 @@ class TestFTSUpdateSync(unittest.TestCase):
 
     def test_update_category_syncs_fts(self):
         """更新 category 后，FTS 索引的 category 字段应同步"""
-        from core.storage import StorageEngine
-        from core.types import MemoryLayer
+        from mindforge.core.storage import StorageEngine
+        from mindforge.core.types import MemoryLayer
 
         storage = StorageEngine(db_path=self.db_path)
         entry = storage.add_memory(
@@ -393,8 +393,8 @@ class TestRebuildFTS(unittest.TestCase):
 
     def test_rebuild_fts_clears_orphans(self):
         """rebuild_fts 应消除孤立 FTS 记录"""
-        from core.storage import StorageEngine
-        from core.types import MemoryLayer
+        from mindforge.core.storage import StorageEngine
+        from mindforge.core.types import MemoryLayer
 
         storage = StorageEngine(db_path=self.db_path)
         for i in range(3):
@@ -443,8 +443,8 @@ class TestPurgeTrash(unittest.TestCase):
 
     def test_purge_trash_removes_soft_deleted(self):
         """purge_trash 应永久删除所有软删除的记忆"""
-        from core.storage import StorageEngine
-        from core.types import MemoryLayer
+        from mindforge.core.storage import StorageEngine
+        from mindforge.core.types import MemoryLayer
 
         storage = StorageEngine(db_path=self.db_path)
 
@@ -481,7 +481,7 @@ class TestPurgeTrash(unittest.TestCase):
 
     def test_purge_trash_empty(self):
         """回收站为空时 purge_trash 应返回 0"""
-        from core.storage import StorageEngine
+        from mindforge.core.storage import StorageEngine
 
         storage = StorageEngine(db_path=self.db_path)
         count = storage.purge_trash()
@@ -502,7 +502,7 @@ class TestSearchHydration(unittest.TestCase):
 
     def test_cross_process_search(self):
         """新进程实例中 search 应能搜到历史记忆（索引水合）"""
-        from core.mindforge import MindForge
+        from mindforge.core.mindforge import MindForge
 
         cm1 = MindForge(db_path=self.db_path, encrypted=False)
         cm1.add("知识图谱让记忆不再孤立", category="tech", tags=["kg"])
@@ -517,7 +517,7 @@ class TestSearchHydration(unittest.TestCase):
 
     def test_cjk_substring_search(self):
         """CJK 子串查询应通过模糊补充召回命中"""
-        from core.mindforge import MindForge
+        from mindforge.core.mindforge import MindForge
 
         cm = MindForge(db_path=self.db_path, encrypted=False)
         cm.add("SQLite 是轻量级嵌入式数据库", category="tech")
@@ -527,7 +527,7 @@ class TestSearchHydration(unittest.TestCase):
 
     def test_search_no_false_positive(self):
         """不存在的关键词应返回 0 条"""
-        from core.mindforge import MindForge
+        from mindforge.core.mindforge import MindForge
 
         cm = MindForge(db_path=self.db_path, encrypted=False)
         cm.add("普通的一条记忆", category="test")
@@ -548,12 +548,12 @@ class TestMultiAgentMemory(unittest.TestCase):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def _make(self):
-        from core.mindforge import MindForge
+        from mindforge.core.mindforge import MindForge
         return MindForge(db_path=self.db_path, encrypted=False)
 
     def test_space_lifecycle(self):
         """创建空间 → 添加成员 → 共享 → 冲突解决 → 隐私护栏 → 读取 → 统计"""
-        from core.types import PrivacyLevel
+        from mindforge.core.types import PrivacyLevel
 
         cm = self._make()
         entry = cm.add("可共享的团队知识", category="team")
@@ -638,7 +638,7 @@ class TestIntentRouter(unittest.TestCase):
 
     def test_rule_matching(self):
         """规则正则匹配"""
-        from modules.intent_router import IntentRouter
+        from mindforge.modules.intent_router import IntentRouter
         router = IntentRouter()
         result = router.classify("记住：用户偏好深色主题")
         self.assertEqual(result.label, "记忆存储")
@@ -646,14 +646,14 @@ class TestIntentRouter(unittest.TestCase):
 
     def test_keyword_matching(self):
         """关键词加权匹配"""
-        from modules.intent_router import IntentRouter
+        from mindforge.modules.intent_router import IntentRouter
         router = IntentRouter()
         result = router.classify("搜索一下之前的部署记录")
         self.assertEqual(result.label, "记忆检索")
 
     def test_force_override(self):
         """强制覆盖意图"""
-        from modules.intent_router import IntentRouter
+        from mindforge.modules.intent_router import IntentRouter
         router = IntentRouter()
         result = router.classify("随便说点什么", force_override="memory_store")
         self.assertEqual(result.intent, "memory_store")
@@ -671,7 +671,7 @@ class TestConflictDetector(unittest.TestCase):
 
     def test_antonym_detection(self):
         """反义词对检测"""
-        from modules.conflict_detector import ConflictDetector
+        from mindforge.modules.conflict_detector import ConflictDetector
         detector = ConflictDetector()
         conflicts = detector.detect_antonym(
             "MySQL 已启用，启动成功", "MySQL 已禁用，启动失败", "id1", "id2"
@@ -681,7 +681,7 @@ class TestConflictDetector(unittest.TestCase):
 
     def test_empty_memories(self):
         """空记忆列表安全"""
-        from modules.conflict_detector import ConflictDetector
+        from mindforge.modules.conflict_detector import ConflictDetector
         detector = ConflictDetector()
         result = detector.scan_memories([])
         self.assertEqual(len(result), 0)
@@ -699,7 +699,7 @@ class TestSkillExtractor(unittest.TestCase):
 
     def test_extract_from_devops(self):
         """从 DevOps 记忆中抽取技能"""
-        from modules.skill_extractor import SkillExtractor
+        from mindforge.modules.skill_extractor import SkillExtractor
         extractor = SkillExtractor()
         memories = [
             {"id": "1", "content": "部署步骤1 安装依赖 步骤2 初始化 步骤3 启动", "category": "devops"},
@@ -710,7 +710,7 @@ class TestSkillExtractor(unittest.TestCase):
 
     def test_empty_memories(self):
         """空记忆列表安全"""
-        from modules.skill_extractor import SkillExtractor
+        from mindforge.modules.skill_extractor import SkillExtractor
         extractor = SkillExtractor()
         skills = extractor.extract([])
         self.assertEqual(len(skills), 0)
@@ -728,7 +728,7 @@ class TestHybridSearch(unittest.TestCase):
 
     def test_query_expansion(self):
         """查询扩展"""
-        from modules.hybrid_search import QueryExpander
+        from mindforge.modules.hybrid_search import QueryExpander
         expander = QueryExpander()
         result = expander.expand("MySQL 部署")
         self.assertIsNotNone(result)
@@ -736,7 +736,7 @@ class TestHybridSearch(unittest.TestCase):
 
     def test_reranker(self):
         """Cross-Encoder 重排"""
-        from modules.hybrid_search import CrossEncoderReranker
+        from mindforge.modules.hybrid_search import CrossEncoderReranker
         reranker = CrossEncoderReranker()
         candidates = [
             {"id": "1", "content": "MySQL 部署成功", "importance": 0.8},
@@ -761,7 +761,7 @@ class TestSessionFocus(unittest.TestCase):
 
     def test_focus_summary(self):
         """焦点摘要"""
-        from modules.session_focus import SessionFocus
+        from mindforge.modules.session_focus import SessionFocus
         sf = SessionFocus()
         messages = [
             {"id": "m1", "role": "user", "content": "MySQL 怎么部署?"},
@@ -774,7 +774,7 @@ class TestSessionFocus(unittest.TestCase):
 
     def test_empty_messages(self):
         """空消息安全"""
-        from modules.session_focus import SessionFocus
+        from mindforge.modules.session_focus import SessionFocus
         sf = SessionFocus()
         summary = sf.summarize([])
         self.assertIsNotNone(summary)
@@ -794,7 +794,7 @@ class TestMemoryReflection(unittest.TestCase):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def _seed(self, storage, agent="agent-r"):
-        from core.types import Importance, MemoryLayer
+        from mindforge.core.types import Importance, MemoryLayer
         items = [
             ("完成了数据库优化任务，效果很好", "work", ["优化", "数据库"], Importance.HIGH),
             ("修复了一个棘手的 bug，成功了", "work", ["bug", "优化"], Importance.MEDIUM),
@@ -808,7 +808,7 @@ class TestMemoryReflection(unittest.TestCase):
                                source_agent=agent)
 
     def test_reflection_structure(self):
-        from core.storage import StorageEngine
+        from mindforge.core.storage import StorageEngine
         storage = StorageEngine(db_path=self.db_path)
         self._seed(storage)
         result = storage.memory_reflection("agent-r", days=30)
@@ -820,14 +820,14 @@ class TestMemoryReflection(unittest.TestCase):
         self.assertIsInstance(result["suggestions"], list)
 
     def test_reflection_empty(self):
-        from core.storage import StorageEngine
+        from mindforge.core.storage import StorageEngine
         storage = StorageEngine(db_path=self.db_path)
         result = storage.memory_reflection("no-such-agent", days=30)
         self.assertEqual(result["total_memories"], 0)
         self.assertEqual(result["emotional_tone"]["dominant"], "no_data")
 
     def test_reflection_empty_agent_id(self):
-        from core.storage import StorageEngine
+        from mindforge.core.storage import StorageEngine
         storage = StorageEngine(db_path=self.db_path)
         result = storage.memory_reflection("", days=30)
         self.assertIn("error", result)
@@ -845,8 +845,8 @@ class TestMemoryLineage(unittest.TestCase):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def test_lineage_with_versions_and_links(self):
-        from core.storage import StorageEngine
-        from core.types import Importance, MemoryLayer
+        from mindforge.core.storage import StorageEngine
+        from mindforge.core.types import Importance, MemoryLayer
         storage = StorageEngine(db_path=self.db_path)
 
         e1 = storage.add_memory(content="主记忆", category="core",
@@ -866,13 +866,13 @@ class TestMemoryLineage(unittest.TestCase):
         self.assertTrue(any(ev["event"] == "version" for ev in result["lifecycle_timeline"]))
 
     def test_lineage_missing_memory(self):
-        from core.storage import StorageEngine
+        from mindforge.core.storage import StorageEngine
         storage = StorageEngine(db_path=self.db_path)
         result = storage.memory_lineage("nonexistent-id")
         self.assertIn("error", result)
 
     def test_lineage_empty_id(self):
-        from core.storage import StorageEngine
+        from mindforge.core.storage import StorageEngine
         storage = StorageEngine(db_path=self.db_path)
         result = storage.memory_lineage("")
         self.assertIn("error", result)
@@ -890,8 +890,8 @@ class TestMemoryReinforce(unittest.TestCase):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def test_reinforce_ranks_high_value_first(self):
-        from core.storage import StorageEngine
-        from core.types import Importance, MemoryLayer
+        from mindforge.core.storage import StorageEngine
+        from mindforge.core.types import Importance, MemoryLayer
         storage = StorageEngine(db_path=self.db_path)
 
         # 高价值：CRITICAL + 星标
@@ -917,7 +917,7 @@ class TestMemoryReinforce(unittest.TestCase):
                                 result["candidates"][1]["reinforce_score"])
 
     def test_reinforce_empty(self):
-        from core.storage import StorageEngine
+        from mindforge.core.storage import StorageEngine
         storage = StorageEngine(db_path=self.db_path)
         result = storage.memory_reinforce("empty-agent")
         self.assertEqual(result["total_scanned"], 0)
@@ -936,7 +936,7 @@ class TestDramaPlotThread(unittest.TestCase):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def _make_drama(self, storage):
-        from core.types import DramaGenre, DramaStatus
+        from mindforge.core.types import DramaGenre, DramaStatus
         d = storage.add_drama(title="测试短剧", genre=DramaGenre.SUSPENSE,
                               total_episodes=3, status=DramaStatus.WATCHING)
         # EP1 埋设伏笔
@@ -948,7 +948,7 @@ class TestDramaPlotThread(unittest.TestCase):
         return d
 
     def test_plot_thread_detection(self):
-        from core.storage import StorageEngine
+        from mindforge.core.storage import StorageEngine
         storage = StorageEngine(db_path=self.db_path)
         d = self._make_drama(storage)
         result = storage.drama_plot_thread(d.id)
@@ -959,14 +959,14 @@ class TestDramaPlotThread(unittest.TestCase):
         self.assertGreater(result["resolution_rate"], 0)
 
     def test_plot_thread_missing_drama(self):
-        from core.storage import StorageEngine
+        from mindforge.core.storage import StorageEngine
         storage = StorageEngine(db_path=self.db_path)
         result = storage.drama_plot_thread("no-such-drama")
         self.assertIn("error", result)
 
     def test_plot_thread_no_scenes(self):
-        from core.storage import StorageEngine
-        from core.types import DramaGenre
+        from mindforge.core.storage import StorageEngine
+        from mindforge.core.types import DramaGenre
         storage = StorageEngine(db_path=self.db_path)
         d = storage.add_drama(title="空剧", genre=DramaGenre.OTHER)
         result = storage.drama_plot_thread(d.id)
@@ -986,8 +986,8 @@ class TestDramaEpisodeCurve(unittest.TestCase):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def test_episode_curve_shape(self):
-        from core.storage import StorageEngine
-        from core.types import DramaGenre
+        from mindforge.core.storage import StorageEngine
+        from mindforge.core.types import DramaGenre
         storage = StorageEngine(db_path=self.db_path)
         d = storage.add_drama(title="张力剧", genre=DramaGenre.ACTION, total_episodes=3)
         c1 = storage.add_character(d.id, "主角", role="lead")
@@ -1009,8 +1009,8 @@ class TestDramaEpisodeCurve(unittest.TestCase):
         self.assertIn(result["shape"], ("rising", "falling", "mid_peak", "steady"))
 
     def test_episode_curve_no_data(self):
-        from core.storage import StorageEngine
-        from core.types import DramaGenre
+        from mindforge.core.storage import StorageEngine
+        from mindforge.core.types import DramaGenre
         storage = StorageEngine(db_path=self.db_path)
         d = storage.add_drama(title="空剧", genre=DramaGenre.OTHER)
         result = storage.drama_episode_curve(d.id)
@@ -1030,8 +1030,8 @@ class TestDramaScreenTime(unittest.TestCase):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def test_screen_time_balance(self):
-        from core.storage import StorageEngine
-        from core.types import DramaGenre
+        from mindforge.core.storage import StorageEngine
+        from mindforge.core.types import DramaGenre
         storage = StorageEngine(db_path=self.db_path)
         d = storage.add_drama(title="群像剧", genre=DramaGenre.DRAMA, total_episodes=1)
         lead = storage.add_character(d.id, "主角", role="lead")
@@ -1053,8 +1053,8 @@ class TestDramaScreenTime(unittest.TestCase):
         self.assertGreaterEqual(result["balance"]["gini_coefficient"], 0.0)
 
     def test_screen_time_no_characters(self):
-        from core.storage import StorageEngine
-        from core.types import DramaGenre
+        from mindforge.core.storage import StorageEngine
+        from mindforge.core.types import DramaGenre
         storage = StorageEngine(db_path=self.db_path)
         d = storage.add_drama(title="无人剧", genre=DramaGenre.OTHER)
         result = storage.drama_screen_time(d.id)
@@ -1074,7 +1074,7 @@ class TestContentLengthGuard(unittest.TestCase):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def test_update_memory_rejects_oversized(self):
-        from core.storage import StorageEngine, MAX_CONTENT_LEN
+        from mindforge.core.storage import StorageEngine, MAX_CONTENT_LEN
         storage = StorageEngine(db_path=self.db_path)
         entry = storage.add_memory(content="正常内容")
         oversized = "x" * (MAX_CONTENT_LEN + 1)
@@ -1082,7 +1082,7 @@ class TestContentLengthGuard(unittest.TestCase):
             storage.update_memory(entry.id, content=oversized)
 
     def test_batch_add_skips_oversized(self):
-        from core.storage import StorageEngine, MAX_CONTENT_LEN
+        from mindforge.core.storage import StorageEngine, MAX_CONTENT_LEN
         storage = StorageEngine(db_path=self.db_path)
         entries = [
             {"content": "正常条目"},
@@ -1093,7 +1093,7 @@ class TestContentLengthGuard(unittest.TestCase):
         self.assertEqual(storage.count_memories(), 1)
 
     def test_add_memory_still_guarded(self):
-        from core.storage import StorageEngine, MAX_CONTENT_LEN
+        from mindforge.core.storage import StorageEngine, MAX_CONTENT_LEN
         storage = StorageEngine(db_path=self.db_path)
         with self.assertRaises(ValueError):
             storage.add_memory(content="z" * (MAX_CONTENT_LEN + 1))
@@ -1113,8 +1113,8 @@ class TestFederatedACL(unittest.TestCase):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def test_default_deny(self):
-        from core.storage import StorageEngine
-        from modules.federated_acl import FederatedACLManager
+        from mindforge.core.storage import StorageEngine
+        from mindforge.modules.federated_acl import FederatedACLManager
         storage = StorageEngine(db_path=self.db_path)
         acl = FederatedACLManager(storage)
         result = acl.check_access("peerA", "mem1", "read")
@@ -1123,8 +1123,8 @@ class TestFederatedACL(unittest.TestCase):
         self.assertIsNone(result["matched_rule"])
 
     def test_allow_rule_grants_access(self):
-        from core.storage import StorageEngine
-        from modules.federated_acl import FederatedACLManager
+        from mindforge.core.storage import StorageEngine
+        from mindforge.modules.federated_acl import FederatedACLManager
         storage = StorageEngine(db_path=self.db_path)
         acl = FederatedACLManager(storage)
         add = acl.add_rule("peerA", "memory:mem1", "read", effect="allow")
@@ -1138,8 +1138,8 @@ class TestFederatedACL(unittest.TestCase):
         self.assertFalse(acl.check_access("peerA", "mem1", "write")["allowed"])
 
     def test_deny_overrides_at_same_priority(self):
-        from core.storage import StorageEngine
-        from modules.federated_acl import FederatedACLManager
+        from mindforge.core.storage import StorageEngine
+        from mindforge.modules.federated_acl import FederatedACLManager
         storage = StorageEngine(db_path=self.db_path)
         acl = FederatedACLManager(storage)
         acl.add_rule("peerA", "all", "read", effect="allow", priority=100)
@@ -1148,8 +1148,8 @@ class TestFederatedACL(unittest.TestCase):
         self.assertFalse(result["allowed"])
 
     def test_higher_priority_wins(self):
-        from core.storage import StorageEngine
-        from modules.federated_acl import FederatedACLManager
+        from mindforge.core.storage import StorageEngine
+        from mindforge.modules.federated_acl import FederatedACLManager
         storage = StorageEngine(db_path=self.db_path)
         acl = FederatedACLManager(storage)
         acl.add_rule("peerA", "all", "read", effect="deny", priority=50)
@@ -1158,8 +1158,8 @@ class TestFederatedACL(unittest.TestCase):
         self.assertTrue(result["allowed"])
 
     def test_expired_rule_ignored(self):
-        from core.storage import StorageEngine
-        from modules.federated_acl import FederatedACLManager
+        from mindforge.core.storage import StorageEngine
+        from mindforge.modules.federated_acl import FederatedACLManager
         storage = StorageEngine(db_path=self.db_path)
         acl = FederatedACLManager(storage)
         acl.add_rule("peerA", "all", "read", effect="allow", expires_hours=-1)
@@ -1167,8 +1167,8 @@ class TestFederatedACL(unittest.TestCase):
         self.assertFalse(result["allowed"])
 
     def test_trust_min_enforced(self):
-        from core.storage import StorageEngine
-        from modules.federated_acl import FederatedACLManager
+        from mindforge.core.storage import StorageEngine
+        from mindforge.modules.federated_acl import FederatedACLManager
         storage = StorageEngine(db_path=self.db_path)
         acl = FederatedACLManager(storage)
         acl.add_rule("peerA", "all", "read", effect="allow", trust_min=0.7)
@@ -1178,8 +1178,8 @@ class TestFederatedACL(unittest.TestCase):
         self.assertTrue(acl.check_access("peerA", "m", "read", peer_trust=0.9)["allowed"])
 
     def test_category_and_tag_resources(self):
-        from core.storage import StorageEngine
-        from modules.federated_acl import FederatedACLManager
+        from mindforge.core.storage import StorageEngine
+        from mindforge.modules.federated_acl import FederatedACLManager
         storage = StorageEngine(db_path=self.db_path)
         acl = FederatedACLManager(storage)
         acl.add_rule("peerA", "category:work", "read", effect="allow")
@@ -1194,8 +1194,8 @@ class TestFederatedACL(unittest.TestCase):
                                           memory_tags=["public"])["allowed"])
 
     def test_filter_peers(self):
-        from core.storage import StorageEngine
-        from modules.federated_acl import FederatedACLManager
+        from mindforge.core.storage import StorageEngine
+        from mindforge.modules.federated_acl import FederatedACLManager
         storage = StorageEngine(db_path=self.db_path)
         acl = FederatedACLManager(storage)
         acl.add_rule("peerA", "all", "read", effect="allow")
@@ -1204,8 +1204,8 @@ class TestFederatedACL(unittest.TestCase):
         self.assertEqual(verdict["denied_count"], 2)
 
     def test_remove_rule_and_stats(self):
-        from core.storage import StorageEngine
-        from modules.federated_acl import FederatedACLManager
+        from mindforge.core.storage import StorageEngine
+        from mindforge.modules.federated_acl import FederatedACLManager
         storage = StorageEngine(db_path=self.db_path)
         acl = FederatedACLManager(storage)
         add = acl.add_rule("peerA", "all", "read", effect="allow")
@@ -1217,8 +1217,8 @@ class TestFederatedACL(unittest.TestCase):
         self.assertGreaterEqual(stats["deny_audit_events"], 1)
 
     def test_invalid_inputs(self):
-        from core.storage import StorageEngine
-        from modules.federated_acl import FederatedACLManager
+        from mindforge.core.storage import StorageEngine
+        from mindforge.modules.federated_acl import FederatedACLManager
         storage = StorageEngine(db_path=self.db_path)
         acl = FederatedACLManager(storage)
         self.assertFalse(acl.add_rule("", "all")["success"])
@@ -1239,8 +1239,8 @@ class TestFederatedShareFiltering(unittest.TestCase):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def test_low_trust_peer_filtered(self):
-        from core.storage import StorageEngine
-        from modules.federated import FederatedMemory
+        from mindforge.core.storage import StorageEngine
+        from mindforge.modules.federated import FederatedMemory
         storage = StorageEngine(db_path=self.db_path)
         entry = storage.add_memory(content="待共享记忆")
         fed = FederatedMemory(storage=storage, local_peer_id="local")
@@ -1253,9 +1253,9 @@ class TestFederatedShareFiltering(unittest.TestCase):
         self.assertIn("ghost", fed.last_share_skipped)
 
     def test_acl_blocks_share(self):
-        from core.storage import StorageEngine
-        from modules.federated import FederatedMemory
-        from modules.federated_acl import FederatedACLManager
+        from mindforge.core.storage import StorageEngine
+        from mindforge.modules.federated import FederatedMemory
+        from mindforge.modules.federated_acl import FederatedACLManager
         storage = StorageEngine(db_path=self.db_path)
         entry = storage.add_memory(content="受控记忆")
         acl = FederatedACLManager(storage)
@@ -1270,9 +1270,9 @@ class TestFederatedShareFiltering(unittest.TestCase):
         self.assertEqual(shared.shared_with, ["peerA"])
 
     def test_accept_incoming_conflict_manual(self):
-        from core.storage import StorageEngine
-        from modules.federated import FederatedMemory
-        from modules.share_conflict import SharedConflictResolver
+        from mindforge.core.storage import StorageEngine
+        from mindforge.modules.federated import FederatedMemory
+        from mindforge.modules.share_conflict import SharedConflictResolver
         storage = StorageEngine(db_path=self.db_path)
         resolver = SharedConflictResolver(storage)
         # P1-004: 测试聚焦于冲突解决功能，显式启用未签名节点以隔离测试范围
@@ -1308,8 +1308,8 @@ class TestShareConflict(unittest.TestCase):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def _make(self):
-        from core.storage import StorageEngine
-        from modules.share_conflict import SharedConflictResolver
+        from mindforge.core.storage import StorageEngine
+        from mindforge.modules.share_conflict import SharedConflictResolver
         storage = StorageEngine(db_path=self.db_path)
         return storage, SharedConflictResolver(storage)
 
@@ -1423,7 +1423,7 @@ class TestAgentInfluenceMap(unittest.TestCase):
 
     def test_influence_map_empty_agent(self):
         """空 Agent 应返回空图谱"""
-        from core.storage import StorageEngine
+        from mindforge.core.storage import StorageEngine
         storage = StorageEngine(db_path=self.db_path)
         result = storage.agent_influence_map("nonexistent_agent", days=30)
         self.assertEqual(result["total_nodes"], 1)
@@ -1432,7 +1432,7 @@ class TestAgentInfluenceMap(unittest.TestCase):
 
     def test_influence_map_invalid_input(self):
         """无效输入应返回错误"""
-        from core.storage import StorageEngine
+        from mindforge.core.storage import StorageEngine
         storage = StorageEngine(db_path=self.db_path)
         result = storage.agent_influence_map("", days=30)
         self.assertIn("error", result)
@@ -1440,8 +1440,8 @@ class TestAgentInfluenceMap(unittest.TestCase):
 
     def test_influence_map_with_data(self):
         """有数据的 Agent 应返回影响力图谱"""
-        from core.storage import StorageEngine
-        from core.types import MemoryLayer
+        from mindforge.core.storage import StorageEngine
+        from mindforge.core.types import MemoryLayer
         storage = StorageEngine(db_path=self.db_path)
 
         storage.add_memory(content="Agent A 的记忆", category="tech",
@@ -1471,7 +1471,7 @@ class TestMemoryOverlap(unittest.TestCase):
 
     def test_overlap_identical_agents_error(self):
         """相同 Agent ID 应返回错误"""
-        from core.storage import StorageEngine
+        from mindforge.core.storage import StorageEngine
         storage = StorageEngine(db_path=self.db_path)
         result = storage.memory_overlap("agent_a", "agent_a", days=30)
         self.assertIn("error", result)
@@ -1479,8 +1479,8 @@ class TestMemoryOverlap(unittest.TestCase):
 
     def test_overlap_with_shared_tags(self):
         """有共享标签的 Agent 应返回重叠结果"""
-        from core.storage import StorageEngine
-        from core.types import MemoryLayer
+        from mindforge.core.storage import StorageEngine
+        from mindforge.core.types import MemoryLayer
         storage = StorageEngine(db_path=self.db_path)
 
         storage.add_memory(content="Python 编程技巧", category="tech",
@@ -1499,8 +1499,8 @@ class TestMemoryOverlap(unittest.TestCase):
 
     def test_overlap_no_shared_data(self):
         """无共享数据的 Agent 应返回低相似度"""
-        from core.storage import StorageEngine
-        from core.types import MemoryLayer
+        from mindforge.core.storage import StorageEngine
+        from mindforge.core.types import MemoryLayer
         storage = StorageEngine(db_path=self.db_path)
 
         storage.add_memory(content="量子物理研究", category="physics",
@@ -1529,7 +1529,7 @@ class TestConflictGraph(unittest.TestCase):
 
     def test_conflict_graph_empty(self):
         """空 Agent 应返回零冲突"""
-        from core.storage import StorageEngine
+        from mindforge.core.storage import StorageEngine
         storage = StorageEngine(db_path=self.db_path)
         result = storage.conflict_graph("nonexistent_agent", days=30)
         self.assertEqual(result["conflict_count"], 0)
@@ -1538,8 +1538,8 @@ class TestConflictGraph(unittest.TestCase):
 
     def test_conflict_graph_with_conflicts(self):
         """有冲突标签的记忆应检测到冲突"""
-        from core.storage import StorageEngine
-        from core.types import MemoryLayer, Importance
+        from mindforge.core.storage import StorageEngine
+        from mindforge.core.types import MemoryLayer, Importance
         storage = StorageEngine(db_path=self.db_path)
 
         storage.add_memory(content="Python is great for data science",
@@ -1571,7 +1571,7 @@ class TestDramaQuoteMap(unittest.TestCase):
 
     def test_quote_map_nonexistent_drama(self):
         """不存在的短剧应返回错误"""
-        from core.storage import StorageEngine
+        from mindforge.core.storage import StorageEngine
         storage = StorageEngine(db_path=self.db_path)
         result = storage.drama_quote_map("nonexistent")
         self.assertIn("error", result)
@@ -1579,7 +1579,7 @@ class TestDramaQuoteMap(unittest.TestCase):
 
     def test_quote_map_with_data(self):
         """有台词数据的短剧应返回台词地图"""
-        from core.storage import StorageEngine
+        from mindforge.core.storage import StorageEngine
         storage = StorageEngine(db_path=self.db_path)
 
         drama = storage.add_drama(title="测试短剧", total_episodes=5)
@@ -1614,7 +1614,7 @@ class TestCharacterGrowth(unittest.TestCase):
 
     def test_growth_nonexistent_character(self):
         """不存在的角色应返回错误"""
-        from core.storage import StorageEngine
+        from mindforge.core.storage import StorageEngine
         storage = StorageEngine(db_path=self.db_path)
         result = storage.character_growth("nonexistent", "nonexistent")
         self.assertIn("error", result)
@@ -1622,7 +1622,7 @@ class TestCharacterGrowth(unittest.TestCase):
 
     def test_growth_with_data(self):
         """有台词数据的角色应返回成长分析"""
-        from core.storage import StorageEngine
+        from mindforge.core.storage import StorageEngine
         storage = StorageEngine(db_path=self.db_path)
 
         drama = storage.add_drama(title="成长短剧", total_episodes=6)
@@ -1658,7 +1658,7 @@ class TestSceneRhythm(unittest.TestCase):
 
     def test_rhythm_nonexistent_drama(self):
         """不存在的短剧应返回错误"""
-        from core.storage import StorageEngine
+        from mindforge.core.storage import StorageEngine
         storage = StorageEngine(db_path=self.db_path)
         result = storage.scene_rhythm("nonexistent")
         self.assertIn("error", result)
@@ -1666,7 +1666,7 @@ class TestSceneRhythm(unittest.TestCase):
 
     def test_rhythm_with_data(self):
         """有场景数据的短剧应返回节奏分析"""
-        from core.storage import StorageEngine
+        from mindforge.core.storage import StorageEngine
         storage = StorageEngine(db_path=self.db_path)
 
         drama = storage.add_drama(title="节奏短剧", total_episodes=3)

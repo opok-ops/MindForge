@@ -1,102 +1,20 @@
+# -*- coding: utf-8 -*-
 """
 MindForge - AI Agent 终身记忆系统
 =======================================
 四层记忆架构 · 知识图谱引擎 · 多模态支持 · 人格化记忆 · 联邦网络 · AI短剧记忆
-v5.5.8 修复：storage __version__ NameError · MCP 参数校验 · API body 校验 · 加密输入校验 · falsy 枚举值
-v5.5.8 新增：memory_diff 版本对比 · MCP memory_diff 工具 · CLI memory-diff 命令
-v5.5.7 安全加固：加密 fail-closed · 并发限制 · webhook 签名一致性 · banner 纯净 · WAL 降级
-v5.5.6 新增：记忆置顶 · 批量获取 · 时间线视图 · 搜索建议 · 添加前去重 · 批量标签操作
-v5.5.4 新增：记忆合并 · 最常访问 · 最近访问 · 批量更新 · 标签统计 · 索引一致性检查
-v5.5.2 新增：Memory TTL过期机制 · 多关键词搜索高亮 · 按分类/标签批量删除 · FTS5溢出修复 · 查询引擎性能优化 · 全面BOM修复
 
-便捷导入模块，使 `from MindForge import MindForge` 在 pip install 后可用。
-底层实现仍在 core/ 和 modules/ 子包中。
+兼容入口（自 v5.8.13 起）：全部源码已迁入 `mindforge.*` 命名空间，
+本文件仅为向后兼容保留，使 `from MindForge import MindForge` 在 pip install
+后仍然可用。新代码请统一使用 `from mindforge import MindForge`。
 """
 
-# v5.6.2 收敛：版本号唯一真值在 core/version.py，此处仅做再导出，
-# 避免发版时出现「顶层与子模块版本漂移」。
-from core.version import __version__, VERSION_INFO, NEXT_MAJOR_TARGET
+from mindforge import *  # noqa: F401,F403
+from mindforge import (  # noqa: F401
+    __version__,
+    VERSION_INFO,
+    NEXT_MAJOR_TARGET,
+)
 
 __author__ = "MindForge Project"
 __license__ = "MIT"
-
-from core import (
-    MindForge,
-    MemoryEntry,
-    MemoryLayer,
-    PrivacyLevel,
-    Importance,
-    MemoryType,
-    StorageEngine,
-    EncryptionEngine,
-    IndexEngine,
-    QueryEngine,
-)
-
-from modules import (
-    RecallEngine,
-    RecallConfig,
-    KnowledgeGraph,
-    MemoryEvolution,
-    PersonalityEngine,
-    MultimodalMemory,
-    FederatedMemory,
-    TaxonomyManager,
-    PrivacyEngine,
-    MemoryIntegrator,
-)
-
-# v6.0.0 扩展端口预留（默认不启用，仅暴露发现/注册入口）
-from modules import (
-    V6Capability,
-    V6Status,
-    V6Port,
-    MultiAgentCollaborationPort,
-    MultiAgentAdapterPort,
-    MemoryPreviewPort,
-    create_multi_agent_adapter,
-    v6_status,
-    register_v6_port,
-    get_v6_port,
-    list_v6_ports,
-    V6_TARGET_VERSION,
-)
-
-__all__ = [
-    "MindForge",
-    "MemoryEntry",
-    "MemoryLayer",
-    "PrivacyLevel",
-    "Importance",
-    "MemoryType",
-    "StorageEngine",
-    "EncryptionEngine",
-    "IndexEngine",
-    "QueryEngine",
-    "RecallEngine",
-    "RecallConfig",
-    "KnowledgeGraph",
-    "MemoryEvolution",
-    "PersonalityEngine",
-    "MultimodalMemory",
-    "FederatedMemory",
-    "TaxonomyManager",
-    "PrivacyEngine",
-    "MemoryIntegrator",
-    "__version__",
-    "VERSION_INFO",
-    "NEXT_MAJOR_TARGET",
-    # v6.0.0 端口预留
-    "V6_TARGET_VERSION",
-    "V6Capability",
-    "V6Status",
-    "V6Port",
-    "MultiAgentCollaborationPort",
-    "MultiAgentAdapterPort",
-    "MemoryPreviewPort",
-    "create_multi_agent_adapter",
-    "v6_status",
-    "register_v6_port",
-    "get_v6_port",
-    "list_v6_ports",
-]

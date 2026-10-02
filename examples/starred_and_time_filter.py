@@ -8,8 +8,8 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.MindForge import MindForge
-from core.types import Importance
+from mindforge.core.mindforge import MindForge
+from mindforge.core.types import Importance
 
 
 def main():

@@ -21,7 +21,7 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional
 
-from modules.skill_extractor import SkillExtractor, SkillTemplate
+from mindforge.modules.skill_extractor import SkillExtractor, SkillTemplate
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +122,7 @@ class SkillStore:
             ):
                 (name, desc, triggers, slots, steps, examples, tags,
                  source_ids, confidence, cluster_size, _updated) = row
-                from modules.skill_extractor import SkillSlot
+                from mindforge.modules.skill_extractor import SkillSlot
                 parsed_slots = []
                 for s in json.loads(slots) if slots else []:
                     try:

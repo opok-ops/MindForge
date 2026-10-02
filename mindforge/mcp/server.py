@@ -22,57 +22,10 @@ _PKG_ROOT = Path(__file__).resolve().parent.parent
 if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
 
-# v5.6.2 收敛：版本号唯一真值在 core/version.py，此处按
-# 「脚本模式（core 为顶层包）→ 安装模式（MindForge.core）→ 硬编码兜底」三级回退，
-# 避免顶层包导入失败时出现版本漂移。
-try:
-    from core.version import __version__
-except ImportError:
-    try:
-        from MindForge.core.version import __version__
-    except (ImportError, ValueError):
-        # 兜底值：仅当 core/version 完全不可导入时启用。发版时必须与
-        # core/version.py 的 __version__ 一起更新（见发版清单），否则漂移。
-        __version__ = "5.8.12"
+# v5.6.2 收敛：版本号唯一真值在 mindforge/core/version.py，此处仅做再导出，
+# 避免发版时出现版本漂移（v5.8.13 起统一 mindforge.* 命名空间，不再需要回退）。
+from mindforge.core.version import __version__
 
-
-def _import_mindforge():
-    """Import MindForge package with fallback for non-editable / direct runs."""
-    try:
-        import MindForge  # noqa: F401
-        return sys.modules["MindForge"]
-    except ImportError:
-        # Running as bare package (not installed as MindForge) —
-        # bootstrap a MindForge alias using the top-level __init__.py.
-        import importlib.util
-        init_py = _PKG_ROOT / "__init__.py"
-        if not init_py.exists():
-            raise
-        spec = importlib.util.spec_from_file_location(
-            "MindForge", str(init_py), submodule_search_locations=[str(_PKG_ROOT)]
-        )
-        mod = importlib.util.module_from_spec(spec)
-        sys.modules["MindForge"] = mod
-        spec.loader.exec_module(mod)
-        # Eagerly import known submodules so `from MindForge import X` works
-        for _sub in ("core", "core.types", "core.storage", "core.mindforge",
-                     "core.encryption", "core.indexer", "core.query",
-                     "modules", "modules.recall", "modules.integrator",
-                     "modules.knowledge_graph", "modules.personality",
-                     "modules.federated", "modules.privacy", "modules.multimodal",
-                     "modules.evolution", "modules.categorizer",
-                     "modules.intent_router", "modules.conflict_detector",
-                     "modules.skill_extractor", "modules.hybrid_search",
-                     "modules.session_focus",
-                     "adapters", "cli", "cli.main", "mcp", "mcp.server"):
-            try:
-                __import__("MindForge." + _sub)
-            except Exception:
-                pass
-        return mod
-
-
-_import_mindforge()
 
 # ---------------------------------------------------------------------------
 # MCP transport — Content-Length framed JSON-RPC over stdio
@@ -131,7 +84,7 @@ def _read_message() -> Dict[str, Any]:
         raise EOFError("stdin closed")
     # P2 #23 修复：外部输入用安全 JSON 解析（深度限制）
     try:
-        from core.storage import _safe_json_loads
+        from mindforge.core.storage import _safe_json_loads
         return _safe_json_loads(raw.decode("utf-8"))
     except ImportError:
         return json.loads(raw.decode("utf-8"))
@@ -841,14 +794,14 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
 # ---------------------------------------------------------------------------
 
 def _to_importance(s: Optional[str], default):
-    from MindForge import Importance
+    from mindforge import Importance
     if not s:
         return default
     return Importance.from_string(s)
 
 
 def _to_layer(s: Optional[str], default):
-    from MindForge import MemoryLayer
+    from mindforge import MemoryLayer
     if not s:
         return default
     return MemoryLayer.from_string(s)
@@ -963,7 +916,7 @@ def _entry_to_dict(m) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 def h_memory_add(mf, args: Dict[str, Any]) -> Dict[str, Any]:
-    from MindForge import Importance, MemoryLayer, PrivacyLevel
+    from mindforge import Importance, MemoryLayer, PrivacyLevel
     err = _require_args(args, "content")
     if err:
         return err
@@ -1753,10 +1706,10 @@ class _AuthState:
 
 def serve_forever(db_path: Optional[str] = None, key_file: Optional[str] = None,
                   auth_secret: Optional[str] = None) -> int:
-    from MindForge import MindForge
+    from mindforge import MindForge
     if not db_path:
         # v5.6.5 P2 #18：与 CLI 统一默认数据库路径（core.paths 单点真值）
-        from core.paths import get_default_db_path
+        from mindforge.core.paths import get_default_db_path
         db_path = get_default_db_path()
     _log(f"db: {db_path}")
     kwargs: Dict[str, Any] = {"db_path": db_path, "encrypted": False}

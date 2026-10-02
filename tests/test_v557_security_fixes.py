@@ -29,7 +29,7 @@ class TestP1008EncryptionNoFallback(unittest.TestCase):
 
     def test_encryption_requires_cryptography(self):
         """验证加密引擎在 cryptography 可用时正常工作"""
-        from core.encryption import EncryptionEngine
+        from mindforge.core.encryption import EncryptionEngine
 
         # cryptography 应该已安装（测试依赖）
         key = os.urandom(32)
@@ -41,7 +41,7 @@ class TestP1008EncryptionNoFallback(unittest.TestCase):
 
     def test_from_password_uses_cryptography(self):
         """验证 from_password 使用 cryptography 的 PBKDF2"""
-        from core.encryption import EncryptionEngine
+        from mindforge.core.encryption import EncryptionEngine
 
         engine, salt = EncryptionEngine.from_password("testpassword")
         self.assertIsNotNone(engine._aesgcm)
@@ -49,7 +49,7 @@ class TestP1008EncryptionNoFallback(unittest.TestCase):
 
     def test_no_simple_encrypt_method(self):
         """验证 _simple_encrypt 和 _simple_decrypt 已被移除"""
-        from core.encryption import EncryptionEngine
+        from mindforge.core.encryption import EncryptionEngine
 
         key = os.urandom(32)
         engine = EncryptionEngine(key)
@@ -70,8 +70,8 @@ class TestP1004FederatedFailClosed(unittest.TestCase):
 
     def test_default_rejects_unsigned(self):
         """默认配置下，无签名消息被拒绝（fail-closed）"""
-        from core.storage import StorageEngine
-        from modules.federated import FederatedMemory
+        from mindforge.core.storage import StorageEngine
+        from mindforge.modules.federated import FederatedMemory
 
         storage = StorageEngine(db_path=self.db_path)
         fed = FederatedMemory(storage=storage, local_peer_id="local")
@@ -83,8 +83,8 @@ class TestP1004FederatedFailClosed(unittest.TestCase):
 
     def test_unregistered_peer_rejected(self):
         """未注册节点即使有签名也被拒绝"""
-        from core.storage import StorageEngine
-        from modules.federated import FederatedMemory
+        from mindforge.core.storage import StorageEngine
+        from mindforge.modules.federated import FederatedMemory
 
         storage = StorageEngine(db_path=self.db_path)
         fed = FederatedMemory(storage=storage, local_peer_id="local")
@@ -95,8 +95,8 @@ class TestP1004FederatedFailClosed(unittest.TestCase):
 
     def test_allow_unsigned_peers_enabled(self):
         """启用 allow_unsigned_peers 后，已注册节点的无签名消息被接受"""
-        from core.storage import StorageEngine
-        from modules.federated import FederatedMemory
+        from mindforge.core.storage import StorageEngine
+        from mindforge.modules.federated import FederatedMemory
 
         storage = StorageEngine(db_path=self.db_path)
         fed = FederatedMemory(
@@ -112,7 +112,7 @@ class TestP1004FederatedFailClosed(unittest.TestCase):
 
     def test_allow_unsigned_does_not_allow_unregistered(self):
         """启用 allow_unsigned_peers 后，未注册节点仍被拒绝"""
-        from modules.federated import FederatedMemory
+        from mindforge.modules.federated import FederatedMemory
 
         fed = FederatedMemory(
             local_peer_id="local",
@@ -125,7 +125,7 @@ class TestP1004FederatedFailClosed(unittest.TestCase):
 
     def test_signed_verification_works(self):
         """有正确签名的消息验证通过"""
-        from modules.federated import FederatedMemory
+        from mindforge.modules.federated import FederatedMemory
 
         fed = FederatedMemory(local_peer_id="local")
         fed.register_peer("peerA", "节点A", trust_level=0.9)
@@ -140,7 +140,7 @@ class TestP1004FederatedFailClosed(unittest.TestCase):
 
     def test_wrong_signature_rejected(self):
         """错误签名被拒绝"""
-        from modules.federated import FederatedMemory
+        from mindforge.modules.federated import FederatedMemory
 
         fed = FederatedMemory(local_peer_id="local")
         fed.register_peer("peerA", "节点A", trust_level=0.9)
@@ -152,7 +152,7 @@ class TestP1004FederatedFailClosed(unittest.TestCase):
 
     def test_no_shared_secret_rejected(self):
         """无共享密钥节点即使有签名也被拒绝（P0 修复：public_key 不再用于 HMAC）"""
-        from modules.federated import FederatedMemory
+        from mindforge.modules.federated import FederatedMemory
 
         fed = FederatedMemory(local_peer_id="local")
         fed.register_peer("peerA", "节点A", trust_level=0.9)
@@ -167,7 +167,7 @@ class TestP1007IntentRouterSha256(unittest.TestCase):
 
     def test_cache_key_uses_sha256(self):
         """验证缓存键使用 SHA-256 而非 MD5"""
-        from modules.intent_router import IntentRouter
+        from mindforge.modules.intent_router import IntentRouter
 
         router = IntentRouter()
         test_text = "测试一下这个功能"
@@ -192,7 +192,7 @@ class TestP1007IntentRouterSha256(unittest.TestCase):
 
     def test_cache_hit_works(self):
         """验证 SHA-256 缓存命中正常工作"""
-        from modules.intent_router import IntentRouter
+        from mindforge.modules.intent_router import IntentRouter
 
         router = IntentRouter()
         text = "帮我搜索一下历史记录"
@@ -212,20 +212,20 @@ class TestP003BoundedThreadingServer(unittest.TestCase):
 
     def test_bounded_server_class_exists(self):
         """验证 BoundedThreadingHTTPServer 类存在"""
-        from api.server import BoundedThreadingHTTPServer
+        from mindforge.api.server import BoundedThreadingHTTPServer
         self.assertTrue(hasattr(BoundedThreadingHTTPServer, 'max_threads'))
         self.assertEqual(BoundedThreadingHTTPServer.max_threads, 50)
 
     def test_server_is_threading(self):
         """验证服务器基于 ThreadingHTTPServer"""
         from http.server import ThreadingHTTPServer
-        from api.server import BoundedThreadingHTTPServer
+        from mindforge.api.server import BoundedThreadingHTTPServer
 
         self.assertTrue(issubclass(BoundedThreadingHTTPServer, ThreadingHTTPServer))
 
     def test_active_threads_tracking(self):
         """验证活跃线程计数机制存在"""
-        from api.server import BoundedThreadingHTTPServer
+        from mindforge.api.server import BoundedThreadingHTTPServer
 
         # 检查关键方法和属性
         self.assertTrue(hasattr(BoundedThreadingHTTPServer, 'process_request'))
@@ -238,7 +238,7 @@ class TestP1001ExportLimit(unittest.TestCase):
     def test_export_limit_in_handler(self):
         """验证 API handler 中有导出上限配置"""
         import inspect
-        from api.server import MindForgeAPIHandler
+        from mindforge.api.server import MindForgeAPIHandler
 
         source = inspect.getsource(MindForgeAPIHandler.do_GET)
         self.assertIn('5000', source)
@@ -251,7 +251,7 @@ class TestP1002TagsLimit(unittest.TestCase):
     def test_tags_limit_in_handler(self):
         """验证 API handler 中 tags 查询有 LIMIT"""
         import inspect
-        from api.server import MindForgeAPIHandler
+        from mindforge.api.server import MindForgeAPIHandler
 
         source = inspect.getsource(MindForgeAPIHandler.do_GET)
         self.assertIn('LIMIT 10000', source)
@@ -263,7 +263,7 @@ class TestP1003WebhookTimeout(unittest.TestCase):
     def test_webhook_timeout_config(self):
         """验证 webhook 使用正确的超时配置"""
         import inspect
-        from modules.event_bus import EventBus
+        from mindforge.modules.event_bus import EventBus
 
         source = inspect.getsource(EventBus._deliver_webhook)
         self.assertIn('timeout', source)
@@ -273,7 +273,7 @@ class TestP1003WebhookTimeout(unittest.TestCase):
 
     def test_event_bus_webhook_registration(self):
         """验证 webhook 注册正常工作"""
-        from modules.event_bus import EventBus
+        from mindforge.modules.event_bus import EventBus
 
         bus = EventBus()
         wh = bus.register_webhook("https://example.com/hook")
@@ -296,7 +296,7 @@ class TestP001KeyFileEncryption(unittest.TestCase):
 
     def test_key_file_existing_enables_encryption(self):
         """验证 key_file 存在时 MindForge 启用加密模式"""
-        from core import MindForge, MemoryConfig
+        from mindforge.core import MindForge, MemoryConfig
 
         # 先创建加密数据库和密钥文件
         config = MemoryConfig(
@@ -319,7 +319,7 @@ class TestP001KeyFileEncryption(unittest.TestCase):
 
     def test_no_key_file_no_encryption(self):
         """验证 key_file 不存在时不启用加密"""
-        from core import MindForge, MemoryConfig
+        from mindforge.core import MindForge, MemoryConfig
 
         non_existent_key = os.path.join(self.tmp_dir, "nonexistent.key")
         self.assertFalse(Path(non_existent_key).exists())

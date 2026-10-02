@@ -9,20 +9,21 @@ core/mindforge.py、cli/main.py、mcp/server.py），每处都带一份硬编码
 本模块把版本号收敛为唯一真值：
 
 - 运行时代码一律从这里 import，不再自带硬编码兜底；
-- `pyproject.toml` 与 `setup.py` 仍然各自声明/读取同一份字符串
-  （打包元数据无法在导入期依赖本模块），发版时同步这两处即可。
+- `pyproject.toml` 通过 `[tool.setuptools.dynamic] version = {attr =
+  "mindforge.core.version.__version__"}` 读取同一份值，打包元数据与运行时
+  完全一致。
 
-发版清单：改 `core/version.py` 的 `__version__` + `pyproject.toml` 的
-`project.version`，其余位置自动跟随。
+发版清单：只改本文件的 `__version__`（与 `VERSION_INFO`），其余位置
+（pyproject 动态版本、CLI/MCP/API、README/官网徽章）全部自动跟随。
 """
 
 from typing import Tuple
 
 #: 当前发布版本（唯一真值）
-__version__: str = "5.8.12"
+__version__: str = "5.8.13"
 
 #: 结构化版本元组，便于比较（如 `VERSION_INFO >= (6, 0, 0)`）
-VERSION_INFO: Tuple[int, int, int] = (5, 8, 12)
+VERSION_INFO: Tuple[int, int, int] = (5, 8, 13)
 
 #: 下一个大版本的目标版本号（供 v6 端口预留引用）
 NEXT_MAJOR_TARGET: str = "6.0.0"

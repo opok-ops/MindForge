@@ -25,8 +25,8 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, Tuple
 from enum import Enum
 
-from core.types import MemoryLayer, Importance
-from core.storage import StorageEngine, MemoryEntry
+from mindforge.core.types import MemoryLayer, Importance
+from mindforge.core.storage import StorageEngine, MemoryEntry
 
 
 class DecayPolicy(Enum):

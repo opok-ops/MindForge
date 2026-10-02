@@ -11,8 +11,8 @@ import tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from core.mindforge import MindForge
-from core.types import Importance
+from mindforge.core.mindforge import MindForge
+from mindforge.core.types import Importance
 
 
 class TestAgentMemoryReinforce:

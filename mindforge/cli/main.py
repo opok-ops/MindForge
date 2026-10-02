@@ -4,7 +4,7 @@ MindForge CLI - 命令行工具
 =================================
 
 Usage:
-    python cli/main.py <command> [options]
+    python mindforge/cli/main.py <command> [options]
 
 Commands:
     init                初始化 MindForge（生成加密密钥）
@@ -82,7 +82,7 @@ from xml.sax.saxutils import escape as xml_escape
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core import (
+from mindforge.core import (
     MindForge,
     MemoryConfig,
     PrivacyLevel,
@@ -90,20 +90,11 @@ from core import (
     MemoryType,
     MemoryLayer,
 )
-from core.mindforge import _safe_path
+from mindforge.core.mindforge import _safe_path
 
-# v5.6.2 收敛：版本号唯一真值在 core/version.py，此处按
-# 「脚本模式（core 为顶层包）→ 安装模式（MindForge.core）→ 硬编码兜底」三级回退，
-# 避免顶层包导入失败时出现版本漂移。
-try:
-    from core.version import __version__
-except ImportError:
-    try:
-        from MindForge.core.version import __version__
-    except (ImportError, ValueError):
-        # 兜底值：仅当 core/version 完全不可导入时启用。发版时必须与
-        # core/version.py 的 __version__ 一起更新（见发版清单），否则漂移。
-        __version__ = "5.8.12"
+# v5.6.2 收敛：版本号唯一真值在 mindforge/core/version.py，此处仅做再导出，
+# 避免发版时出现版本漂移（v5.8.13 起统一 mindforge.* 命名空间，不再需要回退）。
+from mindforge.core.version import __version__
 
 # 懒加载 modules：仅在对应命令执行时才导入，大幅加速 CLI 启动
 _modules_cache = {}
@@ -112,39 +103,39 @@ _modules_cache = {}
 def _lazy_import(name):
     if name not in _modules_cache:
         if name == "TaxonomyManager":
-            from modules.categorizer import TaxonomyManager
+            from mindforge.modules.categorizer import TaxonomyManager
 
             _modules_cache[name] = TaxonomyManager
         elif name == "RecallConfig":
-            from modules.recall import RecallConfig
+            from mindforge.modules.recall import RecallConfig
 
             _modules_cache[name] = RecallConfig
         elif name == "KnowledgeGraph":
-            from modules.knowledge_graph import KnowledgeGraph
+            from mindforge.modules.knowledge_graph import KnowledgeGraph
 
             _modules_cache[name] = KnowledgeGraph
         elif name == "MemoryEvolution":
-            from modules.evolution import MemoryEvolution
+            from mindforge.modules.evolution import MemoryEvolution
 
             _modules_cache[name] = MemoryEvolution
         elif name == "PersonalityEngine":
-            from modules.personality import PersonalityEngine
+            from mindforge.modules.personality import PersonalityEngine
 
             _modules_cache[name] = PersonalityEngine
         elif name == "MultimodalMemory":
-            from modules.multimodal import MultimodalMemory
+            from mindforge.modules.multimodal import MultimodalMemory
 
             _modules_cache[name] = MultimodalMemory
         elif name == "FederatedMemory":
-            from modules.federated import FederatedMemory
+            from mindforge.modules.federated import FederatedMemory
 
             _modules_cache[name] = FederatedMemory
         elif name == "PrivacyEngine":
-            from modules.privacy import PrivacyEngine
+            from mindforge.modules.privacy import PrivacyEngine
 
             _modules_cache[name] = PrivacyEngine
         elif name == "MemoryIntegrator":
-            from modules.integrator import MemoryIntegrator
+            from mindforge.modules.integrator import MemoryIntegrator
 
             _modules_cache[name] = MemoryIntegrator
     return _modules_cache[name]
@@ -813,7 +804,7 @@ def cmd_agent_decay_boost(args):
 
 def cmd_connector_list(args):
     """列出可用数据连接器（v5.7.7 新增）"""
-    from modules.connectors import list_connectors
+    from mindforge.modules.connectors import list_connectors
     conns = list_connectors()
     print(c(f"\n📦 数据连接器（{len(conns)} 个）", "bold"))
     for c_ in conns:
@@ -2344,7 +2335,7 @@ def cmd_serve(args):
         print(c("启动 MindForge REST API...", "cyan"))
         cm = _get_memory(args)
         try:
-            from api.server import start_api_server
+            from mindforge.api.server import start_api_server
 
             start_api_server(
                 cm,
@@ -5434,7 +5425,7 @@ def main(argv=None):
 
     # v5.6.5 P2 #18：统一入口默认数据库路径（CLI/MCP 一致）
     if not getattr(args, "db_path", None):
-        from core.paths import get_default_db_path
+        from mindforge.core.paths import get_default_db_path
 
         args.db_path = get_default_db_path()
 
@@ -7281,7 +7272,7 @@ def cmd_import_url(args):
         text_content = re.sub(r"<[^>]+>", "\n", content)
         # v5.6.9 安全：过一遍标准化 XSS 清洗器（与存储层一致），
         # 额外清掉 <script> 等标签内的残留脚本文本，再折叠空白并截断
-        from core.storage import _sanitize_html
+        from mindforge.core.storage import _sanitize_html
 
         text_content = _sanitize_html(text_content, max_len=5000)
         text_content = re.sub(r"\s+", " ", text_content).strip()[:5000]
@@ -7537,7 +7528,7 @@ def cmd_export_json(args):
     if password:
         # v5.7.3 加密导出（AES-256-GCM + PBKDF2-SHA256）
         import base64 as _b64
-        from core.encryption import (
+        from mindforge.core.encryption import (
             EncryptionEngine,
             KDF_ALGORITHM,
             PBKDF2_ITERATIONS_CURRENT,
@@ -7606,7 +7597,7 @@ def cmd_import_json(args):
     try:
         content = input_path.read_text(encoding="utf-8")
         # P2 #23 修复：外部文件用安全 JSON 解析
-        from core.storage import _safe_json_loads
+        from mindforge.core.storage import _safe_json_loads
 
         data = _safe_json_loads(content)
     except (json.JSONDecodeError, ValueError, OSError, IOError) as e:
@@ -7629,7 +7620,7 @@ def cmd_import_json(args):
             return 1
         try:
             import base64 as _b64
-            from core.encryption import EncryptionEngine, EncryptedBlob, SecurityError
+            from mindforge.core.encryption import EncryptionEngine, EncryptedBlob, SecurityError
 
             kdf = data.get("kdf", {})
             salt = _b64.b64decode(kdf.get("salt", "") or "")
@@ -8121,7 +8112,7 @@ def cmd_rekey(args):
     # v5.6.8 修复：原为 `from ..core.encryption import ...`——`core` 已是顶层包，
     # `..` 越界相对导入直接抛 ImportError，使 rekey 命令必然崩溃。
     # 改为与其余命令一致的绝对导入。
-    from core.encryption import get_key_params, PBKDF2_ITERATIONS_CURRENT
+    from mindforge.core.encryption import get_key_params, PBKDF2_ITERATIONS_CURRENT
 
     # 先拿到配置判断加密状态
     # v5.6.8 修复：原调用 `_build_config(args)`，该函数从未定义（NameError）。
@@ -8353,7 +8344,7 @@ def cmd_backup_restore(args):
     try:
         with zipfile.ZipFile(backup_file, "r") as zf:
             # P2 #23 修复：外部备份文件用安全 JSON 解析
-            from core.storage import _safe_json_loads
+            from mindforge.core.storage import _safe_json_loads
 
             manifest = _safe_json_loads(zf.read("manifest.json").decode("utf-8"))
     except Exception as e:
@@ -8588,7 +8579,7 @@ def cmd_find(args):
 
 def cmd_gc(args):
     """记忆衰减/垃圾回收（v5.6.0 新增）"""
-    from modules.memory_decay import MemoryDecayEngine, DecayConfig, DecayPolicy
+    from mindforge.modules.memory_decay import MemoryDecayEngine, DecayConfig, DecayPolicy
 
     cm = _get_memory(args)
 

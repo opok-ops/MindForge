@@ -28,8 +28,8 @@ import urllib.error
 import urllib.request
 from unittest import mock
 
-from adapters.generic_api import GenericAPIAdapter
-from core.mindforge import MindForge
+from mindforge.adapters.generic_api import GenericAPIAdapter
+from mindforge.core.mindforge import MindForge
 
 
 # ---------------------------------------------------------------------------
@@ -149,7 +149,7 @@ class TestMCPFraming(unittest.TestCase):
     """MCP Content-Length 帧协议（P2 #17 / P2 #23）"""
 
     def _read(self, data: bytes):
-        import mcp.server as mcp
+        import mindforge.mcp.server as mcp
         with mock.patch.object(mcp.sys, "stdin", _FakeStream(data)):
             return mcp._read_message()
 
@@ -180,7 +180,7 @@ class TestMCPFraming(unittest.TestCase):
             self._read(b"Content-Length: 9999999999\r\n\r\n")
 
     def test_write_message_framing(self):
-        import mcp.server as mcp
+        import mindforge.mcp.server as mcp
         out = _FakeStream()
         with mock.patch.object(mcp.sys, "stdout", out):
             mcp._write_message({"jsonrpc": "2.0", "id": 1, "result": {}})
@@ -192,7 +192,7 @@ class TestMCPFraming(unittest.TestCase):
         self.assertEqual(json.loads(body.decode()), {"jsonrpc": "2.0", "id": 1, "result": {}})
 
     def test_check_auth(self):
-        import mcp.server as mcp
+        import mindforge.mcp.server as mcp
         self.assertTrue(mcp._check_auth({}, ""))  # 无密钥 → 放行（兼容 stdio 本地）
         self.assertFalse(mcp._check_auth({"params": {"_meta": {"authSecret": "x"}}}, "y"))
         self.assertTrue(mcp._check_auth({"params": {"_meta": {"authSecret": "y"}}}, "y"))
@@ -202,7 +202,7 @@ class TestMCPAuthExpiry(unittest.TestCase):
     """MCP 认证过期（P2 #16）：30 分钟无活动自动登出"""
 
     def test_session_expired_after_idle_timeout(self):
-        import mcp.server as mcp
+        import mindforge.mcp.server as mcp
 
         tmp = tempfile.mkdtemp(prefix="mf_mcp_")
         try:
@@ -271,7 +271,7 @@ class TestRestAPIEntry(unittest.TestCase):
 
     def _boot(self, **env):
         # 环境变量在测试期间保持生效（认证检查按请求时读取），tearDown 统一恢复
-        from api.server import start_api_server
+        from mindforge.api.server import start_api_server
         os.environ.update(env)
         t = threading.Thread(
             target=start_api_server,
@@ -352,7 +352,7 @@ class TestRestAPIEntry(unittest.TestCase):
 
     def test_startup_rejects_non_localhost_without_key(self):
         """非 localhost 绑定且无 API Key → SecurityError（fail-closed 启动）"""
-        from api.server import start_api_server, SecurityError
+        from mindforge.api.server import start_api_server, SecurityError
         with mock.patch.dict(os.environ, {}, clear=True):
             with self.assertRaises(SecurityError):
                 start_api_server(self.cm, host="0.0.0.0", port=self.port)
@@ -404,7 +404,7 @@ class TestRateLimitKeyNormalization(unittest.TestCase):
     """IPv6 临时地址限流绕过（P2 #15）"""
 
     def _norm(self, ip):
-        from api.server import _normalize_ip
+        from mindforge.api.server import _normalize_ip
         return _normalize_ip(ip)
 
     def test_ipv4_unchanged(self):
@@ -428,20 +428,20 @@ class TestCLIEntry(unittest.TestCase):
     """CLI 入口 main() 分发：不触碰真实数据目录"""
 
     def test_version_flag(self):
-        import cli.main as cm
+        import mindforge.cli.main as cm
         with mock.patch.object(sys, "argv", ["mindforge", "--version"]):
             with self.assertRaises(SystemExit) as ctx:
                 cm.main(["--version"])
             self.assertEqual(ctx.exception.code, 0)
 
     def test_help_flag(self):
-        import cli.main as cm
+        import mindforge.cli.main as cm
         with self.assertRaises(SystemExit) as ctx:
             cm.main(["--help"])
         self.assertEqual(ctx.exception.code, 0)
 
     def test_no_command_prints_help(self):
-        import cli.main as cm
+        import mindforge.cli.main as cm
         buf = io.StringIO()
         with mock.patch.object(sys, "stdout", buf):
             rc = cm.main([])
@@ -449,7 +449,7 @@ class TestCLIEntry(unittest.TestCase):
         self.assertIn("usage", buf.getvalue().lower())
 
     def test_unknown_command_exits_2(self):
-        import cli.main as cm
+        import mindforge.cli.main as cm
         with self.assertRaises(SystemExit) as ctx:
             cm.main(["no-such-command-xyz"])
         self.assertEqual(ctx.exception.code, 2)

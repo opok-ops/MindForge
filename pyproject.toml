@@ -38,9 +38,9 @@ MindForge-mcp = "mindforge.mcp.server:main"
 dev = ["pytest", "pytest-cov"]
 embedding = ["sentence-transformers>=2.7.0"]
 
-# 所有包统一在 mindforge.* 命名空间下，避免 core/mcp/api/cli/modules/adapters
-# 直接进入 site-packages 顶层与其他库冲突。
-# package-dir 把源码目录映射到命名空间包，无需物理移动文件。
+# 所有源码统一位于 mindforge.* 命名空间下（物理目录即包目录），
+# 不再以 core/mcp/api/cli/modules/adapters 等顶层名称进入 site-packages，
+# 避免与其他库冲突。仓库根目录保留 MindForge.py 作为向后兼容入口。
 [tool.setuptools]
 packages = [
     "mindforge",
@@ -51,16 +51,8 @@ packages = [
     "mindforge.mcp",
     "mindforge.adapters",
 ]
+py-modules = ["MindForge"]
 
-[tool.setuptools.package-dir]
-"mindforge" = "mindforge"
-"mindforge.core" = "core"
-"mindforge.modules" = "modules"
-"mindforge.cli" = "cli"
-"mindforge.api" = "api"
-"mindforge.mcp" = "mcp"
-"mindforge.adapters" = "adapters"
-
-# 版本号唯一真值：core/version.py 的 __version__
+# 版本号唯一真值：mindforge/core/version.py 的 __version__
 [tool.setuptools.dynamic]
 version = {attr = "mindforge.core.version.__version__"}

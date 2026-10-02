@@ -8,7 +8,7 @@ import time
 import tempfile
 import pytest
 
-from MindForge import MindForge, __version__
+from mindforge import MindForge, __version__
 
 
 @pytest.fixture
@@ -36,21 +36,26 @@ class TestVersion:
             f"版本号格式不正确: {__version__}"
 
     def test_pyproject_version_matches(self):
-        """pyproject.toml 版本与 __version__ 一致"""
+        """pyproject.toml 动态版本指向 core/version.py 的 __version__"""
         from pathlib import Path
         pyproject = Path(__file__).parent.parent / "pyproject.toml"
         try:
             import tomllib
             with open(pyproject, "rb") as f:
                 data = tomllib.load(f)
-            assert data["project"]["version"] == __version__
+            assert "version" in data["project"].get("dynamic", []), \
+                "pyproject.toml 应声明 dynamic version"
+            attr = data.get("tool", {}).get("setuptools", {}).get("dynamic", {}).get("version", {}).get("attr")
+            assert attr == "mindforge.core.version.__version__", \
+                f"dynamic version attr 应为 mindforge.core.version.__version__，实际: {attr}"
         except ModuleNotFoundError:
             # Python < 3.11: tomllib not available, fallback to regex
             import re
             text = pyproject.read_text(encoding="utf-8")
-            m = re.search(r'version\s*=\s*"([^"]+)"', text)
-            assert m is not None
-            assert m.group(1) == __version__
+            m = re.search(r'attr\s*=\s*"mindforge\.core\.version\.__version__"', text)
+            assert m is not None, "pyproject.toml 未找到 dynamic version attr"
+        from mindforge.core.version import __version__ as _truth
+        assert _truth == __version__
 
 
 class TestTTLExpiration:
@@ -289,7 +294,7 @@ class TestFTS5ScoreFix:
 
     def test_indexer_fts_search_handles_none_score(self, mf):
         """索引引擎 FTS 搜索处理 None 分数"""
-        from core.indexer import IndexEngine
+        from mindforge.core.indexer import IndexEngine
         idx = IndexEngine()
         # 直接调用 fts_search，传入空连接应优雅处理
         import sqlite3
@@ -315,7 +320,7 @@ class TestQueryEngineCache:
 
     def test_search_with_layer_filter(self, mf):
         """带层级过滤的搜索正常工作"""
-        from MindForge import MemoryLayer
+        from mindforge import MemoryLayer
         mf.add("长期记忆", layer=MemoryLayer.LONG_TERM)
         mf.add("短期记忆", layer=MemoryLayer.SHORT_TERM)
         result = mf.search("记忆", max_results=10, layers=[MemoryLayer.LONG_TERM])

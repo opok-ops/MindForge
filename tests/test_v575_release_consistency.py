@@ -21,7 +21,7 @@ import re
 import unittest
 from pathlib import Path
 
-import core.version as core_version
+import mindforge.core.version as core_version
 
 _REPO = Path(__file__).resolve().parent.parent
 _VERSION = core_version.__version__
@@ -38,24 +38,33 @@ class TestVersionTruth(unittest.TestCase):
     """版本号真值必须收敛在 core/version.py，且各处投影一致。"""
 
     def test_core_version_matches_release(self):
-        self.assertEqual(core_version.__version__, "5.8.12")
-        self.assertEqual(core_version.VERSION_INFO, (5, 8, 12))
+        self.assertEqual(core_version.__version__, "5.8.13")
+        self.assertEqual(core_version.VERSION_INFO, (5, 8, 13))
 
     def test_pyproject_matches_core_version(self):
-        m = re.search(r'^version\s*=\s*"([^"]+)"', _read("pyproject.toml"), re.M)
-        self.assertIsNotNone(m, "pyproject.toml 缺少 project.version")
-        self.assertEqual(m.group(1), _VERSION)
+        # v5.8.13 起 pyproject 不再写死静态版本：
+        # dynamic = ["version"] + [tool.setuptools.dynamic] attr 指向唯一真值
+        pyproject = _read("pyproject.toml")
+        m = re.search(r'^dynamic\s*=\s*\["version"\]\s*$', pyproject, re.M)
+        self.assertIsNotNone(m, "pyproject.toml 未声明 dynamic version")
+        m = re.search(r'version\s*=\s*\{attr\s*=\s*"([^"]+)"\}', pyproject)
+        self.assertIsNotNone(m, "pyproject.toml 缺少 dynamic attr")
+        self.assertEqual(
+            m.group(1), "mindforge.core.version.__version__",
+            "pyproject dynamic attr 未指向版本唯一真值")
 
-    def test_cli_and_mcp_fallback_match_truth(self):
-        for rel in ("cli/main.py", "mcp/server.py"):
+    def test_cli_and_mcp_import_single_version_source(self):
+        # v5.8.13 起已移除 cli/mcp 的硬编码版本兜底（P0-04 根治）：
+        # 统一从 mindforge.core.version 导入，且不得再出现兜底字面量。
+        for rel in ("mindforge/cli/main.py", "mindforge/mcp/server.py"):
+            src = _read(rel)
+            self.assertIn(
+                "from mindforge.core.version import __version__", src,
+                f"{rel} 未从唯一真值导入 __version__")
             literals = re.findall(
-                r'__version__\s*=\s*["\']([^"\']+)["\']', _read(rel)
-            )
-            self.assertTrue(literals, f"{rel} 应含兜底 __version__ 字面量")
-            for lit in literals:
-                self.assertEqual(
-                    lit, _VERSION,
-                    f"{rel} 兜底版本 {lit} 与真值 {_VERSION} 漂移（P0-04）")
+                r'__version__\s*=\s*["\']([^"\']+)["\']', src)
+            self.assertFalse(
+                literals, f"{rel} 不应再含硬编码版本兜底字面量：{literals}")
 
     def test_test_expectation_matches_truth(self):
         src = _read("tests/test_v568_fixes.py")

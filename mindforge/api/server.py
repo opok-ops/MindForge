@@ -51,10 +51,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 from collections import defaultdict
 from typing import Dict, List, Optional, Any
-from MindForge import __version__ as MF_VERSION
+from mindforge import __version__ as MF_VERSION
 
 try:
-    from core.encryption import SecurityError
+    from mindforge.core.encryption import SecurityError
 except ImportError:
 
     class SecurityError(Exception):
@@ -429,7 +429,7 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
         raw = self.rfile.read(content_length)
         try:
             # P2 #23 修复：外部输入用安全 JSON 解析（深度+大小限制）
-            from core.storage import _safe_json_loads
+            from mindforge.core.storage import _safe_json_loads
 
             return _safe_json_loads(raw.decode("utf-8"))
         except (ValueError, json.JSONDecodeError, UnicodeDecodeError):
@@ -843,7 +843,7 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                     return
                 self._send_json(self.mindforge.graph_path(frm, to) or {"path": None})
             elif path == "/api/connectors":
-                from modules.connectors import list_connectors
+                from mindforge.modules.connectors import list_connectors
                 self._send_json({"connectors": list_connectors()})
             elif path == "/":
                 # v5.6.5 P2 #16：根路径不再枚举完整 API 端点清单，

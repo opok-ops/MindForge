@@ -13,8 +13,8 @@ import tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from core.mindforge import MindForge
-from core.types import Importance, MemoryLayer
+from mindforge.core.mindforge import MindForge
+from mindforge.core.types import Importance, MemoryLayer
 
 
 # ============================================================
@@ -448,6 +448,6 @@ class TestBugFixes:
     def test_version_semver_format(self):
         """验证版本号符合 semver 格式（v5.5.4 动态校验）"""
         import re
-        from MindForge import __version__
+        from mindforge import __version__
         assert re.match(r'^\d+\.\d+\.\d+$', __version__), \
             f"版本号格式不正确: {__version__}"

@@ -1,3 +1,28 @@
+## [5.8.13] - 2026-10-02
+
+### 重构：全部源码迁入 mindforge.* 命名空间 + 打包/文档一致性修复
+
+- **命名空间重构**：`core` / `modules` / `mcp` / `api` / `cli` / `adapters`
+  全部物理迁入 `mindforge/` 子包，不再以顶层包名安装进 site-packages，
+  消除与官方 `mcp` SDK 等第三方库的顶层冲突；仓库根目录保留 `MindForge.py`
+  作为向后兼容入口（`from MindForge import MindForge` 仍可用），新代码统一
+  `from mindforge import ...`。
+- **版本号唯一真值**：`pyproject.toml` 改为 `dynamic = ["version"]`，
+  通过 `[tool.setuptools.dynamic]` 读取 `mindforge.core.version.__version__`，
+  发版只需改一处；移除 CLI/MCP 旧的「三级回退」硬编码版本兜底。
+- **打包配置收敛**：`setup.py` 收敛为薄壳；移除已失效的 package-dir 映射；
+  `MindForge.py` 兼容模块随 wheel 发布（py-modules）。
+- **文档一致性**：README / README.zh-CN 导入示例统一为 `mindforge.*`；
+  官网 index.html 版本号、更新日志、统计数字同步至 v5.8.13；修正
+  `check_docs_consistency.py` 对 dynamic version 的校验，并仅在 tag
+  触发时比对 git tag（避免 master 推送处于「版本已 bump、tag 未打」窗口期误报）。
+- **CI 依赖升级**：`actions/checkout` v4/v5 → v7（所有工作流均未使用
+  `pull_request_target`，不存在 fork PR 检出行为变更风险）。
+- **Dependabot 冲突收敛**：关闭 #8（sentence-transformers ≥6.0.1，与 Python
+  3.9 兼容性冲突），保留 #9（≥2.7.0）；#2（checkout 5→7）已关闭，本次直接
+  在工作流中完成升级。
+- 全量 938 项通过（938 passed）。
+
 ## [5.8.12] - 2026-10-02
 
 ### 修复：搜索/召回边界、API 更新语义与 LangGraph Store 协议

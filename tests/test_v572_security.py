@@ -17,7 +17,7 @@ CHANGELOG 中记录，不在本文件断言。
 import types
 import unittest
 
-from api.server import MindForgeAPIHandler
+from mindforge.api.server import MindForgeAPIHandler
 
 
 class _Stub:

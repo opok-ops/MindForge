@@ -16,7 +16,7 @@ import time
 import tempfile
 import pytest
 
-from MindForge import MindForge, __version__
+from mindforge import MindForge, __version__
 
 
 @pytest.fixture
@@ -40,14 +40,17 @@ class TestVersion:
         assert parts >= [5, 5, 7], f"版本 {__version__} < 5.5.7"
 
     def test_pyproject_version(self):
-        """pyproject.toml 版本号一致"""
+        """pyproject.toml 动态版本指向 core/version.py 的唯一真值"""
         import re
         pyproject_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "pyproject.toml")
         with open(pyproject_path, "r", encoding="utf-8") as f:
             content = f.read()
-        m = re.search(r'^version\s*=\s*["\']([^"\']+)["\']', content, re.M)
-        assert m, "pyproject.toml 中未找到 version"
-        assert m.group(1) == __version__, f"pyproject.toml version {m.group(1)} != __version__ {__version__}"
+        m = re.search(r'attr\s*=\s*"mindforge\.core\.version\.__version__"', content)
+        assert m, "pyproject.toml 中未找到 dynamic version attr"
+        assert 'dynamic = ["version"]' in content or '"version"' in content, \
+            "pyproject.toml 应声明 dynamic version"
+        from mindforge.core.version import __version__ as _truth
+        assert _truth == __version__, f"core/version.py {_truth} != __version__ {__version__}"
 
 
 # ===== 置顶功能 =====

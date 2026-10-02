@@ -44,8 +44,8 @@ sys.path.insert(0, str(ROOT))
 
 import psutil  # noqa: E402
 
-from core.mindforge import MindForge  # noqa: E402
-from core import MemoryConfig  # noqa: E402
+from mindforge.core.mindforge import MindForge  # noqa: E402
+from mindforge.core import MemoryConfig  # noqa: E402
 
 N = int(os.environ.get("MF_BENCH_N", "3000"))
 SEARCH_CHECKPOINTS = [n for n in (500, 1000, 2000, 3000) if n <= N] or [N]
@@ -299,7 +299,7 @@ def bench_encryption(tmp, result):
     }
 
     # 原语：直接测 EncryptionEngine
-    from core.encryption import EncryptionEngine
+    from mindforge.core.encryption import EncryptionEngine
     engine, _salt = EncryptionEngine.from_password("bench-pass-123")
     prim = {}
     for size_name, payload in (("1KB", "x" * 1024), ("10KB", "x" * (10 * 1024))):
@@ -444,7 +444,7 @@ def bench_concurrency(tmp, result):
 
 def bench_misc(tmp, result):
     print("[11-12/12] 磁盘探测缓存 / 体积 / RSS ...", flush=True)
-    from core.storage import HardwareProfiler
+    from mindforge.core.storage import HardwareProfiler
 
     # P3 #24：磁盘探测应被缓存，第二次近乎零成本（类变量缓存，仅首次写 1MB）。
     # 先清类缓存，确保 first 测到的是真正的冷探测而非此前流程遗留的缓存命中。
@@ -457,7 +457,7 @@ def bench_misc(tmp, result):
     second_ms = (time.perf_counter_ns() - t0) / 1e6
 
     # 限流器记账吞吐（不同 key，避免触发窗口上限）
-    from core.storage import _rate_limiter as rl
+    from mindforge.core.storage import _rate_limiter as rl
     n_rl = 20000
     t0 = time.perf_counter()
     for i in range(n_rl):
@@ -502,7 +502,7 @@ def main():
         },
     }
     try:
-        from core.version import __version__
+        from mindforge.core.version import __version__
         result["env"]["mindforge_version"] = __version__
     except Exception:  # noqa: BLE001
         result["env"]["mindforge_version"] = "unknown"

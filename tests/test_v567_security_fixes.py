@@ -23,7 +23,7 @@ import threading
 import unittest
 from pathlib import Path
 
-import core.version as core_version
+import mindforge.core.version as core_version
 
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -43,16 +43,18 @@ class TestVersionFallbackSync(unittest.TestCase):
 
     def test_cli_and_mcp_fallback_match_truth(self):
         truth = core_version.__version__
-        for rel in ("cli/main.py", "mcp/server.py"):
+        for rel in ("mindforge/cli/main.py", "mindforge/mcp/server.py"):
             literals = self._fallback_literal(rel)
-            self.assertTrue(literals, f"{rel} 应含兜底 __version__ 字面量")
-            for lit in literals:
-                self.assertEqual(
-                    lit, truth,
-                    f"{rel} 的兜底版本 {lit} 与真值 {truth} 漂移（P1-01）")
+            self.assertFalse(literals, f"{rel} 不应再含兜底 __version__ 字面量（v5.8.13 起统一从真值导入）：{literals}")
+            text = (_REPO_ROOT / rel).read_text(encoding="utf-8")
+            self.assertIn(
+                "from mindforge.core.version import __version__",
+                text,
+                f"{rel} 应从唯一真值导入 __version__",
+            )
 
     def test_no_stale_5_6_1_fallback(self):
-        for rel in ("cli/main.py", "mcp/server.py"):
+        for rel in ("mindforge/cli/main.py", "mindforge/mcp/server.py"):
             literals = self._fallback_literal(rel)
             self.assertNotIn("5.6.1", literals, f"{rel} 仍残留 5.6.1 兜底（P1-01）")
 
@@ -62,7 +64,7 @@ class TestVersionFallbackSync(unittest.TestCase):
 # --------------------------------------------------------------------------
 class TestSanitizeTag(unittest.TestCase):
     def setUp(self):
-        from api.server import _sanitize_tag
+        from mindforge.api.server import _sanitize_tag
         self.sanitize = _sanitize_tag
 
     def test_strips_whitespace(self):
@@ -87,8 +89,8 @@ class TestSanitizeTag(unittest.TestCase):
 # --------------------------------------------------------------------------
 class TestLogUnhandledApiError(unittest.TestCase):
     def test_error_level_omits_traceback(self):
-        from api.server import _log_unhandled_api_error
-        with self.assertLogs("api.server", level="ERROR") as cm:
+        from mindforge.api.server import _log_unhandled_api_error
+        with self.assertLogs("mindforge.api.server", level="ERROR") as cm:
             try:
                 raise ValueError("boom at C:\\Users\\secret\\db.sqlite")
             except ValueError as e:
@@ -105,7 +107,7 @@ class TestLogUnhandledApiError(unittest.TestCase):
 # --------------------------------------------------------------------------
 class TestSafeErrorMsg(unittest.TestCase):
     def setUp(self):
-        from mcp.server import _safe_error_msg
+        from mindforge.mcp.server import _safe_error_msg
         self.safe = _safe_error_msg
 
     def test_redacts_windows_and_posix_paths(self):
@@ -130,7 +132,7 @@ class TestSafeErrorMsg(unittest.TestCase):
 # --------------------------------------------------------------------------
 class TestDetectDiskTypeRace(unittest.TestCase):
     def test_concurrent_results_consistent(self):
-        from core.storage import HardwareProfiler
+        from mindforge.core.storage import HardwareProfiler
         HardwareProfiler._cached_disk_type = None  # 强制首次测量
         results = []
         lock = threading.Lock()
@@ -159,8 +161,8 @@ class TestFederatedQueue(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="mf_v567_")
         self.db = os.path.join(self.tmp, "fed.db")
-        from core.storage import StorageEngine
-        from modules.federated import FederatedMemory
+        from mindforge.core.storage import StorageEngine
+        from mindforge.modules.federated import FederatedMemory
         self.storage = StorageEngine(db_path=self.db)
         self.fed = FederatedMemory(storage=self.storage, local_peer_id="local",
                                    config={"allow_unsigned_peers": True})
@@ -177,7 +179,7 @@ class TestFederatedQueue(unittest.TestCase):
         ok = self.fed.receive_memory("peerA", {"content": "   "})
         self.assertTrue(ok)  # 入队成功
         self.assertEqual(len(self.fed._incoming_queue), 1)
-        with self.assertLogs("modules.federated", level="WARNING"):
+        with self.assertLogs("mindforge.modules.federated", level="WARNING"):
             result = self.fed.accept_incoming()
         self.assertIsNone(result)  # 空内容丢弃但记日志，不再静默
         self.assertEqual(len(self.fed._incoming_queue), 0)

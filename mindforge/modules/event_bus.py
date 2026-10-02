@@ -58,7 +58,7 @@ from datetime import datetime, timezone
 
 # v5.6.8 修复：payload 与 User-Agent 中的版本号此前硬编码为 5.4.9（早已过期，
 # 与 core/version.py 真值漂移），改为引用唯一真值。
-from core.version import __version__ as _MF_VERSION
+from mindforge.core.version import __version__ as _MF_VERSION
 
 logger = logging.getLogger(__name__)
 

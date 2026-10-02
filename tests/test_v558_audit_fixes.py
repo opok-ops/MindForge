@@ -16,7 +16,7 @@ import pytest
 #     （修复前应为 primary_char / partner_char，否则 NameError 崩溃）
 # ---------------------------------------------------------------------------
 def test_character_network_builds_edges_without_nameerror():
-    from core.storage import StorageEngine
+    from mindforge.core.storage import StorageEngine
 
     db = tempfile.mktemp(suffix=".db")
     try:
@@ -67,12 +67,12 @@ def test_character_network_builds_edges_without_nameerror():
 #     （修复前真实数据库错误会被 NameError 掩盖）
 # ---------------------------------------------------------------------------
 def test_cli_imports_sqlite3_for_except_branch():
-    import cli.main
+    import mindforge.cli.main
     import sqlite3 as real_sqlite3
 
     # 修复前 cli/main.py 未 import sqlite3，except sqlite3.Error 分支会触发
     # 二级 NameError，掩盖真实的数据库错误。此处断言模块级 sqlite3 已正确导入。
-    assert cli.main.sqlite3 is real_sqlite3
+    assert mindforge.cli.main.sqlite3 is real_sqlite3
 
 
 # ---------------------------------------------------------------------------
@@ -80,14 +80,14 @@ def test_cli_imports_sqlite3_for_except_branch():
 #     （修复前 -> NameError 崩溃；修复后基于 commands dict 干净退出）
 # ---------------------------------------------------------------------------
 def test_main_dispatch_unknown_command_exits_cleanly():
-    import cli.main
+    import mindforge.cli.main
 
     class _Args:
         command = "__definitely_not_a_real_command__"
 
     # 修复前：未知命令时引用 main() 的局部 parser -> NameError 崩溃
     with pytest.raises(SystemExit) as exc:
-        cli.main._main_dispatch(_Args())
+        mindforge.cli.main._main_dispatch(_Args())
     assert exc.value.code == 1
 
 
@@ -96,7 +96,7 @@ def test_main_dispatch_unknown_command_exits_cleanly():
 #     （修复前 `2 if self.fallback else 2` 两支相同，兜底与 LLM 路由无法区分）
 # ---------------------------------------------------------------------------
 def test_intent_result_level_routing():
-    from modules.intent_router import IntentResult
+    from mindforge.modules.intent_router import IntentResult
 
     base = dict(intent="x", label="x", confidence=1.0, routing="x")
 
@@ -118,8 +118,8 @@ def test_intent_result_level_routing():
 #     （修复前导致记忆内容被永久截断）
 # ---------------------------------------------------------------------------
 def test_recall_optimize_context_does_not_mutate_original():
-    from core.query import MemoryChunk
-    from modules.recall import RecallEngine
+    from mindforge.core.query import MemoryChunk
+    from mindforge.modules.recall import RecallEngine
 
     engine = RecallEngine(storage=MagicMock(), index=MagicMock())
 
@@ -144,7 +144,7 @@ def test_recall_optimize_context_does_not_mutate_original():
 def test_api_concurrency_slot_rollback_on_thread_start_failure():
     import threading
 
-    from api.server import BoundedThreadingHTTPServer
+    from mindforge.api.server import BoundedThreadingHTTPServer
 
     # 绕过网络绑定的 __init__，仅构造所需属性
     server = object.__new__(BoundedThreadingHTTPServer)

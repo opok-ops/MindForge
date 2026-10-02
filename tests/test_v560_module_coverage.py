@@ -25,7 +25,7 @@ class TestSkillExtractorMore(unittest.TestCase):
 
     def test_skill_template_render_with_slots(self):
         """SkillTemplate.render() 正确填充 slot 变量"""
-        from modules.skill_extractor import SkillTemplate, SkillSlot
+        from mindforge.modules.skill_extractor import SkillTemplate, SkillSlot
 
         template = SkillTemplate(
             name="docker_deploy",
@@ -50,7 +50,7 @@ class TestSkillExtractorMore(unittest.TestCase):
 
     def test_skill_template_render_default_values(self):
         """SkillTemplate.render() 未提供的 slot 使用默认值或占位符"""
-        from modules.skill_extractor import SkillTemplate, SkillSlot
+        from mindforge.modules.skill_extractor import SkillTemplate, SkillSlot
 
         template = SkillTemplate(
             name="test",
@@ -68,7 +68,7 @@ class TestSkillExtractorMore(unittest.TestCase):
 
     def test_skill_template_to_dict(self):
         """SkillTemplate.to_dict() 完整序列化"""
-        from modules.skill_extractor import SkillTemplate, SkillSlot
+        from mindforge.modules.skill_extractor import SkillTemplate, SkillSlot
 
         template = SkillTemplate(
             name="test_skill",
@@ -98,7 +98,7 @@ class TestSkillExtractorMore(unittest.TestCase):
 
     def test_skill_slot_to_dict(self):
         """SkillSlot.to_dict() 序列化"""
-        from modules.skill_extractor import SkillSlot
+        from mindforge.modules.skill_extractor import SkillSlot
 
         slot = SkillSlot(name="my_slot", examples=["a", "b"], required=True, default="x")
         d = slot.to_dict()
@@ -109,7 +109,7 @@ class TestSkillExtractorMore(unittest.TestCase):
 
     def test_extract_single_cluster_skill(self):
         """相关记忆聚类后提取技能"""
-        from modules.skill_extractor import SkillExtractor
+        from mindforge.modules.skill_extractor import SkillExtractor
 
         extractor = SkillExtractor(min_cluster_size=2)
         memories = [
@@ -132,7 +132,7 @@ class TestSkillExtractorMore(unittest.TestCase):
 
     def test_extract_returns_skill_template_objects(self):
         """extract() 返回 SkillTemplate 对象列表"""
-        from modules.skill_extractor import SkillExtractor, SkillTemplate
+        from mindforge.modules.skill_extractor import SkillExtractor, SkillTemplate
 
         extractor = SkillExtractor()
         memories = [
@@ -148,7 +148,7 @@ class TestSkillExtractorMore(unittest.TestCase):
 
     def test_extract_below_min_cluster_size(self):
         """少于 min_cluster_size 的记忆不提取技能"""
-        from modules.skill_extractor import SkillExtractor
+        from mindforge.modules.skill_extractor import SkillExtractor
 
         extractor = SkillExtractor(min_cluster_size=10)
         memories = [
@@ -162,7 +162,7 @@ class TestSkillExtractorMore(unittest.TestCase):
 
     def test_ngrams_helper(self):
         """_ngrams 静态方法正确生成 n-gram 集合"""
-        from modules.skill_extractor import SkillExtractor
+        from mindforge.modules.skill_extractor import SkillExtractor
 
         result = SkillExtractor._ngrams("hello", n=2)
         self.assertIsInstance(result, set)
@@ -181,7 +181,7 @@ class TestSkillExtractorMore(unittest.TestCase):
 
     def test_tags_of_helper(self):
         """_tags_of 静态方法正确解析各种 tag 格式"""
-        from modules.skill_extractor import SkillExtractor
+        from mindforge.modules.skill_extractor import SkillExtractor
 
         # 列表格式
         mem1 = {"tags": ["python", "docker"]}
@@ -211,8 +211,8 @@ class TestSharedConflictResolverMore(unittest.TestCase):
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def _make(self):
-        from core.storage import StorageEngine
-        from modules.share_conflict import SharedConflictResolver
+        from mindforge.core.storage import StorageEngine
+        from mindforge.modules.share_conflict import SharedConflictResolver
         storage = StorageEngine(db_path=self.db_path, encrypted=False)
         return storage, SharedConflictResolver(storage)
 
@@ -411,8 +411,8 @@ class TestFederatedACLMore(unittest.TestCase):
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def _make(self):
-        from core.storage import StorageEngine
-        from modules.federated_acl import FederatedACLManager
+        from mindforge.core.storage import StorageEngine
+        from mindforge.modules.federated_acl import FederatedACLManager
         storage = StorageEngine(db_path=self.db_path, encrypted=False)
         return storage, FederatedACLManager(storage)
 

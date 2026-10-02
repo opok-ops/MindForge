@@ -26,34 +26,38 @@ class TestVersionConsistency(unittest.TestCase):
 
     @staticmethod
     def _pyproject_version():
-        """从 pyproject.toml 动态读取发布版本，避免每次发版同步硬编码断言"""
+        """从 pyproject.toml 动态读取发布版本（v5.8.13 起为 dynamic attr，读唯一真值 core/version.py）"""
         import re
+        from mindforge.core.version import __version__ as _truth
         pyproject = os.path.join(_PROJECT_ROOT, "pyproject.toml")
         if not os.path.exists(pyproject):
             return None
         with open(pyproject, "r", encoding="utf-8") as f:
-            m = re.search(r'^version\s*=\s*"([^"]+)"', f.read(), re.M)
+            content = f.read()
+        if re.search(r'attr\s*=\s*"mindforge\.core\.version\.__version__"', content):
+            return _truth
+        m = re.search(r'^version\s*=\s*"([^"]+)"', content, re.M)
         return m.group(1) if m else None
 
     def test_version_matches_pyproject(self):
-        """顶层包 __version__ 必须与 pyproject.toml 发布版本一致"""
-        from MindForge import __version__
+        """顶层包 __version__ 必须与唯一真值 core/version.py 一致"""
+        from mindforge import __version__
         expected = self._pyproject_version()
         if expected is None:
             self.skipTest("pyproject.toml not found")
         self.assertEqual(__version__, expected)
 
     def test_version_semver_format(self):
-        from MindForge import __version__
+        from mindforge import __version__
         parts = __version__.split(".")
         self.assertEqual(len(parts), 3)
         for p in parts:
             self.assertTrue(p.isdigit())
 
     def test_pyproject_version(self):
-        """pyproject.toml 必须声明合法且完整的 semver 版本"""
+        """pyproject.toml 必须声明 dynamic version 并指向 core/version.py 的唯一真值"""
         expected = self._pyproject_version()
-        self.assertIsNotNone(expected, "pyproject.toml not found or missing version")
+        self.assertIsNotNone(expected, "pyproject.toml 缺少 dynamic version attr 或静态版本")
         parts = expected.split(".")
         self.assertEqual(len(parts), 3)
         for p in parts:
@@ -61,8 +65,8 @@ class TestVersionConsistency(unittest.TestCase):
 
     def test_storage_has_version(self):
         """storage.py 的 __version__ 应与顶层包一致（v5.5.8 修复，v5.5.9 起动态比对）"""
-        from MindForge import __version__ as top_version
-        from core.storage import __version__ as storage_version
+        from mindforge import __version__ as top_version
+        from mindforge.core.storage import __version__ as storage_version
         self.assertEqual(storage_version, top_version)
 
 
@@ -73,7 +77,7 @@ class TestMemoryDiff(unittest.TestCase):
     def setUpClass(cls):
         cls.tmpdir = tempfile.mkdtemp(prefix="mindforge_test_")
         cls.db_path = os.path.join(cls.tmpdir, "test.db")
-        from MindForge import MindForge
+        from mindforge import MindForge
         cls.mf = MindForge(db_path=cls.db_path, encrypted=False)
 
     @classmethod
@@ -179,7 +183,7 @@ class TestFalsyEnumFix(unittest.TestCase):
     def setUpClass(cls):
         cls.tmpdir = tempfile.mkdtemp(prefix="mindforge_test_")
         cls.db_path = os.path.join(cls.tmpdir, "test_enum.db")
-        from MindForge import MindForge
+        from mindforge import MindForge
         cls.mf = MindForge(db_path=cls.db_path, encrypted=False)
 
     @classmethod
@@ -200,7 +204,7 @@ class TestFalsyEnumFix(unittest.TestCase):
 
     def test_add_preserves_explicit_enum(self):
         """显式传入的枚举值应该被保留"""
-        from MindForge import Importance
+        from mindforge import Importance
         entry = self.mf.add(
             "test importance",
             category="test",
@@ -215,20 +219,20 @@ class TestMCPParamValidation(unittest.TestCase):
     def test_require_args_missing(self):
         """测试 _require_args 检测缺失参数"""
         sys.path.insert(0, _PROJECT_ROOT)
-        from mcp.server import _require_args
+        from mindforge.mcp.server import _require_args
         result = _require_args({}, "content")
         self.assertIsNotNone(result)
         self.assertIn("content", result["error"])
 
     def test_require_args_present(self):
         """测试 _require_args 通过"""
-        from mcp.server import _require_args
+        from mindforge.mcp.server import _require_args
         result = _require_args({"content": "hello"}, "content")
         self.assertIsNone(result)
 
     def test_require_args_multiple(self):
         """测试多参数校验"""
-        from mcp.server import _require_args
+        from mindforge.mcp.server import _require_args
         # 缺少一个
         result = _require_args({"agent_id": "x"}, "agent_id", "query")
         self.assertIsNotNone(result)
@@ -239,14 +243,14 @@ class TestMCPParamValidation(unittest.TestCase):
 
     def test_handle_tools_call_validates_params_type(self):
         """测试 params 类型校验"""
-        from mcp.server import _handle_tools_call
+        from mindforge.mcp.server import _handle_tools_call
         # params 是 list 而非 dict
         with self.assertRaises(ValueError):
             _handle_tools_call(None, {"params": []})
 
     def test_memory_add_missing_content(self):
         """测试 memory_add 缺少 content 参数"""
-        from mcp.server import h_memory_add
+        from mindforge.mcp.server import h_memory_add
         # 模拟一个空的 MindForge 实例
         result = h_memory_add(None, {})
         self.assertIn("error", result)
@@ -254,28 +258,28 @@ class TestMCPParamValidation(unittest.TestCase):
 
     def test_memory_search_missing_query(self):
         """测试 memory_search 缺少 query 参数"""
-        from mcp.server import h_memory_search
+        from mindforge.mcp.server import h_memory_search
         result = h_memory_search(None, {})
         self.assertIn("error", result)
         self.assertIn("query", result["error"])
 
     def test_memory_context_missing_params(self):
         """测试 memory_context 缺少参数"""
-        from mcp.server import h_memory_context
+        from mindforge.mcp.server import h_memory_context
         result = h_memory_context(None, {"agent_id": "x"})
         self.assertIn("error", result)
         self.assertIn("query", result["error"])
 
     def test_memory_diff_tool_registered(self):
         """测试 memory_diff 工具已注册"""
-        from mcp.server import HANDLERS, TOOL_SCHEMAS
+        from mindforge.mcp.server import HANDLERS, TOOL_SCHEMAS
         self.assertIn("memory_diff", HANDLERS)
         tool_names = [t["name"] for t in TOOL_SCHEMAS]
         self.assertIn("memory_diff", tool_names)
 
     def test_mcp_tool_count(self):
         """测试 MCP 工具数量 >= 30"""
-        from mcp.server import TOOL_SCHEMAS
+        from mindforge.mcp.server import TOOL_SCHEMAS
         self.assertGreaterEqual(len(TOOL_SCHEMAS), 30)
 
 
@@ -283,10 +287,10 @@ class TestEncryptionValidation(unittest.TestCase):
     """加密引擎输入校验测试"""
 
     def test_encrypt_non_string_raises_security_error(self):
-        from core.encryption import SecurityError
+        from mindforge.core.encryption import SecurityError
         # 先创建一个可用的引擎
         try:
-            from core.encryption import EncryptionEngine
+            from mindforge.core.encryption import EncryptionEngine
             engine, _ = EncryptionEngine.from_password("testpass")
             with self.assertRaises(SecurityError):
                 engine.encrypt(123)  # type: ignore
@@ -297,9 +301,9 @@ class TestEncryptionValidation(unittest.TestCase):
             self.skipTest("cryptography not available")
 
     def test_hash_non_string_raises_security_error(self):
-        from core.encryption import SecurityError
+        from mindforge.core.encryption import SecurityError
         try:
-            from core.encryption import EncryptionEngine
+            from mindforge.core.encryption import EncryptionEngine
             engine, _ = EncryptionEngine.from_password("testpass")
             with self.assertRaises(SecurityError):
                 engine.hash(123)  # type: ignore
@@ -307,9 +311,9 @@ class TestEncryptionValidation(unittest.TestCase):
             self.skipTest("cryptography not available")
 
     def test_decrypt_non_blob_raises_security_error(self):
-        from core.encryption import SecurityError
+        from mindforge.core.encryption import SecurityError
         try:
-            from core.encryption import EncryptionEngine
+            from mindforge.core.encryption import EncryptionEngine
             engine, _ = EncryptionEngine.from_password("testpass")
             with self.assertRaises(SecurityError):
                 engine.decrypt("not a blob")  # type: ignore
@@ -324,7 +328,7 @@ class TestCLIListFilteredCount(unittest.TestCase):
     def setUpClass(cls):
         cls.tmpdir = tempfile.mkdtemp(prefix="mindforge_test_")
         cls.db_path = os.path.join(cls.tmpdir, "test_list.db")
-        from MindForge import MindForge
+        from mindforge import MindForge
         cls.mf = MindForge(db_path=cls.db_path, encrypted=False)
         # 添加不同分类的记忆
         cls.mf.add("cat A item 1", category="catA")

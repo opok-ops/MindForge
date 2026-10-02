@@ -41,7 +41,7 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Any, Dict, List, Optional, Type
 
-from core.version import __version__
+from mindforge.core.version import __version__
 
 # ---------------------------------------------------------------------------
 # v6 常量

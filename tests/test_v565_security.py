@@ -29,7 +29,7 @@ class _StorageCase(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="mf_v565_")
         self.db = os.path.join(self.tmp, "test.db")
-        from core.storage import StorageEngine
+        from mindforge.core.storage import StorageEngine
 
         self.storage = StorageEngine(db_path=self.db, encrypted=False)
 
@@ -44,7 +44,7 @@ class _StorageCase(unittest.TestCase):
 # ---------------- P0 #1 / #2：Ed25519 + 重放防护 ----------------
 class TestFederatedEd25519(unittest.TestCase):
     def _two_nodes(self):
-        from modules.federated import FederatedMemory
+        from mindforge.modules.federated import FederatedMemory
 
         node_a = FederatedMemory(local_peer_id="nodeA")
         node_b = FederatedMemory(local_peer_id="nodeB")
@@ -58,7 +58,7 @@ class TestFederatedEd25519(unittest.TestCase):
         return node_a, node_b
 
     def test_keypair_is_ed25519_and_distinct(self):
-        from modules.federated import generate_keypair
+        from mindforge.modules.federated import generate_keypair
         import base64
 
         priv1, pub1 = generate_keypair()
@@ -115,7 +115,7 @@ class TestFederatedEd25519(unittest.TestCase):
         self.assertFalse(b.receive_memory("nodeA", data, sig))
 
     def test_hmac_legacy_still_verifies(self):
-        from modules.federated import FederatedMemory
+        from mindforge.modules.federated import FederatedMemory
 
         a = FederatedMemory(local_peer_id="a")
         b = FederatedMemory(local_peer_id="b")
@@ -169,7 +169,7 @@ class TestAccessLastFlushPrune(_StorageCase):
 # ---------------- P1 #5：IndexEngine LRU 上限 ----------------
 class TestIndexEngineBound(unittest.TestCase):
     def test_lru_cap_bounds_all_structures(self):
-        from core.indexer import IndexEngine
+        from mindforge.core.indexer import IndexEngine
 
         idx = IndexEngine(max_docs=5)
         for i in range(8):
@@ -182,7 +182,7 @@ class TestIndexEngineBound(unittest.TestCase):
         self.assertIn("d7", idx._doc_texts)
 
     def test_unlimited_when_zero(self):
-        from core.indexer import IndexEngine
+        from mindforge.core.indexer import IndexEngine
 
         idx = IndexEngine(max_docs=0)
         self.assertIsNone(idx.max_docs)
@@ -237,7 +237,7 @@ class TestAutoArchiveReportsFailure(_StorageCase):
 # ---------------- P1 #7：过期授权清理 ----------------
 class TestPrivacyGrantPurge(_StorageCase):
     def test_purge_removes_expired_everywhere(self):
-        from modules.privacy import PrivacyEngine
+        from mindforge.modules.privacy import PrivacyEngine
 
         entry = self.storage.add_memory(content="私密", source_agent="owner")
         pe = PrivacyEngine(self.storage)
@@ -261,7 +261,7 @@ class TestPrivacyGrantPurge(_StorageCase):
 # ---------------- P1 #10：共享记录过期清理 ----------------
 class TestSharedMemoryPurge(_StorageCase):
     def test_expired_shared_purged(self):
-        from modules.federated import FederatedMemory
+        from mindforge.modules.federated import FederatedMemory
 
         fed = FederatedMemory(storage=self.storage, local_peer_id="local")
         fed.register_peer("p", "P", trust_level=0.9, public_key=fed.local_public_key)
@@ -276,7 +276,7 @@ class TestSharedMemoryPurge(_StorageCase):
 # ---------------- P2 #9：X-Agent-Id 默认不可伪造 ----------------
 class TestAgentHeaderTrust(unittest.TestCase):
     def setUp(self):
-        from api.server import MindForgeAPIHandler
+        from mindforge.api.server import MindForgeAPIHandler
 
         self.H = MindForgeAPIHandler
 
@@ -399,7 +399,7 @@ class TestCorsHeaders(unittest.TestCase):
             return types.SimpleNamespace(write=lambda data: None)
 
     def test_no_cors_headers_without_origin(self):
-        from api.server import MindForgeAPIHandler as H
+        from mindforge.api.server import MindForgeAPIHandler as H
 
         stub = self._Stub()
         with mock.patch.dict(os.environ, {"MINDFORGE_CORS_ORIGIN": ""}, clear=False):
@@ -409,7 +409,7 @@ class TestCorsHeaders(unittest.TestCase):
         self.assertNotIn("Access-Control-Allow-Origin", stub.sent)
 
     def test_cors_headers_when_origin_set(self):
-        from api.server import MindForgeAPIHandler as H
+        from mindforge.api.server import MindForgeAPIHandler as H
 
         stub = self._Stub()
         with mock.patch.dict(
@@ -424,7 +424,7 @@ class TestCorsHeaders(unittest.TestCase):
 # ---------------- P2 #17：MCP 认证状态持有者 ----------------
 class TestMcpAuthState(unittest.TestCase):
     def test_state_transitions_and_lock(self):
-        from mcp.server import _AuthState
+        from mindforge.mcp.server import _AuthState
         import threading
 
         st = _AuthState()
@@ -445,13 +445,13 @@ class TestMcpAuthState(unittest.TestCase):
 # ---------------- P2 #18：入口默认库路径统一 ----------------
 class TestDefaultDbPath(unittest.TestCase):
     def test_env_override(self):
-        from core.paths import get_default_db_path
+        from mindforge.core.paths import get_default_db_path
 
         with mock.patch.dict(os.environ, {"MINDFORGE_DB_PATH": "/x/y.db"}, clear=False):
             self.assertEqual(get_default_db_path(), "/x/y.db")
 
     def test_default_is_stable_home_path(self):
-        from core.paths import get_default_db_path
+        from mindforge.core.paths import get_default_db_path
 
         env = dict(os.environ)
         env.pop("MINDFORGE_DB_PATH", None)
@@ -463,7 +463,7 @@ class TestDefaultDbPath(unittest.TestCase):
 
     def test_mcp_uses_shared_resolver(self):
         import inspect
-        import mcp.server as mcp
+        import mindforge.mcp.server as mcp
 
         self.assertIn("get_default_db_path", inspect.getsource(mcp.serve_forever))
 
@@ -472,8 +472,8 @@ class TestDefaultDbPath(unittest.TestCase):
 class TestCodebaseConsistency(unittest.TestCase):
     def test_safe_path_single_delegating_impl(self):
         import inspect
-        import core.mindforge as mf
-        import core.storage as storage
+        import mindforge.core.mindforge as mf
+        import mindforge.core.storage as storage
 
         src = inspect.getsource(mf._safe_path)
         self.assertIn("_storage_safe_path", src)
@@ -488,7 +488,7 @@ class TestCodebaseConsistency(unittest.TestCase):
 
     def test_disk_probe_is_1mb_and_cached(self):
         import inspect
-        import core.storage as storage
+        import mindforge.core.storage as storage
 
         src = inspect.getsource(storage.HardwareProfiler)
         self.assertIn("_probe_bytes = 1024 * 1024", src)

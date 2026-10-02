@@ -13,10 +13,10 @@ import time
 import unittest
 from unittest import mock
 
-from core.storage import StorageEngine
-from core.encryption import EncryptionEngine
-from core.indexer import IndexEngine
-from core.query import QueryEngine
+from mindforge.core.storage import StorageEngine
+from mindforge.core.encryption import EncryptionEngine
+from mindforge.core.indexer import IndexEngine
+from mindforge.core.query import QueryEngine
 
 
 PASSWORD = "v571-regression-password"
@@ -113,7 +113,7 @@ class TestRateLimiterCleanup(unittest.TestCase):
     """P2：限流空键清理。"""
 
     def test_expired_key_removed(self):
-        from api.server import _RateLimiter
+        from mindforge.api.server import _RateLimiter
         rl = _RateLimiter(max_requests=5, window_seconds=60)
         # 打满
         for _ in range(5):
@@ -126,7 +126,7 @@ class TestRateLimiterCleanup(unittest.TestCase):
         self.assertEqual(len(rl._requests), 1)
 
     def test_reject_keeps_count(self):
-        from api.server import _RateLimiter
+        from mindforge.api.server import _RateLimiter
         rl = _RateLimiter(max_requests=2, window_seconds=60)
         self.assertTrue(rl.check("9.9.9.9"))
         self.assertTrue(rl.check("9.9.9.9"))

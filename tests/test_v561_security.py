@@ -37,17 +37,17 @@ class TestFailClosedStartup(unittest.TestCase):
         """非 localhost 绑定且无 API Key → SecurityError"""
         os.environ.pop("MINDFORGE_API_KEY", None)
 
-        from api.server import start_api_server, SecurityError
+        from mindforge.api.server import start_api_server, SecurityError
 
         with self.assertRaises(SecurityError):
             start_api_server(None, host="0.0.0.0", port=9999)
 
-    @patch("api.server.BoundedThreadingHTTPServer")
+    @patch("mindforge.api.server.BoundedThreadingHTTPServer")
     def test_non_localhost_allows_with_api_key(self, _mock_server):
         """非 localhost 绑定但有 API Key → 不抛 SecurityError"""
         os.environ["MINDFORGE_API_KEY"] = "test-secret-key"
 
-        from api.server import start_api_server, SecurityError
+        from mindforge.api.server import start_api_server, SecurityError
 
         _mock_server.return_value.serve_forever.side_effect = KeyboardInterrupt
         try:
@@ -55,12 +55,12 @@ class TestFailClosedStartup(unittest.TestCase):
         except SecurityError:
             self.fail("设置了 API Key 后不应抛 SecurityError")
 
-    @patch("api.server.BoundedThreadingHTTPServer")
+    @patch("mindforge.api.server.BoundedThreadingHTTPServer")
     def test_localhost_allows_without_api_key(self, _mock_server):
         """localhost 绑定且无 API Key → 不抛 SecurityError"""
         os.environ.pop("MINDFORGE_API_KEY", None)
 
-        from api.server import start_api_server, SecurityError
+        from mindforge.api.server import start_api_server, SecurityError
 
         _mock_server.return_value.serve_forever.side_effect = KeyboardInterrupt
         try:
@@ -68,10 +68,10 @@ class TestFailClosedStartup(unittest.TestCase):
         except SecurityError:
             self.fail("localhost 绑定不应抛 SecurityError")
 
-    @patch("api.server.BoundedThreadingHTTPServer")
+    @patch("mindforge.api.server.BoundedThreadingHTTPServer")
     def test_localhost_addresses_recognized(self, _mock_server):
         """验证所有 localhost 地址变体都被识别"""
-        from api.server import start_api_server, SecurityError
+        from mindforge.api.server import start_api_server, SecurityError
 
         os.environ.pop("MINDFORGE_API_KEY", None)
         _mock_server.return_value.serve_forever.side_effect = KeyboardInterrupt
@@ -87,7 +87,7 @@ class TestTLSParameters(unittest.TestCase):
 
     def test_start_api_server_has_tls_params(self):
         """验证 start_api_server 签名包含 ssl_certfile / ssl_keyfile"""
-        from api.server import start_api_server
+        from mindforge.api.server import start_api_server
 
         sig = inspect.signature(start_api_server)
         self.assertIn("ssl_certfile", sig.parameters)
@@ -115,28 +115,28 @@ class TestWriteOperationRateLimit(unittest.TestCase):
 
     def test_do_POST_calls_rate_limit(self):
         """验证 do_POST 调用 _check_rate_limit"""
-        from api.server import MindForgeAPIHandler
+        from mindforge.api.server import MindForgeAPIHandler
 
         source = inspect.getsource(MindForgeAPIHandler.do_POST)
         self.assertIn("_check_rate_limit", source)
 
     def test_do_PUT_calls_rate_limit(self):
         """验证 do_PUT 调用 _check_rate_limit"""
-        from api.server import MindForgeAPIHandler
+        from mindforge.api.server import MindForgeAPIHandler
 
         source = inspect.getsource(MindForgeAPIHandler.do_PUT)
         self.assertIn("_check_rate_limit", source)
 
     def test_do_DELETE_calls_rate_limit(self):
         """验证 do_DELETE 调用 _check_rate_limit"""
-        from api.server import MindForgeAPIHandler
+        from mindforge.api.server import MindForgeAPIHandler
 
         source = inspect.getsource(MindForgeAPIHandler.do_DELETE)
         self.assertIn("_check_rate_limit", source)
 
     def test_do_GET_calls_rate_limit(self):
         """验证 do_GET 仍调用 _check_rate_limit（回归）"""
-        from api.server import MindForgeAPIHandler
+        from mindforge.api.server import MindForgeAPIHandler
 
         source = inspect.getsource(MindForgeAPIHandler.do_GET)
         self.assertIn("_check_rate_limit", source)
@@ -147,7 +147,7 @@ class TestXSSUnclosedTagBypass(unittest.TestCase):
 
     def test_unclosed_img_onerror_sanitized(self):
         """未闭合 <img onerror=alert(1) 被清除"""
-        from core.storage import _sanitize_html
+        from mindforge.core.storage import _sanitize_html
 
         payload = "<img onerror=alert(1) src=x"
         cleaned = _sanitize_html(payload)
@@ -156,7 +156,7 @@ class TestXSSUnclosedTagBypass(unittest.TestCase):
 
     def test_unclosed_script_tag_sanitized(self):
         """未闭合 <script 被清除"""
-        from core.storage import _sanitize_html
+        from mindforge.core.storage import _sanitize_html
 
         payload = "<script alert(1)"
         cleaned = _sanitize_html(payload)
@@ -164,7 +164,7 @@ class TestXSSUnclosedTagBypass(unittest.TestCase):
 
     def test_closed_tag_still_sanitized(self):
         """闭合标签仍被清除（回归）"""
-        from core.storage import _sanitize_html
+        from mindforge.core.storage import _sanitize_html
 
         payload = "<script>alert(1)</script>"
         cleaned = _sanitize_html(payload)
@@ -173,7 +173,7 @@ class TestXSSUnclosedTagBypass(unittest.TestCase):
 
     def test_plain_text_preserved(self):
         """普通文本不被消毒（回归）"""
-        from core.storage import _sanitize_html
+        from mindforge.core.storage import _sanitize_html
 
         text = "这是一段正常的记忆内容"
         cleaned = _sanitize_html(text)
@@ -181,7 +181,7 @@ class TestXSSUnclosedTagBypass(unittest.TestCase):
 
     def test_javascript_protocol_sanitized(self):
         """javascript: 协议被清除"""
-        from core.storage import _sanitize_html
+        from mindforge.core.storage import _sanitize_html
 
         payload = '<a href="javascript:alert(1)">click</a>'
         cleaned = _sanitize_html(payload)
@@ -201,7 +201,7 @@ class TestBulkUpdateFieldWhitelist(unittest.TestCase):
 
     def test_non_whitelisted_field_rejected(self):
         """非白名单字段（如 content）被拒绝"""
-        from core.storage import StorageEngine
+        from mindforge.core.storage import StorageEngine
 
         storage = StorageEngine(db_path=self.db_path)
         with self.assertRaises(ValueError) as ctx:
@@ -213,7 +213,7 @@ class TestBulkUpdateFieldWhitelist(unittest.TestCase):
 
     def test_sql_injection_field_rejected(self):
         """SQL 注入式字段名被拒绝"""
-        from core.storage import StorageEngine
+        from mindforge.core.storage import StorageEngine
 
         storage = StorageEngine(db_path=self.db_path)
         with self.assertRaises(ValueError):
@@ -224,7 +224,7 @@ class TestBulkUpdateFieldWhitelist(unittest.TestCase):
 
     def test_whitelisted_fields_accepted(self):
         """白名单字段正常工作"""
-        from core.storage import StorageEngine
+        from mindforge.core.storage import StorageEngine
 
         storage = StorageEngine(db_path=self.db_path)
         # 先插入一条记忆
@@ -244,7 +244,7 @@ class TestBulkUpdateFieldWhitelist(unittest.TestCase):
 
     def test_empty_inputs_return_zero(self):
         """空列表返回 0"""
-        from core.storage import StorageEngine
+        from mindforge.core.storage import StorageEngine
 
         storage = StorageEngine(db_path=self.db_path)
         self.assertEqual(storage.bulk_update_memory_fields([], ["strength"]), 0)
@@ -252,7 +252,7 @@ class TestBulkUpdateFieldWhitelist(unittest.TestCase):
 
     def test_allowed_fields_set_contents(self):
         """验证白名单集合包含预期字段"""
-        from core.storage import _sanitize_html  # noqa: F401 — just importing storage module
+        from mindforge.core.storage import _sanitize_html  # noqa: F401 — just importing storage module
 
         # 通过读取源码验证白名单
         source = inspect.getsource(

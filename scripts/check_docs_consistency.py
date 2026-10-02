@@ -102,7 +102,7 @@ for chunk in index.split('class="hero-badge"')[1:]:
         hero_cur.append(hm.group(1))
 check("hero 徽标（当前版本，排除路线图徽标）", sorted(set(hero_cur)), [VERSION])
 check("安装示例输出",
-      sorted(set(re.findall(r'Successfully installed mindforge-([\d.]+)', index))), [VERSION])
+      sorted(set(re.findall(r'Successfully installed [\w-]+-([\d.]+)', index))), [VERSION])
 check("开发者板块标题",
       sorted(set(re.findall(r'敲到 v([\d.]+)</h2>', index))), [VERSION])
 check("更新日志导语",

@@ -12,6 +12,10 @@
   发版只需改一处；移除 CLI/MCP 旧的「三级回退」硬编码版本兜底。
 - **打包配置收敛**：`setup.py` 收敛为薄壳；移除已失效的 package-dir 映射；
   `MindForge.py` 兼容模块随 wheel 发布（py-modules）。
+- **PyPI 发行名改为 `mindforge-memory`**：`mindforge` 规范名已被
+  mindforge.ai 的第三方客户端占用（最后发布 2024-10），PyPI 项目名大小写
+  不敏感导致 `MindForge` 无法发布；改为 `mindforge-memory` 后 Python 模块
+  名 `mindforge.*`、CLI 与 `MindForge.py` 兼容层均不变。
 - **文档一致性**：README / README.zh-CN 导入示例统一为 `mindforge.*`；
   官网 index.html 版本号、更新日志、统计数字同步至 v5.8.13；修正
   `check_docs_consistency.py` 对 dynamic version 的校验，并仅在 tag

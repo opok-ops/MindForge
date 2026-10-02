@@ -1,3 +1,13 @@
+## [5.8.12] - 2026-10-02
+
+### 修复：搜索/召回边界、API 更新语义与 LangGraph Store 协议
+
+- **权限过滤后 top-k 漏召回**：不可见的高分记忆不再挤掉可访问结果；候选不足时自适应扩大窗口，且只更新最终可见结果的访问统计。拒绝负数、布尔值和非整数 `max_results`。
+- **召回配置与会话隔离**：实际应用 `exclude_categories` / `min_importance`；会话相关召回保留当前会话上下文，不混入其他会话专属记忆。
+- **REST / MCP**：PUT 未提供 `valid_from` / `valid_to` 时保持原有效期；冲突自动调和只接受 JSON 布尔值；嵌入状态异常不再把内部异常详情返回客户端。
+- **LangGraph Store**：支持 namespace 前缀搜索及 `ListNamespacesOp`，按协议使用绝对 `max_depth`；精确区分斜杠分隔段不同的 namespace，并忽略非 Store 记忆；返回可按属性或映射访问的 Item，`PutOp(value=None)` 正确删除并遵循 `None` 返回协议。
+- 新增 11 个回归用例；全量 938 项通过（938 passed）。
+
 ## [5.8.11] - 2026-09-28
 
 ### 修复：LangGraph batch() 未按 Op 类型分发，GetOp 覆盖数据（P1，鱼刃审计）

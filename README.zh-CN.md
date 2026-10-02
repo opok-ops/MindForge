@@ -8,7 +8,7 @@ MindForge 为 AI Agent 提供持久、结构化的长期记忆：四层记忆生
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-5.8.11-green.svg)](https://github.com/opok-ops/MindForge/releases)
+[![Version](https://img.shields.io/badge/version-5.8.12-green.svg)](https://github.com/opok-ops/MindForge/releases)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
 [![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
@@ -30,7 +30,7 @@ MindForge 为 AI Agent 提供持久、结构化的长期记忆：四层记忆生
 - **结构化记忆。** 四层模型（感官 / 短期 / 长期 / 永久），依据艾宾浩斯遗忘曲线自动晋升与衰减。
 - **检索质量。** 六条互补检索通路融合为一份排序结果，而非单一向量索引。
 - **默认加密。** 落盘 AES-256-GCM + PBKDF2 密钥派生；支持导出受信任的加密备份。
-- **开放接口。** MCP Server（33 个工具）、Python SDK、带 Shell 补全的 CLI，以及面向非 Python 应用的 REST API。
+- **开放接口。** MCP Server（56 个工具）、Python SDK、带 Shell 补全的 CLI，以及面向非 Python 应用的 REST API。
 
 ## 快速开始
 

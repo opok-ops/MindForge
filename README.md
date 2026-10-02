@@ -8,7 +8,7 @@ MindForge gives AI agents a persistent, structured long-term memory: a four-tier
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-5.8.11-green.svg)](https://github.com/opok-ops/MindForge/releases)
+[![Version](https://img.shields.io/badge/version-5.8.12-green.svg)](https://github.com/opok-ops/MindForge/releases)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
 [![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
@@ -30,7 +30,7 @@ Key design decisions:
 - **Structured memory.** Four tiers (sensory, short-term, long-term, permanent) with promotion and decay driven by the Ebbinghaus forgetting curve.
 - **Retrieval quality.** Six complementary retrieval paths fused into one ranked result, instead of a single vector index.
 - **Encryption by default.** AES-256-GCM at rest with PBKDF2 key derivation; encrypted backups you can export and trust.
-- **Open interfaces.** MCP server (40 tools), Python SDK, CLI with shell completion, and a REST API for non-Python consumers.
+- **Open interfaces.** MCP server (56 tools), Python SDK, CLI with shell completion, and a REST API for non-Python consumers.
 
 ## Quick Start
 
@@ -89,7 +89,7 @@ MindForge stats
 
 **Integration**
 
-- **MCP server** — 40 tools, drop into Claude Code, OpenClaw, or any MCP client.
+- **MCP server** — 56 tools, drop into Claude Code, OpenClaw, or any MCP client.
 - **Federated memory** — P2P sharing between agents with trust levels, ACLs, and conflict resolution.
 - **REST API** — standard HTTP endpoints for non-Python applications.
 - **CLI** — 200+ commands with bash / zsh / fish completion.
@@ -99,7 +99,7 @@ MindForge stats
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│           MindForge v5.8.11            │
+│           MindForge v5.8.12            │
 │  Cognitive Layer  Personality · KnowledgeGraph       │
 │                   MemoryEvolution · FederatedMemory  │
 ├──────────────────────────────────────────────────────┤

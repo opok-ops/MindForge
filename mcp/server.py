@@ -33,7 +33,7 @@ except ImportError:
     except (ImportError, ValueError):
         # 兜底值：仅当 core/version 完全不可导入时启用。发版时必须与
         # core/version.py 的 __version__ 一起更新（见发版清单），否则漂移。
-        __version__ = "5.8.11"
+        __version__ = "5.8.12"
 
 
 def _import_mindforge():
@@ -1500,9 +1500,12 @@ def h_graph_extract(mf, args):
 
 def h_conflict_reconcile(mf, args):
     try:
+        auto = args.get("auto", True)
+        if not isinstance(auto, bool):
+            raise ValueError("Field 'auto' must be a boolean")
         result = mf.reconcile_conflicts(
             memory_ids=args.get("memory_ids"),
-            auto=bool(args.get("auto", True)))
+            auto=auto)
     except ValueError as e:
         return {"ok": False, "error": _safe_error_msg(e)}
     return {"ok": True, **result}

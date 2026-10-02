@@ -11,7 +11,7 @@ from typing import List, Optional, Any
 from core.storage import StorageEngine, MemoryEntry
 from core.indexer import IndexEngine
 from core.query import QueryEngine, MemoryChunk, RecallResult
-from core.types import MemoryLayer
+from core.types import Importance, MemoryLayer
 
 
 @dataclass
@@ -65,6 +65,9 @@ class RecallEngine:
             kg_chunks = self._kg_enhanced_search(query, config)
             chunks = self._merge_results(chunks, kg_chunks)
 
+        if config.exclude_categories or config.min_importance is not None:
+            chunks = self._apply_config_filters(chunks, config)
+
         if config.use_reranking:
             chunks = self._rerank(chunks, query, config)
 
@@ -85,6 +88,40 @@ class RecallEngine:
             token_estimate=sum(len(c.content) for c in chunks) // 4,
             layers_used=layers_used,
         )
+
+    def _apply_config_filters(self, chunks: List[MemoryChunk],
+                              config: RecallConfig) -> List[MemoryChunk]:
+        """应用 RecallConfig 中声明的排除分类和最低重要度。"""
+        minimum = config.min_importance
+        if minimum is not None:
+            if isinstance(minimum, str):
+                try:
+                    minimum = Importance[minimum.strip().upper()]
+                except KeyError as exc:
+                    raise ValueError(
+                        "min_importance must be LOW/MEDIUM/HIGH/CRITICAL"
+                    ) from exc
+            elif not isinstance(minimum, Importance):
+                if (isinstance(minimum, int) and not isinstance(minimum, bool)
+                        and 0 <= minimum <= 3):
+                    minimum = minimum
+                else:
+                    raise ValueError(
+                        "min_importance must be an Importance, valid name, or rank 0-3"
+                    )
+
+        kept = []
+        excluded = set(config.exclude_categories or [])
+        for chunk in chunks:
+            entry = self.storage.get_memory(chunk.memory_id)
+            if entry is None or entry.category in excluded:
+                continue
+            if minimum is not None:
+                rank = minimum if isinstance(minimum, int) else minimum.to_int()
+                if entry.importance.to_int() < rank:
+                    continue
+            kept.append(chunk)
+        return kept
 
     def _kg_enhanced_search(self, query: str, config: RecallConfig) -> List[MemoryChunk]:
         """知识图谱增强搜索"""
@@ -208,6 +245,7 @@ class RecallEngine:
 
         result = self.recall(
             query=current_query,
+            session_id=session_id,
             config=RecallConfig(max_results=limit),
         )
 
@@ -217,7 +255,15 @@ class RecallEngine:
         for c in result.chunks:
             if c.memory_id not in seen_ids:
                 entry = self.storage.get_memory(c.memory_id)
-                if entry:
+                if entry and entry.source_session in ("", session_id):
                     entries.append(entry)
                     seen_ids.add(c.memory_id)
-        return entries
+        # 会话上下文即使未命中当前查询，也应保留在会话召回结果中；
+        # 不把其他会话的记忆混入该上下文。
+        for entry in session_memories:
+            if entry.id not in seen_ids:
+                entries.append(entry)
+                seen_ids.add(entry.id)
+            if len(entries) >= limit:
+                break
+        return entries[:limit]

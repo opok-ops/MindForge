@@ -180,7 +180,9 @@ class QueryEngine:
                layers: Optional[List[MemoryLayer]] = None,
                agent_id: str = "",
                session_id: str = "",
-               use_embedding: bool = True) -> RecallResult:
+               use_embedding: bool = True,
+               *, _update_access: bool = True,
+               _record_search: bool = True) -> RecallResult:
         """搜索记忆
 
         v5.4.5 新增向量检索两阶段搜索：
@@ -193,6 +195,20 @@ class QueryEngine:
         """
         import time
         start = time.time()
+        if (isinstance(max_results, bool) or not isinstance(max_results, int)
+                or max_results < 0):
+            raise ValueError("max_results must be a non-negative integer")
+        if max_results == 0:
+            if _record_search:
+                try:
+                    self.storage.record_search(query)
+                except Exception:
+                    pass
+            return RecallResult(
+                chunks=[], total_found=0,
+                query_time_ms=round((time.time() - start) * 1000, 2),
+                strategy_used="none", token_estimate=0, layers_used=[],
+            )
 
         # v5.2.8 修复：CLI 等短生命周期进程中，内存 TF-IDF 索引为空，
         # 导致跨进程搜索永远返回 0 结果。搜索前先从持久层水合索引。
@@ -372,16 +388,18 @@ class QueryEngine:
             # v5.5.2 fix: update access stats for returned results.
             # The cached fetch intentionally skips access updates, so we
             # update them here for memories that actually make it to results.
-            self.storage._update_access(entry, agent_id, session_id)
+            if _update_access:
+                self.storage._update_access(entry, agent_id, session_id)
 
             if len(chunks) >= max_results:
                 break
 
         # v5.7.0 P2：记录搜索历史（审计写入失败不阻断主路径）
-        try:
-            self.storage.record_search(query)
-        except Exception:
-            pass
+        if _record_search:
+            try:
+                self.storage.record_search(query)
+            except Exception:
+                pass
 
         elapsed = (time.time() - start) * 1000
         token_estimate = sum(len(c.content) for c in chunks) // 4

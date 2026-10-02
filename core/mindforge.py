@@ -602,31 +602,56 @@ class MindForge:
             query = ""
         elif not isinstance(query, str):
             query = str(query)
-        result = self._query.search(
-            query=query,
-            max_results=max_results,
-            min_relevance=min_relevance,
-            categories=categories,
-            layers=layers,
-            agent_id=agent_id,
-            session_id=session_id,
-            use_embedding=use_embedding,
-        )
-        # 批量获取记忆条目做隐私过滤，避免 N+1 查询
-        if result.chunks:
+        if (isinstance(max_results, bool) or not isinstance(max_results, int)
+                or max_results < 0):
+            raise ValueError("max_results must be a non-negative integer")
+
+        # 拉取候选后再做权限过滤时，不可见的高分结果不能占用调用方的
+        # top-k 名额。逐步扩大候选窗口，直到填满可见结果或候选已耗尽。
+        candidate_limit = max_results
+        result = None
+        entry_map = {}
+        while True:
+            result = self._query.search(
+                query=query,
+                max_results=candidate_limit,
+                min_relevance=min_relevance,
+                categories=categories,
+                layers=layers,
+                agent_id=agent_id,
+                session_id=session_id,
+                use_embedding=use_embedding,
+                _update_access=False,
+                _record_search=False,
+            )
             mem_ids = [c.memory_id for c in result.chunks]
-            entries = self._storage.get_memories_by_ids(mem_ids)
+            entries = self._storage.get_memories_by_ids(mem_ids) if mem_ids else []
             entry_map = {e.id: e for e in entries if e is not None}
-            filtered_chunks = []
+            visible = []
             for chunk in result.chunks:
                 entry = entry_map.get(chunk.memory_id)
                 if entry is None:
                     continue
                 ok, _ = self.privacy_engine.check_access(entry, agent_id, session_id)
                 if ok:
-                    filtered_chunks.append(chunk)
-            result.chunks = filtered_chunks
-            result.total_found = len(filtered_chunks)
+                    visible.append(chunk)
+
+            if (max_results == 0 or len(visible) >= max_results
+                    or len(result.chunks) < candidate_limit):
+                result.chunks = visible[:max_results]
+                break
+            candidate_limit *= 2
+
+        # 只对最终返回的可访问条目更新访问统计，避免越权候选产生副作用。
+        for chunk in result.chunks:
+            entry = entry_map.get(chunk.memory_id)
+            if entry is not None:
+                self._storage._update_access(entry, agent_id, session_id)
+        try:
+            self._storage.record_search(query)
+        except Exception:
+            pass
+        result.total_found = len(result.chunks)
         return result
 
     def rebuild_embeddings(self, batch_size: int = 100,

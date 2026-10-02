@@ -59,10 +59,9 @@ jobs:
           sys.path.insert(0, '.')
           from mcp.server import _handle_tools_list
           tools = _handle_tools_list({})['tools']
-          # 精确锁定工具数：官网/README 对外宣称 35 个（v5.7.6 新增
-          # memory_supersede / memory_valid_at），此前阈值只卡 >=30，
-          # 误删 3 个工具 CI 也不会报警。改为等值断言，让数量回归可被守护。
-          assert len(tools) == 48, f'Expected exactly 48 tools, got {len(tools)}'
+          # 精确锁定工具数：v5.8.6 增加 8 个联邦工具后为 56。
+          # 等值断言守护工具意外增删；发版新增工具时同步更新此值。
+          assert len(tools) == 56, f'Expected exactly 56 tools, got {len(tools)}'
           print(f'MCP tools: {len(tools)} OK')
           "
 

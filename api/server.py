@@ -779,7 +779,8 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                     st = self.mindforge.get_embedding_status()
                     self._send_json(st)
                 except Exception as e:
-                    self._send_json({"error": str(e)}, 500)
+                    _log_unhandled_api_error(e)
+                    self._send_json({"error": "Internal server error"}, 500)
             elif path == "/api/skills/stats":
                 self._send_json(self.mindforge.skill_stats())
             elif path == "/api/skills/match":
@@ -935,7 +936,10 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                     return
                 self._send_json({"status": "forgotten", "id": mid})
             elif path == "/api/conflicts/reconcile":
-                auto = bool(body.get("auto", True))
+                auto = body.get("auto", True)
+                if not isinstance(auto, bool):
+                    self._send_json({"error": "Field 'auto' must be a boolean"}, 400)
+                    return
                 memory_ids = body.get("memory_ids")
                 if memory_ids is not None and not isinstance(memory_ids, list):
                     self._send_json({"error": "'memory_ids' must be a list"}, 400)
@@ -1091,8 +1095,14 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                     )
                     importance = _validate_importance(body.get("importance"))
                     starred = _validate_starred(body.get("starred"))
-                    valid_from = _validate_float_ts(body.get("valid_from"))
-                    valid_to = _validate_float_ts(body.get("valid_to"))
+                    valid_from = (
+                        _validate_float_ts(body.get("valid_from"))
+                        if "valid_from" in body else None
+                    )
+                    valid_to = (
+                        _validate_float_ts(body.get("valid_to"))
+                        if "valid_to" in body else None
+                    )
                 except ValueError as ve:
                     self._send_json({"error": str(ve)}, 400)
                     return

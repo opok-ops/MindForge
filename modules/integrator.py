@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import List, Dict, Optional
 from collections import defaultdict
 
-from core.storage import StorageEngine, MemoryEntry
+from mindforge.core.storage import StorageEngine, MemoryEntry
 
 logger = logging.getLogger(__name__)
 

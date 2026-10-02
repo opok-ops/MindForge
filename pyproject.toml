@@ -22,9 +22,6 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-# 运行依赖：仅 cryptography。加 <52 上限作为供应链护栏，
-# 避免未来大版本（可能含破坏性变更）在无人维护期间被自动拉入。
-# 确定性安装请使用仓库根目录的 requirements.txt。
 dependencies = ["cryptography>=50.0.1,<52"]
 
 [project.urls]
@@ -34,20 +31,36 @@ Documentation = "https://opok-ops.github.io/MindForge/"
 Source = "https://github.com/opok-ops/MindForge"
 
 [project.scripts]
-MindForge = "cli.main:main"
-MindForge-mcp = "mcp.server:main"
+MindForge = "mindforge.cli.main:main"
+MindForge-mcp = "mindforge.mcp.server:main"
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-cov"]
 embedding = ["sentence-transformers>=2.2.0"]
 
+# 所有包统一在 mindforge.* 命名空间下，避免 core/mcp/api/cli/modules/adapters
+# 直接进入 site-packages 顶层与其他库冲突。
+# package-dir 把源码目录映射到命名空间包，无需物理移动文件。
 [tool.setuptools]
-py-modules = ["MindForge"]
+packages = [
+    "mindforge",
+    "mindforge.core",
+    "mindforge.modules",
+    "mindforge.cli",
+    "mindforge.api",
+    "mindforge.mcp",
+    "mindforge.adapters",
+]
+
+[tool.setuptools.package-dir]
+"mindforge" = "mindforge"
+"mindforge.core" = "core"
+"mindforge.modules" = "modules"
+"mindforge.cli" = "cli"
+"mindforge.api" = "api"
+"mindforge.mcp" = "mcp"
+"mindforge.adapters" = "adapters"
 
 # 版本号唯一真值：core/version.py 的 __version__
-# 发版时只需改 core/version.py，不再需要同步 pyproject.toml。
 [tool.setuptools.dynamic]
-version = {attr = "core.version.__version__"}
-
-[tool.setuptools.packages.find]
-exclude = ["tests*", "website*", "examples*", "data*", "benchmarks*", "scripts*", "docs*", "plugins*"]
+version = {attr = "mindforge.core.version.__version__"}

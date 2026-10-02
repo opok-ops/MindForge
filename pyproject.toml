@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "MindForge"
-version = "5.8.12"
+dynamic = ["version"]
 description = "AI Agent 终身记忆系统 - 四层记忆架构 · 知识图谱 · 多模态支持"
 readme = {file = "README.md", content-type = "text/markdown"}
 license = {text = "MIT"}
@@ -44,5 +44,10 @@ embedding = ["sentence-transformers>=2.2.0"]
 [tool.setuptools]
 py-modules = ["MindForge"]
 
+# 版本号唯一真值：core/version.py 的 __version__
+# 发版时只需改 core/version.py，不再需要同步 pyproject.toml。
+[tool.setuptools.dynamic]
+version = {attr = "core.version.__version__"}
+
 [tool.setuptools.packages.find]
-exclude = ["tests*", "website*", "examples*", "data*"]
+exclude = ["tests*", "website*", "examples*", "data*", "benchmarks*", "scripts*", "docs*", "plugins*"]

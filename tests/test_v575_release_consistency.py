@@ -108,7 +108,7 @@ class TestWebsiteConsistency(unittest.TestCase):
         index = _read("website/index.html")
         self.assertIn(f'"softwareVersion": "{_VERSION}"', index)
         self.assertIn(f'class="brand-ver">v{_VERSION}<', index)
-        self.assertIn(f"Successfully installed mindforge-{_VERSION}", index)
+        self.assertIn(f"Successfully installed mindforge-memory-{_VERSION}", index)
         self.assertIn(f"敲到 v{_VERSION}</h2>", index)
         # hero 徽标：排除 v6 路线图 chip-badge 块后必须命中当前版本
         hero = []

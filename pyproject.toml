@@ -36,7 +36,7 @@ MindForge-mcp = "mindforge.mcp.server:main"
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-cov"]
-embedding = ["sentence-transformers>=2.2.0"]
+embedding = ["sentence-transformers>=2.7.0"]
 
 # 所有包统一在 mindforge.* 命名空间下，避免 core/mcp/api/cli/modules/adapters
 # 直接进入 site-packages 顶层与其他库冲突。

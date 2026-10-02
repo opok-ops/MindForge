@@ -152,7 +152,7 @@ Retrieval quality (500 multi-domain memories, 50 annotated queries):
 **Claude Code**
 
 ```python
-from MindForge.adapters import ClaudeCodeAdapter
+from adapters import ClaudeCodeAdapter
 
 adapter = ClaudeCodeAdapter.from_env()
 adapter.remember("User prefers concise code style", ["preferences"])

@@ -4,8 +4,7 @@ MindForge OpenClaw 适配器
 
 from typing import List, Dict, Optional
 
-# v5.6.8 修复：适配器上报的版本号此前硬编码为 5.0.1（早已过期）。改为引用唯一真值。
-from core.version import __version__ as _MF_VERSION
+from mindforge.core.version import __version__ as _MF_VERSION
 
 
 class OpenClawAdapter:
@@ -67,13 +66,13 @@ class OpenClawAdapter:
 
     def consolidate(self):
         """触发记忆巩固"""
-        from modules.evolution import MemoryEvolution
+        from mindforge.modules.evolution import MemoryEvolution
         evo = MemoryEvolution(self.cm.storage)
         return evo.consolidate(self.agent_id, self.session_id)
 
     def get_personality(self, user_id: str = "default") -> Dict:
         """获取用户画像"""
-        from modules.personality import PersonalityEngine
+        from mindforge.modules.personality import PersonalityEngine
         pe = PersonalityEngine(self.cm.storage)
         return pe.get_recommended_style(user_id)
 

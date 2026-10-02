@@ -17,9 +17,7 @@ class ClaudeCodeAdapter:
     @classmethod
     def from_env(cls):
         """从环境变量创建"""
-        # v5.6.8 修复：`core` 已是顶层包，`..core` 为越界相对导入，调用时必抛
-        # ImportError。改为与 modules/*、core/* 一致的绝对导入。
-        from core import MindForge, MemoryConfig
+        from mindforge.core import MindForge, MemoryConfig
 
         db_path = os.environ.get("MindForge_DB_PATH", "./data/memory.db")
         key_file = os.environ.get("MindForge_KEY_FILE", "./data/.key")
@@ -75,12 +73,12 @@ class ClaudeCodeAdapter:
 
     def learn_user_preference(self, user_message: str, response: str):
         """学习用户偏好"""
-        from modules.personality import PersonalityEngine
+        from mindforge.modules.personality import PersonalityEngine
         pe = PersonalityEngine(self.cm.storage)
         pe.learn_from_interaction("default", user_message, response)
 
     def get_user_style(self) -> Dict:
         """获取用户风格偏好"""
-        from modules.personality import PersonalityEngine
+        from mindforge.modules.personality import PersonalityEngine
         pe = PersonalityEngine(self.cm.storage)
         return pe.get_recommended_style()

@@ -97,6 +97,8 @@ MindForge stats
 
 ## Architecture
 
+![MindForge Architecture](docs/architecture.png)
+
 ```
 ┌──────────────────────────────────────────────────────┐
 │           MindForge v5.8.13            │

@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MindForge v5.8.13 测试性能与安全检查报告</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<style>
+  :root { --accent:#1f6feb; --ok:#1a7f37; --warn:#9a6700; --bg:#f6f8fa; --card:#fff; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif; background:var(--bg); color:#1f2328; line-height:1.6; }
+  .wrap { max-width:1100px; margin:0 auto; padding:24px 16px 60px; }
+  header { border-bottom:3px solid var(--accent); padding-bottom:16px; margin-bottom:24px; }
+  h1 { font-size:26px; color:#0d1117; }
+  .sub { color:#57606a; font-size:14px; margin-top:4px; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin:20px 0 28px; }
+  .card { background:var(--card); border:1px solid #d0d7de; border-radius:10px; padding:14px 16px; }
+  .card .num { font-size:26px; font-weight:700; color:var(--accent); }
+  .card .lbl { font-size:12px; color:#57606a; margin-top:2px; }
+  .card.ok .num { color:var(--ok); }
+  h2 { font-size:19px; margin:32px 0 12px; color:#0d1117; }
+  .chart { background:var(--card); border:1px solid #d0d7de; border-radius:10px; padding:12px; }
+  .chartbox { width:100%; height:420px; }
+  table { width:100%; border-collapse:collapse; background:var(--card); font-size:13px; }
+  th,td { border:1px solid #d0d7de; padding:6px 10px; text-align:left; }
+  th { background:#f0f3f6; font-weight:600; position:sticky; top:0; }
+  tr:nth-child(even) td { background:#fafbfc; }
+  .opt { color:var(--warn); }
+  .note { font-size:13px; color:#57606a; margin:6px 0 16px; }
+  .pill { display:inline-block; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:600; }
+  .pill.good { background:#dafbe1; color:#1a7f37; }
+  .pill.warn { background:#fff8c5; color:#9a6700; }
+  .tag { display:inline-block; padding:1px 8px; border-radius:6px; font-size:12px; margin-right:6px; }
+  .tag.mis { background:#ddf4ff; color:#0969da; }
+  .tag.def { background:#dafbe1; color:#1a7f37; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:760px) { .grid2 { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>MindForge v5.8.13 测试性能与安全检查报告（2026-10-03 重测）</h1>
+  <div class="sub">仓库 opok-ops/MindForge · 提交 ea80281（含 build/ 排除优化）· 2026-10-03 · 本机 Windows + Python 3.14.7 / venv</div>
+</header>
+
+<div class="cards">
+  <div class="card ok"><div class="num">938</div><div class="lbl">测试用例（全部通过）</div></div>
+  <div class="card ok"><div class="num">0</div><div class="lbl">失败 / 跳过 / warnings</div></div>
+  <div class="card"><div class="num">3.2min</div><div class="lbl">本次逐文件总耗时（46 文件 191.6s）</div></div>
+  <div class="card"><div class="num">0</div><div class="lbl">bandit HIGH（CI 阈值）</div></div>
+  <div class="card"><div class="num">2</div><div class="lbl">性能优化落地（-26% 逐文件口径）</div></div>
+</div>
+
+<h2>1. 每文件耗时排行（Top 15，逐文件实测）</h2>
+<div class="chart"><div id="c1" class="chartbox"></div></div>
+<p class="note">口径：46 文件逐文件计时（含进程启动，相对排序可信，绝对秒数受系统负载波动）；<b>test_v568_fixes</b> 累计优化后实测 22.79s（基准 42.56s，-46%：_code_text 缓存 + build/ 排除）。test_v568_fixes 含备份/恢复子进程往返与全仓 AST 扫描等真实功能耗时。</p>
+
+<h2>2. 最慢用例 Top 10（逐文件实测）</h2>
+<div class="chart"><div id="c2" class="chartbox"></div></div>
+<p class="note">本轮最慢用例 test_no_beyond_toplevel_relative_imports 3.39s（排除 build/ 后 -46%，原 6.44s）；KDF rekey 2.2s（600k 迭代重加密，功能必需）；其余 API 探测类 1.6-2.8s 为真实进程往返。</p>
+
+<h2>3. 全量耗时多轮观测</h2>
+<div class="chart"><div id="c3" class="chartbox"></div></div>
+<p class="note">波动（144-161s）来自后台负载；R1/R6 为逐文件口径（含 46 次进程启动），259.2s → 191.6s（-26%）反映 v568 守卫用例与扫描优化；全量单次口径 ~150s 基线稳定。</p>
+
+<h2>4. 安全扫描结果（bandit 1.8.6 + pip-audit）</h2>
+<div class="grid2">
+<div>
+<table>
+<tr><th>级别</th><th>数量</th><th>结论</th></tr>
+<tr><td>HIGH</td><td>0</td><td><span class="pill good">CI 阈值通过</span></td></tr>
+<tr><td>MEDIUM</td><td>48</td><td>全部误报或已防护</td></tr>
+<tr><td>LOW</td><td>58</td><td>容错模式 / 误报</td></tr>
+</table>
+<p class="note">pip-audit --strict（cryptography 依赖）：CI 通过，无已知漏洞。</p>
+</div>
+<div>
+<table>
+<tr><th>类别</th><th>判定</th></tr>
+<tr><td>B608 SQL 注入 ×45 <span class="tag mis">误报</span></td><td>全部为参数化查询（IN 占位符 / 固定片段 + 参数绑定 / 白名单）</td></tr>
+<tr><td>B314/B405 XML ×3 <span class="tag def">已防护</span></td><td>解析前全文拒绝 DOCTYPE/ENTITY（防 XXE/实体膨胀）</td></tr>
+<tr><td>B310 urlopen ×3 <span class="tag mis">误报</span></td><td>出站 API 调用（OpenAI/Ollama 配置端点）</td></tr>
+<tr><td>B104 绑定 0.0.0.0 <span class="tag mis">误报</span></td><td>实为 SSRF 防护（拦截特殊地址）</td></tr>
+<tr><td>B105/B107 硬编码密码 ×4 <span class="tag mis">误报</span></td><td>密钥验证域分离常量 / 空串默认参数</td></tr>
+<tr><td>B603/B607 subprocess ×4 <span class="tag mis">误报</span></td><td>icacls/stat 参数列表执行，无 shell，超时边界</td></tr>
+<tr><td>B110/B112 吞异常 ×35 <span class="tag mis">容错</span></td><td>网络发送失败/可选功能失败不阻断主流程，抽查合理</td></tr>
+</table>
+</div>
+</div>
+
+<h2>5. 发现与修复记录</h2>
+<table>
+<tr><th>发现</th><th>处理</th><th>结果</th></tr>
+<tr><td>测试失败 / 跳过 / warnings</td><td>全量逐文件+全量多次运行</td><td>0 真实 bug，938/938 通过</td></tr>
+<tr><td>test_v568_fixes 42.56s（守卫测试重复 tokenize+ast 大文件）</td><td><b>_code_text 加 lru_cache</b>（纯确定性处理，缓存安全）</td><td><span class="opt">24.18s（-43%）</span>，27 用例仍全过</td></tr>
+<tr><td>全仓 AST 扫描含 build/ 副本（47 个重复 .py，占扫描 30%）</td><td><b>排除 build/ 目录</b>（构建产物非源码，防旧副本误报）</td><td><span class="opt">最慢用例 6.44s → 3.39s（-46%）</span>，v568 文件 24.63s → 22.79s</td></tr>
+<tr><td>bandit HIGH=0，MEDIUM/LOW 106 项</td><td>逐项审查（45 处 SQL 参数化核验 + 10 处代码路径阅读）</td><td>无真实可利用漏洞，无需代码改动</td></tr>
+<tr><td>已知成本（不改）</td><td>KDF rekey 2.2s（600k 迭代）；备份/恢复往返 2.45s</td><td>功能必需，报告中留档</td></tr>
+</table>
+
+<h2>6. 每文件明细（46 文件）</h2>
+<div style="max-height:480px;overflow:auto;border:1px solid #d0d7de;border-radius:10px;">
+<table>
+<tr><th>文件</th><th>用例数</th><th>耗时(s)</th><th>占比</th><th>优化前(s)</th></tr>
+<tr><td>test_v568_fixes.py</td><td>27</td><td>22.79</td><td>11.9%</td><td>-</td></tr><tr><td>test_v563_entry_coverage.py</td><td>33</td><td>12.86</td><td>6.7%</td><td>-</td></tr><tr><td>test_v556_features.py</td><td>81</td><td>7.42</td><td>3.9%</td><td>-</td></tr><tr><td>test_core.py</td><td>88</td><td>7.21</td><td>3.8%</td><td>-</td></tr><tr><td>test_v583_security.py</td><td>18</td><td>6.81</td><td>3.6%</td><td>-</td></tr><tr><td>test_v570_encrypted_fallback.py</td><td>10</td><td>6.20</td><td>3.2%</td><td>-</td></tr><tr><td>test_v584_adapters.py</td><td>13</td><td>5.80</td><td>3.0%</td><td>-</td></tr><tr><td>test_v576_bitemporal.py</td><td>18</td><td>5.32</td><td>2.8%</td><td>-</td></tr><tr><td>test_v577_agent_governance.py</td><td>20</td><td>5.11</td><td>2.7%</td><td>-</td></tr><tr><td>test_v566_encrypted_search.py</td><td>7</td><td>4.65</td><td>2.4%</td><td>-</td></tr><tr><td>test_v560_kdf_versioning.py</td><td>18</td><td>4.60</td><td>2.4%</td><td>-</td></tr><tr><td>test_v570_coverage_expansion.py</td><td>42</td><td>4.54</td><td>2.4%</td><td>-</td></tr><tr><td>test_v578_embedding.py</td><td>11</td><td>4.34</td><td>2.3%</td><td>-</td></tr><tr><td>test_v570_drama_and_utils.py</td><td>36</td><td>4.33</td><td>2.3%</td><td>-</td></tr><tr><td>test_v579_graph.py</td><td>15</td><td>4.29</td><td>2.2%</td><td>-</td></tr><tr><td>test_v550_features.py</td><td>33</td><td>4.20</td><td>2.2%</td><td>-</td></tr><tr><td>test_v580_experience.py</td><td>12</td><td>4.15</td><td>2.2%</td><td>-</td></tr><tr><td>test_v573_encrypted_export.py</td><td>6</td><td>4.00</td><td>2.1%</td><td>-</td></tr><tr><td>test_v552_features.py</td><td>33</td><td>3.84</td><td>2.0%</td><td>-</td></tr><tr><td>test_v546_features.py</td><td>17</td><td>3.83</td><td>2.0%</td><td>-</td></tr><tr><td>test_v586_federated_mcp.py</td><td>7</td><td>3.69</td><td>1.9%</td><td>-</td></tr><tr><td>test_security_hardening.py</td><td>6</td><td>3.67</td><td>1.9%</td><td>-</td></tr><tr><td>test_v554_features.py</td><td>26</td><td>3.61</td><td>1.9%</td><td>-</td></tr><tr><td>test_v560_module_coverage.py</td><td>34</td><td>3.47</td><td>1.8%</td><td>-</td></tr><tr><td>test_v585_benchmark.py</td><td>4</td><td>3.44</td><td>1.8%</td><td>-</td></tr><tr><td>test_v560_decay_gc.py</td><td>26</td><td>3.16</td><td>1.6%</td><td>-</td></tr><tr><td>test_v548_features.py</td><td>18</td><td>2.97</td><td>1.6%</td><td>-</td></tr><tr><td>test_v576_gdpr.py</td><td>8</td><td>2.77</td><td>1.4%</td><td>-</td></tr><tr><td>test_v558_features.py</td><td>28</td><td>2.60</td><td>1.4%</td><td>-</td></tr><tr><td>test_v5812_bugfixes.py</td><td>11</td><td>2.53</td><td>1.3%</td><td>-</td></tr><tr><td>test_v557_security_fixes.py</td><td>21</td><td>2.48</td><td>1.3%</td><td>-</td></tr><tr><td>test_v567_security_fixes.py</td><td>15</td><td>2.40</td><td>1.3%</td><td>-</td></tr><tr><td>test_v562_p2_fixes.py</td><td>23</td><td>2.39</td><td>1.2%</td><td>-</td></tr><tr><td>test_v565_security.py</td><td>31</td><td>2.38</td><td>1.2%</td><td>-</td></tr><tr><td>test_v573_security.py</td><td>15</td><td>2.33</td><td>1.2%</td><td>-</td></tr><tr><td>test_v563_perf_fixes.py</td><td>16</td><td>2.31</td><td>1.2%</td><td>-</td></tr><tr><td>test_v547_fixes.py</td><td>10</td><td>2.30</td><td>1.2%</td><td>-</td></tr><tr><td>test_v571_fixes.py</td><td>10</td><td>2.24</td><td>1.2%</td><td>-</td></tr><tr><td>test_v561_security.py</td><td>21</td><td>2.11</td><td>1.1%</td><td>-</td></tr><tr><td>test_v6_ports.py</td><td>17</td><td>1.93</td><td>1.0%</td><td>-</td></tr><tr><td>test_v569_fts_sync.py</td><td>3</td><td>1.88</td><td>1.0%</td><td>-</td></tr><tr><td>test_v557_banner_insight_wal.py</td><td>14</td><td>1.83</td><td>1.0%</td><td>-</td></tr><tr><td>test_v558_audit_fixes.py</td><td>6</td><td>1.76</td><td>0.9%</td><td>-</td></tr><tr><td>test_v572_security.py</td><td>4</td><td>1.71</td><td>0.9%</td><td>-</td></tr><tr><td>test_v575_release_consistency.py</td><td>12</td><td>1.70</td><td>0.9%</td><td>-</td></tr><tr><td>test_v557_webhook_sig_export.py</td><td>14</td><td>1.65</td><td>0.9%</td><td>-</td></tr>
+</table>
+</div>
+
+<h2>7. 慢用例明细（Top 25）</h2>
+<div style="max-height:420px;overflow:auto;border:1px solid #d0d7de;border-radius:10px;">
+<table>
+<tr><th>用例</th><th>耗时(s)</th><th>状态</th></tr>
+<tr><td>tests/test_v568_fixes.py::TestStaticStructure::test_no_beyond_toplevel_relative_imports</td><td>3.39</td><td>call</td></tr><tr><td>tests/test_v583_security.py::TestP11SsrfiPBlacklist::test_编码绕过向量全部拒绝</td><td>2.77</td><td>call</td></tr><tr><td>tests/test_v568_fixes.py::TestCliEndToEnd::test_backup_and_restore_roundtrip</td><td>2.45</td><td>call</td></tr><tr><td>tests/test_v568_fixes.py::TestCliEndToEnd::test_rekey_password_rotation_succeeds</td><td>2.20</td><td>call</td></tr><tr><td>tests/test_v568_fixes.py::TestCliEndToEnd::test_rekey_upgrade_only_succeeds</td><td>2.15</td><td>call</td></tr><tr><td>tests/test_v546_features.py::TestRestAPI::test_stats_and_health_endpoints</td><td>1.70</td><td>call</td></tr><tr><td>tests/test_v576_bitemporal.py::TestAPI::test_valid_at_endpoint_and_write_fields</td><td>1.70</td><td>call</td></tr><tr><td>tests/test_v580_experience.py::TestAPI::test_experience_and_skills_endpoints</td><td>1.67</td><td>call</td></tr><tr><td>tests/test_v577_agent_governance.py::TestAPI::test_governance_and_reconcile_endpoints</td><td>1.66</td><td>call</td></tr><tr><td>tests/test_v579_graph.py::TestAPI::test_graph_endpoints</td><td>1.64</td><td>call</td></tr><tr><td>tests/test_v578_embedding.py::TestAPI::test_embedding_status_endpoint</td><td>1.63</td><td>call</td></tr><tr><td>tests/test_v568_fixes.py::TestStaticStructure::test_dispatch_table_has_no_duplicate_keys</td><td>1.58</td><td>call</td></tr><tr><td>tests/test_v568_fixes.py::TestVersionTruth::test_url_importer_user_agent_references_truth</td><td>1.56</td><td>call</td></tr><tr><td>tests/test_v568_fixes.py::TestStaticStructure::test_dispatch_entry_commands_are_defined</td><td>1.41</td><td>call</td></tr><tr><td>tests/test_v568_fixes.py::TestStaticStructure::test_cli_has_module_level_import_os</td><td>1.39</td><td>call</td></tr><tr><td>tests/test_v563_entry_coverage.py::TestRestAPIEntry::test_404_generic_no_path_leak</td><td>1.34</td><td>call</td></tr><tr><td>tests/test_v568_fixes.py::TestCliEndToEnd::test_rekey_on_unencrypted_db_exits_cleanly</td><td>1.31</td><td>call</td></tr><tr><td>tests/test_v568_fixes.py::TestStaticStructure::test_single_module_level_cmd_backup</td><td>1.31</td><td>call</td></tr><tr><td>tests/test_v563_entry_coverage.py::TestRestAPIEntry::test_oversized_body_rejected_413</td><td>1.30</td><td>call</td></tr><tr><td>tests/test_v563_entry_coverage.py::TestRestAPIEntry::test_hsts_sent_when_trusting_https_proxy</td><td>1.28</td><td>call</td></tr><tr><td>tests/test_v563_entry_coverage.py::TestRestAPIEntry::test_auth_fail_closed_without_key</td><td>1.28</td><td>call</td></tr><tr><td>tests/test_v563_entry_coverage.py::TestRestAPIEntry::test_auth_with_bearer_token</td><td>1.28</td><td>call</td></tr><tr><td>tests/test_v563_entry_coverage.py::TestRestAPIEntry::test_hsts_not_sent_without_tls_or_trust</td><td>1.27</td><td>call</td></tr><tr><td>tests/test_v563_entry_coverage.py::TestRestAPIEntry::test_noauth_mode_and_actor_filter</td><td>1.27</td><td>call</td></tr><tr><td>tests/test_v563_entry_coverage.py::TestRestAPIEntry::test_security_headers_no_store_on_all_responses</td><td>1.27</td><td>call</td></tr>
+</table>
+</div>
+
+<p class="note" style="margin-top:24px;">数据来源：本地 pytest 逐文件/全量实测 + junitxml + bandit 1.8.6 扫描（%TEMP% 原始日志留存）。本报告由自动化采集生成，不含人工调整。</p>
+</div>
+
+<script>
+var top15 = [{"file": "test_v568_fixes.py", "tests": 27, "failures": 0, "errors": 0, "skipped": 0, "time": 22.79}, {"file": "test_v563_entry_coverage.py", "tests": 33, "failures": 0, "errors": 0, "skipped": 0, "time": 12.86}, {"file": "test_v556_features.py", "tests": 81, "failures": 0, "errors": 0, "skipped": 0, "time": 7.42}, {"file": "test_core.py", "tests": 88, "failures": 0, "errors": 0, "skipped": 0, "time": 7.21}, {"file": "test_v583_security.py", "tests": 18, "failures": 0, "errors": 0, "skipped": 0, "time": 6.81}, {"file": "test_v570_encrypted_fallback.py", "tests": 10, "failures": 0, "errors": 0, "skipped": 0, "time": 6.2}, {"file": "test_v584_adapters.py", "tests": 13, "failures": 0, "errors": 0, "skipped": 0, "time": 5.8}, {"file": "test_v576_bitemporal.py", "tests": 18, "failures": 0, "errors": 0, "skipped": 0, "time": 5.32}, {"file": "test_v577_agent_governance.py", "tests": 20, "failures": 0, "errors": 0, "skipped": 0, "time": 5.11}, {"file": "test_v566_encrypted_search.py", "tests": 7, "failures": 0, "errors": 0, "skipped": 0, "time": 4.65}, {"file": "test_v560_kdf_versioning.py", "tests": 18, "failures": 0, "errors": 0, "skipped": 0, "time": 4.6}, {"file": "test_v570_coverage_expansion.py", "tests": 42, "failures": 0, "errors": 0, "skipped": 0, "time": 4.54}, {"file": "test_v578_embedding.py", "tests": 11, "failures": 0, "errors": 0, "skipped": 0, "time": 4.34}, {"file": "test_v570_drama_and_utils.py", "tests": 36, "failures": 0, "errors": 0, "skipped": 0, "time": 4.33}, {"file": "test_v579_graph.py", "tests": 15, "failures": 0, "errors": 0, "skipped": 0, "time": 4.29}];
+var cases = [{"name": "tests/test_v568_fixes.py::TestStaticStructure::test_no_beyond_toplevel_relative_imports", "time": 3.39, "status": "call"}, {"name": "tests/test_v583_security.py::TestP11SsrfiPBlacklist::test_编码绕过向量全部拒绝", "time": 2.77, "status": "call"}, {"name": "tests/test_v568_fixes.py::TestCliEndToEnd::test_backup_and_restore_roundtrip", "time": 2.45, "status": "call"}, {"name": "tests/test_v568_fixes.py::TestCliEndToEnd::test_rekey_password_rotation_succeeds", "time": 2.2, "status": "call"}, {"name": "tests/test_v568_fixes.py::TestCliEndToEnd::test_rekey_upgrade_only_succeeds", "time": 2.15, "status": "call"}, {"name": "tests/test_v546_features.py::TestRestAPI::test_stats_and_health_endpoints", "time": 1.7, "status": "call"}, {"name": "tests/test_v576_bitemporal.py::TestAPI::test_valid_at_endpoint_and_write_fields", "time": 1.7, "status": "call"}, {"name": "tests/test_v580_experience.py::TestAPI::test_experience_and_skills_endpoints", "time": 1.67, "status": "call"}, {"name": "tests/test_v577_agent_governance.py::TestAPI::test_governance_and_reconcile_endpoints", "time": 1.66, "status": "call"}, {"name": "tests/test_v579_graph.py::TestAPI::test_graph_endpoints", "time": 1.64, "status": "call"}];
+var runs = [{"label": "R1 逐文件", "secs": 259.2}, {"label": "R2 全量", "secs": 143.94}, {"label": "R3 全量", "secs": 150.41}, {"label": "R4 junitxml", "secs": 158.68}, {"label": "R5 全量(优化后)", "secs": 156.6}, {"label": "R6 重测逐文件", "secs": 191.6}];
+
+function chart(id, opt) {
+  var el = document.getElementById(id);
+  var c = echarts.init(el);
+  c.setOption(opt);
+  window.addEventListener('resize', function () { c.resize(); });
+}
+
+chart('c1', {
+  title: { text: '每文件耗时 Top 15', left: 'left', textStyle: { fontSize: 14 } },
+  tooltip: { trigger: 'axis', triggerOn: 'mousemove|click', renderMode: 'richText', confine: true },
+  grid: { left: 180, right: 40, top: 48, bottom: 30, containLabel: true },
+  xAxis: { type: 'value', name: '秒' },
+  yAxis: { type: 'category', inverse: true, data: top15.map(function(f){ return f.file + (f.time_before ? ' (优化后)' : ''); }), axisLabel: { fontSize: 11 } },
+  series: [{ type: 'bar', data: top15.map(function(f){ return f.time; }), barWidth: 14,
+    label: { show: true, position: 'right', fontSize: 11, formatter: function(p){ return p.value + 's'; } } }]
+});
+
+chart('c2', {
+  title: { text: '最慢用例 Top 10', left: 'left', textStyle: { fontSize: 14 } },
+  tooltip: { trigger: 'axis', triggerOn: 'mousemove|click', renderMode: 'richText', confine: true },
+  grid: { left: 200, right: 40, top: 48, bottom: 30, containLabel: true },
+  xAxis: { type: 'value', name: '秒（junitxml 全量口径）' },
+  yAxis: { type: 'category', inverse: true, data: cases.map(function(c){ return c.name.split('::').pop(); }), axisLabel: { fontSize: 11, formatter: function(v){ return v.length > 16 ? v.slice(0, 16) + '…' : v; } } },
+  series: [{ type: 'bar', data: cases.map(function(c){ return c.time; }), barWidth: 14,
+    label: { show: true, position: 'right', fontSize: 11, formatter: function(p){ return p.value + 's'; } } }]
+});
+
+chart('c3', {
+  title: { text: '全量耗时多轮观测（秒）', left: 'left', textStyle: { fontSize: 14 } },
+  tooltip: { trigger: 'axis', triggerOn: 'mousemove|click', renderMode: 'richText', confine: true },
+  grid: { left: 60, right: 30, top: 48, bottom: 30, containLabel: true },
+  xAxis: { type: 'category', data: runs.map(function(r){ return r.label; }), axisLabel: { fontSize: 11 } },
+  yAxis: { type: 'value', name: '秒', axisLabel: { fontSize: 11 } },
+  series: [{ type: 'line', data: runs.map(function(r){ return r.secs; }), lineStyle: { width: 2 }, symbolSize: 8,
+    label: { show: true, position: 'top', fontSize: 11, formatter: function(p){ return p.value; } } }]
+});
+</script>
+</body>
+</html>

@@ -24,6 +24,7 @@
 """
 
 import ast
+import functools
 import io
 import os
 import re
@@ -52,7 +53,14 @@ _VERSION_TRUTH_FILES = (
 #   注释/docstring 里会引用被修掉的坏写法（用于说明修复原因），
 #   直接对原文做子串断言会误报，所以统一走这个工具。
 # --------------------------------------------------------------------------
+@functools.lru_cache(maxsize=None)
 def _code_text(rel_path):
+    """返回去掉注释与 docstring 的源码文本（保留行号）。
+
+    lru_cache：同一文件被多个守卫用例反复读取/分词/解析，
+    缓存处理后结果，避免重复 tokenize+ast（P0 守卫测试性能）。
+    纯确定性处理（输入路径 → 输出文本），缓存安全。
+    """
     path = _REPO / rel_path
     src = path.read_text(encoding="utf-8")
 

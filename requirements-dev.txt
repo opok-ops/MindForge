@@ -8,7 +8,7 @@ pytest==8.4.2
 pytest-cov==6.3.0
 # bandit 1.9.x 起要求 Python>=3.10；test job 在 3.9 上安装本文件，故固定在 1.8.6
 # （最后一个支持 3.9 的版本）。security job 使用未固定安装的 bandit，不受此 pin 影响。
-bandit==1.8.6
+bandit==1.9.4
 pip-audit==2.7.3
 
 # 性能基准与 PDF 报告（benchmarks/）

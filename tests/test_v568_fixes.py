@@ -221,7 +221,7 @@ class TestStaticStructure(unittest.TestCase):
             parts = path.parts
             if any(x in parts for x in (".git", "__pycache__", ".venv",
                                         ".pytest_cache", "node_modules",
-                                        "MindForge.egg-info")):
+                                        "MindForge.egg-info", "build")):
                 continue
             try:
                 tree = ast.parse(path.read_text(encoding="utf-8"))

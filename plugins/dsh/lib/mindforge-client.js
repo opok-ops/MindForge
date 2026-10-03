@@ -1,39 +1,55 @@
 /**
- * MindForge REST API Client
- * -------------------------
- * Thin HTTP wrapper around MindForge v5.4.6's REST API.
- * All calls go to localhost — no external network dependency.
+ * MindForge REST API Client v0.3.0
+ * --------------------------------
+ * Thin HTTP wrapper with retry logic and connection resilience.
  */
 export class MindForgeClient {
     baseUrl;
     config;
+    maxRetries;
+    retryDelay;
     constructor(config) {
         this.config = config;
         this.baseUrl = `http://${config.host}:${config.port}`;
+        this.maxRetries = config.maxRetries ?? 2;
+        this.retryDelay = config.retryDelay ?? 500;
     }
     async request(path, options = {}) {
-        const { method = 'GET', body } = options;
+        const { method = 'GET', body, retries = this.maxRetries } = options;
         const url = `${this.baseUrl}${path}`;
         const init = {
             method,
             headers: { 'Content-Type': 'application/json' },
+            signal: AbortSignal.timeout(10000),
         };
         if (body !== undefined) {
             init.body = JSON.stringify(body);
         }
-        const res = await fetch(url, init);
-        if (!res.ok) {
-            const text = await res.text().catch(() => res.statusText);
-            throw new Error(`MindForge API ${res.status}: ${text}`);
+        let lastError = null;
+        for (let attempt = 0; attempt <= retries; attempt++) {
+            try {
+                const res = await fetch(url, init);
+                if (!res.ok) {
+                    const text = await res.text().catch(() => res.statusText);
+                    throw new Error(`HTTP ${res.status}: ${text}`);
+                }
+                return res.json();
+            }
+            catch (err) {
+                lastError = err;
+                if (attempt < retries) {
+                    await new Promise(r => setTimeout(r, this.retryDelay * (attempt + 1)));
+                }
+            }
         }
-        return res.json();
+        throw lastError || new Error('Request failed');
     }
     async health() {
         return this.request('/api/health');
     }
     async isRunning() {
         try {
-            await this.health();
+            await this.request('/api/health', { retries: 0 });
             return true;
         }
         catch {
@@ -58,6 +74,12 @@ export class MindForgeClient {
     async deleteMemory(id) {
         return this.request(`/api/memories/${id}`, {
             method: 'DELETE',
+        });
+    }
+    async starMemory(id, star = true) {
+        return this.request(`/api/memories/${id}`, {
+            method: 'PUT',
+            body: { starred: star },
         });
     }
     async listMemories(params = {}) {
@@ -88,30 +110,24 @@ export class MindForgeClient {
     async export() {
         return this.request('/api/export');
     }
-    /**
-     * Auto-start the MindForge REST API server as a child process.
-     * Only called when autoStart is true and the server is not already running.
-     */
     async ensureRunning() {
-        if (await this.isRunning()) {
+        if (await this.isRunning())
             return true;
-        }
         if (!this.config.autoStart) {
-            throw new Error(`MindForge API not running at ${this.baseUrl} and autoStart is disabled. ` +
-                `Start it manually: mindforge --db-path <path> serve --api --port ${this.config.port}`);
+            throw new Error(`MindForge API not running at ${this.baseUrl} and autoStart disabled. ` +
+                `Start: python -m mindforge.cli.main --db-path <path> serve --api --port ${this.config.port}`);
         }
         const { spawn } = await import('child_process');
         const pythonPath = this.config.pythonPath || 'python3';
         const mfPath = this.config.mindforgePath;
         if (!mfPath) {
-            throw new Error('mindforgePath not configured. Set it in cordis.patch.yml or start MindForge manually.');
+            throw new Error('mindforgePath not set. Configure in cordis.patch.yml or start manually.');
         }
         const dbPath = this.config.dbPath || 'mindforge_agent.db';
         const args = [
-            '-m', 'cli.main',
+            '-m', 'mindforge.cli.main',
             '--db-path', dbPath,
-            'serve',
-            '--api',
+            'serve', '--api',
             '--host', this.config.host,
             '--port', String(this.config.port),
         ];
@@ -121,24 +137,22 @@ export class MindForgeClient {
             detached: false,
             env: { ...process.env, PYTHONUNBUFFERED: '1' },
         });
-        child.stdout?.on('data', (data) => {
-            console.log(`[mindforge] ${data.toString().trim()}`);
+        child.stdout?.on('data', (d) => console.log(`[mindforge] ${d.toString().trim()}`));
+        child.stderr?.on('data', (d) => console.error(`[mindforge] ${d.toString().trim()}`));
+        child.on('error', (e) => console.error(`[mindforge] spawn: ${e.message}`));
+        child.on('exit', (code) => {
+            if (code !== null && code !== 0) {
+                console.error(`[mindforge] process exited with code ${code}`);
+            }
         });
-        child.stderr?.on('data', (data) => {
-            console.error(`[mindforge] ${data.toString().trim()}`);
-        });
-        child.on('error', (err) => {
-            console.error(`[mindforge] process error: ${err.message}`);
-        });
-        // Wait for the server to be ready (max 10 seconds)
-        for (let i = 0; i < 20; i++) {
-            await new Promise(resolve => setTimeout(resolve, 500));
+        // Wait up to 15 seconds with exponential backoff
+        for (let i = 0; i < 8; i++) {
+            await new Promise(r => setTimeout(r, Math.min(500 * Math.pow(1.5, i), 3000)));
             if (await this.isRunning()) {
-                console.log(`[mindforge] REST API started at ${this.baseUrl}`);
+                console.log(`[mindforge] API ready at ${this.baseUrl}`);
                 return true;
             }
         }
-        throw new Error(`MindForge API failed to start within 10 seconds at ${this.baseUrl}`);
+        throw new Error(`MindForge API failed to start within 15s at ${this.baseUrl}`);
     }
 }
-//# sourceMappingURL=mindforge-client.js.map

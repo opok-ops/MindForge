@@ -4,7 +4,7 @@
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![dsh-plugin](https://img.shields.io/badge/dsh-plugin-purple.svg)](https://github.com/topics/dsh-plugin)
-[![MindForge v5.4.6](https://img.shields.io/badge/MindForge-v5.4.6-green.svg)](https://github.com/opok-ops/MindForge)
+[![MindForge v5.8.13](https://img.shields.io/badge/MindForge-v5.8.13-green.svg)](https://github.com/opok-ops/MindForge)
 
 ## What it does
 
@@ -48,7 +48,7 @@ The plugin is a **native Cordis plugin** (not MCP), running in-process with Harn
 ### 1. Install MindForge backend
 
 ```bash
-pip install -e git+https://github.com/opok-ops/MindForge.git#egg=MindForge
+pip install -e git+https://github.com/opok-ops/MindForge.git#egg=mindforge-memory
 ```
 
 Or clone and install:
@@ -62,11 +62,13 @@ pip install -e .
 
 ```bash
 # Initialize (first time only — sets up encryption)
-mindforge init
+MindForge init
 
 # Start the API server
-mindforge serve --api --port 8765
+MindForge serve --api --port 8765
 ```
+
+> Note: the CLI command is `MindForge` (as declared in the package's `[project.scripts]`).
 
 ### 3. Install this plugin in DSH
 
@@ -102,8 +104,12 @@ The plugin registers these tools that the agent can call autonomously:
 | `memory_add` | Store information in long-term memory |
 | `memory_search` | Search memories by natural language query |
 | `memory_get` | Retrieve a specific memory by ID |
-| `memory_stats` | Get memory store statistics |
+| `memory_list` | List recent memories with pagination / category filter |
+| `memory_update` | Update a memory's content, importance, or tags |
 | `memory_delete` | Delete a memory (use sparingly) |
+| `memory_stats` | Get memory store statistics |
+| `memory_tags` | List all tags with usage counts |
+| `memory_star` | Star / unstar a memory for quick access |
 
 ## Automatic behavior
 
@@ -174,10 +180,10 @@ dsh web
 
 ## Requirements
 
-- DeepSeek Harness v0.1+ (`npx @deepseek-ai/dsh web`)
+- DeepSeek Harness v0.1.7+ (`npx @deepseek-ai/dsh web`; compatible with v0.2.0-rc.x)
 - Node.js 22.19+ (DSH requirement)
 - Python 3.10+ (for MindForge backend)
-- MindForge v5.4.6+
+- MindForge v5.8.13+
 
 ## License
 

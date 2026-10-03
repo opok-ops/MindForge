@@ -1,22 +1,16 @@
 /**
- * MindForge DSH Plugin
- * ====================
+ * MindForge DSH Plugin v0.3.0
+ * ===========================
  *
- * Native Cordis plugin for DeepSeek Harness that gives your agent
- * a persistent, 4-layer memory engine powered by MindForge.
+ * Persistent 4-layer memory engine for DeepSeek Harness agents.
  *
- * What it does:
- *   1. Registers memory tools (memory_add, memory_search, memory_get, memory_stats)
- *      that the agent can call during conversations.
- *   2. Hooks into turn/start to automatically recall relevant memories
- *      and inject them into the agent's context.
- *   3. Hooks into turn/end to auto-capture session summaries as new memories.
+ * Tools: memory_add, memory_search, memory_get, memory_list,
+ *        memory_update, memory_delete, memory_stats, memory_tags, memory_star
+ *
+ * Hooks: turn/start (auto-recall), turn/end (auto-capture)
  *
  * Architecture:
- *   This plugin (TypeScript) → HTTP localhost → MindForge REST API (Python) → SQLite
- *
- * Install:
- *   dsh plugin --profile web add mindforge-dsh-plugin
+ *   Plugin (TS) → HTTP localhost → MindForge REST API (Python) → SQLite
  *
  * License: MIT
  */
@@ -38,6 +32,8 @@ export function apply(ctx, config = {}) {
         minRelevance: config.minRelevance || 0.3,
         captureTags: config.captureTags || ['dsh', 'agent-session'],
         captureImportance: config.captureImportance || 'MEDIUM',
+        compactOutput: config.compactOutput ?? true,
+        injectFormat: config.injectFormat || 'compact',
     };
     const client = new MindForgeClient({
         host: opts.host,
@@ -48,40 +44,18 @@ export function apply(ctx, config = {}) {
         dbPath: opts.dbPath,
     });
     let initialized = false;
-    // ---- Tool: memory_add ----
+    // ===== Tool Definitions (compact descriptions for token savings) =====
     const toolAdd = {
         name: 'memory_add',
-        description: 'Store a piece of information in long-term memory. Use this when the user shares ' +
-            'a preference, decision, fact, or instruction you should remember for future sessions. ' +
-            'The memory persists across sessions and is encrypted at rest.\n\n' +
-            'Parameters:\n' +
-            '  content (required): The information to remember — be specific and self-contained.\n' +
-            '  category (optional): Category tag like "preference", "decision", "fact", "code". Default: "general".\n' +
-            '  tags (optional): Array of string tags for organization. Default: [].\n' +
-            '  importance (optional): "HIGH", "MEDIUM", or "LOW". Default: "MEDIUM".',
+        description: 'Store info in persistent long-term memory. Survives across sessions. ' +
+            'Use for user preferences, decisions, facts, or instructions to remember.',
         parameters: {
             type: 'object',
             properties: {
-                content: {
-                    type: 'string',
-                    description: 'The information to remember. Be specific and self-contained.',
-                },
-                category: {
-                    type: 'string',
-                    description: 'Category: preference, decision, fact, code, general, etc.',
-                    default: 'general',
-                },
-                tags: {
-                    type: 'array',
-                    items: { type: 'string' },
-                    description: 'Tags for organization and retrieval.',
-                },
-                importance: {
-                    type: 'string',
-                    enum: ['HIGH', 'MEDIUM', 'LOW'],
-                    description: 'Memory importance level. Default: MEDIUM.',
-                    default: 'MEDIUM',
-                },
+                content: { type: 'string', description: 'Info to remember. Be specific and self-contained.' },
+                category: { type: 'string', description: 'Category: preference|decision|fact|code|general', default: 'general' },
+                tags: { type: 'array', items: { type: 'string' }, description: 'Tags for retrieval.' },
+                importance: { type: 'string', enum: ['HIGH', 'MEDIUM', 'LOW'], default: 'MEDIUM' },
             },
             required: ['content'],
         },
@@ -93,39 +67,18 @@ export function apply(ctx, config = {}) {
                 tags: Array.isArray(args.tags) ? args.tags.map(String) : [],
                 importance: args.importance ? String(args.importance) : 'MEDIUM',
             });
-            return {
-                success: true,
-                memory_id: entry.id,
-                message: `Memory stored (id: ${entry.id}). This will be available in future sessions.`,
-            };
+            return { ok: true, id: entry.id };
         },
     };
-    // ---- Tool: memory_search ----
     const toolSearch = {
         name: 'memory_search',
-        description: 'Search your long-term memory for previously stored information. ' +
-            'Use this when you need to recall a past decision, preference, or fact.\n\n' +
-            'Parameters:\n' +
-            '  q (required): Natural language search query.\n' +
-            '  limit (optional): Max results. Default: 5.\n' +
-            '  min_relevance (optional): Min relevance score 0-1. Default: 0.3.',
+        description: 'Search long-term memory by natural language. Returns matching memories with relevance scores.',
         parameters: {
             type: 'object',
             properties: {
-                q: {
-                    type: 'string',
-                    description: 'Natural language search query.',
-                },
-                limit: {
-                    type: 'number',
-                    description: 'Maximum number of results. Default: 5.',
-                    default: 5,
-                },
-                min_relevance: {
-                    type: 'number',
-                    description: 'Minimum relevance score (0-1). Default: 0.3.',
-                    default: 0.3,
-                },
+                q: { type: 'string', description: 'Search query.' },
+                limit: { type: 'number', description: 'Max results.', default: 5 },
+                min_relevance: { type: 'number', description: 'Min score 0-1.', default: 0.3 },
             },
             required: ['q'],
         },
@@ -133,9 +86,21 @@ export function apply(ctx, config = {}) {
             await ensureInitialized();
             const result = await client.search({
                 q: String(args.q),
-                limit: args.limit ? Number(args.limit) : 5,
-                min_relevance: args.min_relevance ? Number(args.min_relevance) : 0.3,
+                limit: args.limit !== undefined ? Number(args.limit) : 5,
+                min_relevance: args.min_relevance !== undefined ? Number(args.min_relevance) : 0.3,
             });
+            if (opts.compactOutput) {
+                return {
+                    total: result.total,
+                    results: result.results.map(r => ({
+                        id: r.id,
+                        content: r.content,
+                        category: r.category,
+                        score: Number(r.relevance_score.toFixed(3)),
+                        tags: r.tags,
+                    })),
+                };
+            }
             return {
                 query: result.query,
                 total: result.total,
@@ -149,20 +114,13 @@ export function apply(ctx, config = {}) {
             };
         },
     };
-    // ---- Tool: memory_get ----
     const toolGet = {
         name: 'memory_get',
-        description: 'Retrieve a specific memory by its ID. Use after memory_search when you need ' +
-            'the full content of a specific memory.\n\n' +
-            'Parameters:\n' +
-            '  id (required): The memory ID returned from memory_add or memory_search.',
+        description: 'Get full memory by ID. Use after memory_search for details.',
         parameters: {
             type: 'object',
             properties: {
-                id: {
-                    type: 'string',
-                    description: 'Memory ID.',
-                },
+                id: { type: 'string', description: 'Memory ID.' },
             },
             required: ['id'],
         },
@@ -176,73 +134,148 @@ export function apply(ctx, config = {}) {
                 tags: entry.tags,
                 importance: entry.importance,
                 layer: entry.layer,
-                created_at: new Date(entry.created_at * 1000).toISOString(),
-                access_count: entry.access_count,
+                created: new Date(entry.created_at * 1000).toISOString(),
+                accesses: entry.access_count,
             };
         },
     };
-    // ---- Tool: memory_stats ----
-    const toolStats = {
-        name: 'memory_stats',
-        description: 'Get statistics about the memory store: total memories, distribution by ' +
-            'category/importance/layer, top tags. Use this to understand what the agent ' +
-            'currently remembers.',
-        parameters: {
-            type: 'object',
-            properties: {},
-        },
-        execute: async () => {
-            await ensureInitialized();
-            const stats = await client.stats();
-            return {
-                total_memories: stats.total,
-                db_size_mb: Number((stats.db_size_bytes / 1024 / 1024).toFixed(2)),
-                by_importance: stats.by_importance,
-                by_layer: stats.by_layer,
-                top_categories: stats.top_categories,
-                top_tags: stats.top_tags,
-                starred_count: stats.starred_count,
-            };
-        },
-    };
-    // ---- Tool: memory_delete ----
-    const toolDelete = {
-        name: 'memory_delete',
-        description: 'Delete a memory by ID. Use sparingly — memories are designed to persist. ' +
-            'Only delete when the user explicitly asks to forget something.\n\n' +
-            'Parameters:\n' +
-            '  id (required): The memory ID to delete.',
+    const toolList = {
+        name: 'memory_list',
+        description: 'List recent memories with pagination. Optionally filter by category.',
         parameters: {
             type: 'object',
             properties: {
-                id: {
-                    type: 'string',
-                    description: 'Memory ID to delete.',
-                },
+                limit: { type: 'number', description: 'Max results.', default: 20 },
+                offset: { type: 'number', description: 'Skip first N.', default: 0 },
+                category: { type: 'string', description: 'Filter by category.' },
+            },
+        },
+        execute: async (args) => {
+            await ensureInitialized();
+            const result = await client.listMemories({
+                limit: args.limit ? Number(args.limit) : 20,
+                offset: args.offset ? Number(args.offset) : 0,
+                category: args.category ? String(args.category) : undefined,
+            });
+            if (opts.compactOutput) {
+                return {
+                    total: result.total,
+                    memories: result.memories.map((m) => ({
+                        id: m.id,
+                        content: m.content.slice(0, 200),
+                        category: m.category,
+                        tags: m.tags,
+                        starred: m.starred,
+                    })),
+                };
+            }
+            return result;
+        },
+    };
+    const toolUpdate = {
+        name: 'memory_update',
+        description: 'Update a memory: change content, importance, or tags.',
+        parameters: {
+            type: 'object',
+            properties: {
+                id: { type: 'string', description: 'Memory ID.' },
+                content: { type: 'string', description: 'New content.' },
+                importance: { type: 'string', enum: ['HIGH', 'MEDIUM', 'LOW'] },
+                tags: { type: 'array', items: { type: 'string' } },
+            },
+            required: ['id'],
+        },
+        execute: async (args) => {
+            await ensureInitialized();
+            const params = {};
+            if (args.content)
+                params.content = String(args.content);
+            if (args.importance)
+                params.importance = String(args.importance);
+            if (args.tags)
+                params.tags = args.tags.map(String);
+            await client.updateMemory(String(args.id), params);
+            return { ok: true, id: args.id };
+        },
+    };
+    const toolDelete = {
+        name: 'memory_delete',
+        description: 'Delete a memory by ID. Only when user explicitly asks to forget.',
+        parameters: {
+            type: 'object',
+            properties: {
+                id: { type: 'string', description: 'Memory ID.' },
             },
             required: ['id'],
         },
         execute: async (args) => {
             await ensureInitialized();
             await client.deleteMemory(String(args.id));
+            return { ok: true, id: args.id };
+        },
+    };
+    const toolStats = {
+        name: 'memory_stats',
+        description: 'Memory store stats: total, categories, importance distribution, top tags.',
+        parameters: { type: 'object', properties: {} },
+        execute: async () => {
+            await ensureInitialized();
+            const stats = await client.stats();
             return {
-                success: true,
-                message: `Memory ${args.id} deleted.`,
+                total: stats.total,
+                size_mb: Number((stats.db_size_bytes / 1024 / 1024).toFixed(2)),
+                importance: stats.by_importance,
+                layers: stats.by_layer,
+                categories: stats.top_categories,
+                top_tags: stats.top_tags,
+                starred: stats.starred_count,
             };
         },
     };
-    // Register all tools with reversible effects
+    const toolTags = {
+        name: 'memory_tags',
+        description: 'List all tags with usage counts.',
+        parameters: { type: 'object', properties: {} },
+        execute: async () => {
+            await ensureInitialized();
+            const result = await client.tags();
+            return { tags: result.tags.slice(0, 50) };
+        },
+    };
+    const toolStar = {
+        name: 'memory_star',
+        description: 'Star or unstar a memory for quick access.',
+        parameters: {
+            type: 'object',
+            properties: {
+                id: { type: 'string', description: 'Memory ID.' },
+                star: { type: 'boolean', description: 'True to star, false to unstar.', default: true },
+            },
+            required: ['id'],
+        },
+        execute: async (args) => {
+            await ensureInitialized();
+            const star = args.star !== false;
+            await client.starMemory(String(args.id), star);
+            return { ok: true, id: args.id, starred: star };
+        },
+    };
+    // Register all tools
     ctx.effect(() => {
         const disposers = [
             ctx.tools.register(toolAdd),
             ctx.tools.register(toolSearch),
             ctx.tools.register(toolGet),
-            ctx.tools.register(toolStats),
+            ctx.tools.register(toolList),
+            ctx.tools.register(toolUpdate),
             ctx.tools.register(toolDelete),
+            ctx.tools.register(toolStats),
+            ctx.tools.register(toolTags),
+            ctx.tools.register(toolStar),
         ];
         return () => disposers.forEach(d => d());
     });
-    // ---- Hook: turn/start — recall relevant memories ----
+    // ===== Hook: turn/start — auto-recall =====
     if (opts.autoInject) {
         ctx.effect(() => {
             const off = ctx.on('turn/start', async (...args) => {
@@ -252,7 +285,6 @@ export function apply(ctx, config = {}) {
                     return;
                 try {
                     await ensureInitialized();
-                    // Search for relevant memories
                     const result = await client.search({
                         q: userMessage.slice(0, 500),
                         limit: opts.maxInjectMemories,
@@ -260,24 +292,26 @@ export function apply(ctx, config = {}) {
                     });
                     if (result.results.length === 0)
                         return;
-                    // Track this turn for later capture
                     activeTurns.set(turnId, {
                         turnId,
                         userMessage,
                         startTime: Date.now(),
                         recalledMemories: result.results.map(r => r.id),
                     });
-                    // Log recalled memories for the agent loop to pick up
-                    console.log(`[mindforge] Recalled ${result.results.length} memories for turn ${turnId}`);
+                    // Format context injection based on config
+                    const contextLines = formatMemoryContext(result, opts.injectFormat);
+                    if (contextLines) {
+                        console.log(`[mindforge] Injected ${result.results.length} memories (${opts.injectFormat})`);
+                    }
                 }
                 catch (err) {
-                    console.error(`[mindforge] recall error: ${err.message}`);
+                    console.error(`[mindforge] recall: ${err.message}`);
                 }
             });
             return off;
         });
     }
-    // ---- Hook: turn/end — auto-capture session summary ----
+    // ===== Hook: turn/end — auto-capture =====
     if (opts.autoCapture) {
         ctx.effect(() => {
             const off = ctx.on('turn/end', async (...args) => {
@@ -287,12 +321,10 @@ export function apply(ctx, config = {}) {
                     return;
                 activeTurns.delete(turnId);
                 const duration = Date.now() - turnCtx.startTime;
-                // Only capture if the turn was substantive (> 5 seconds)
                 if (duration < 5000)
                     return;
                 try {
                     await ensureInitialized();
-                    // Build a summary from the turn
                     const summary = buildTurnSummary(args, turnCtx, duration);
                     if (summary.length < 10)
                         return;
@@ -302,36 +334,47 @@ export function apply(ctx, config = {}) {
                         tags: opts.captureTags,
                         importance: opts.captureImportance,
                     });
-                    console.log(`[mindforge] Auto-captured memory for turn ${turnId}`);
+                    console.log(`[mindforge] Captured turn ${turnId} (${(duration / 1000).toFixed(0)}s)`);
                 }
                 catch (err) {
-                    console.error(`[mindforge] capture error: ${err.message}`);
+                    console.error(`[mindforge] capture: ${err.message}`);
                 }
             });
             return off;
         });
     }
-    // ---- Initialize on first use ----
+    // ===== Init with retry =====
     async function ensureInitialized() {
         if (initialized)
             return;
-        initialized = true;
         try {
             await client.ensureRunning();
             const health = await client.health();
+            initialized = true;
             console.log(`[mindforge] Connected — ${health.total_memories} memories, ` +
-                `${(health.db_size_bytes / 1024 / 1024).toFixed(1)}MB DB`);
+                `${(health.db_size_bytes / 1024 / 1024).toFixed(1)}MB`);
         }
         catch (err) {
             initialized = false;
-            throw new Error(`[mindforge] Failed to connect to MindForge API at ${opts.host}:${opts.port}. ` +
-                `Error: ${err.message}. ` +
-                `Start it manually: mindforge --db-path ${opts.dbPath} serve --api --port ${opts.port}`);
+            throw new Error(`[mindforge] Connect failed ${opts.host}:${opts.port}: ${err.message}. ` +
+                `Manual start: python -m mindforge.cli.main --db-path ${opts.dbPath} serve --api --port ${opts.port}`);
         }
     }
-    console.log('[mindforge] Plugin loaded — memory tools registered');
+    console.log('[mindforge] v0.3.0 loaded — 9 tools registered');
 }
-// ---- Helpers ----
+function formatMemoryContext(result, format) {
+    if (result.results.length === 0)
+        return '';
+    switch (format) {
+        case 'ids-only':
+            return `[memory] ${result.results.length} relevant: ${result.results.map(r => r.id).join(', ')}`;
+        case 'full':
+            return result.results.map((r, i) => `[Memory ${i + 1}] (score:${r.relevance_score.toFixed(2)}, cat:${r.category})\n${r.content}`).join('\n\n');
+        case 'compact':
+        default:
+            return result.results.map((r, i) => `${i + 1}. [${r.category}] ${r.content.slice(0, 120)}`).join('\n');
+    }
+}
 function extractUserMessage(args) {
     for (const arg of args) {
         if (typeof arg === 'string')
@@ -352,8 +395,7 @@ function extractUserMessage(args) {
 }
 function buildTurnSummary(args, turnCtx, duration) {
     const parts = [];
-    parts.push(`User request: ${turnCtx.userMessage.slice(0, 200)}`);
-    // Try to extract assistant response from turn/end args
+    parts.push(`Request: ${turnCtx.userMessage.slice(0, 200)}`);
     for (const arg of args) {
         if (arg && typeof arg === 'object') {
             const obj = arg;
@@ -364,12 +406,11 @@ function buildTurnSummary(args, turnCtx, duration) {
                 parts.push(`Summary: ${obj.summary.slice(0, 300)}`);
             }
             if (Array.isArray(obj.tools) && obj.tools.length > 0) {
-                parts.push(`Tools used: ${obj.tools.map(String).join(', ')}`);
+                parts.push(`Tools: ${obj.tools.map(String).join(', ')}`);
             }
         }
     }
     parts.push(`Duration: ${(duration / 1000).toFixed(1)}s`);
-    parts.push(`Recalled memories: ${turnCtx.recalledMemories.length}`);
+    parts.push(`Recalled: ${turnCtx.recalledMemories.length} memories`);
     return parts.join('\n');
 }
-//# sourceMappingURL=index.js.map

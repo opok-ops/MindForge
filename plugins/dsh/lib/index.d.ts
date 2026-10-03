@@ -1,22 +1,16 @@
 /**
- * MindForge DSH Plugin
- * ====================
+ * MindForge DSH Plugin v0.3.0
+ * ===========================
  *
- * Native Cordis plugin for DeepSeek Harness that gives your agent
- * a persistent, 4-layer memory engine powered by MindForge.
+ * Persistent 4-layer memory engine for DeepSeek Harness agents.
  *
- * What it does:
- *   1. Registers memory tools (memory_add, memory_search, memory_get, memory_stats)
- *      that the agent can call during conversations.
- *   2. Hooks into turn/start to automatically recall relevant memories
- *      and inject them into the agent's context.
- *   3. Hooks into turn/end to auto-capture session summaries as new memories.
+ * Tools: memory_add, memory_search, memory_get, memory_list,
+ *        memory_update, memory_delete, memory_stats, memory_tags, memory_star
+ *
+ * Hooks: turn/start (auto-recall), turn/end (auto-capture)
  *
  * Architecture:
- *   This plugin (TypeScript) → HTTP localhost → MindForge REST API (Python) → SQLite
- *
- * Install:
- *   dsh plugin --profile web add mindforge-dsh-plugin
+ *   Plugin (TS) → HTTP localhost → MindForge REST API (Python) → SQLite
  *
  * License: MIT
  */
@@ -33,6 +27,8 @@ export interface MindForgePluginConfig {
     minRelevance?: number;
     captureTags?: string[];
     captureImportance?: string;
+    compactOutput?: boolean;
+    injectFormat?: 'full' | 'compact' | 'ids-only';
 }
 export declare const name = "mindforge-memory";
 export declare const inject: string[];
@@ -55,4 +51,3 @@ interface ToolDefinition {
 }
 export declare function apply(ctx: CordisContext, config?: MindForgePluginConfig): void;
 export {};
-//# sourceMappingURL=index.d.ts.map

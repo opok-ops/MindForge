@@ -1,5 +1,5 @@
 /**
- * MindForge REST API Client v0.1.1
+ * MindForge REST API Client v0.3.0
  * --------------------------------
  * Thin HTTP wrapper with retry logic and connection resilience.
  */
@@ -204,7 +204,7 @@ export class MindForgeClient {
     if (!this.config.autoStart) {
       throw new Error(
         `MindForge API not running at ${this.baseUrl} and autoStart disabled. ` +
-        `Start: mindforge --db-path <path> serve --api --port ${this.config.port}`
+        `Start: python -m mindforge.cli.main --db-path <path> serve --api --port ${this.config.port}`
       )
     }
 
@@ -220,7 +220,7 @@ export class MindForgeClient {
 
     const dbPath = this.config.dbPath || 'mindforge_agent.db'
     const args = [
-      '-m', 'cli.main',
+      '-m', 'mindforge.cli.main',
       '--db-path', dbPath,
       'serve', '--api',
       '--host', this.config.host,

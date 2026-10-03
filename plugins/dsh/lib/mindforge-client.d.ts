@@ -1,8 +1,7 @@
 /**
- * MindForge REST API Client
- * -------------------------
- * Thin HTTP wrapper around MindForge v5.4.6's REST API.
- * All calls go to localhost — no external network dependency.
+ * MindForge REST API Client v0.3.0
+ * --------------------------------
+ * Thin HTTP wrapper with retry logic and connection resilience.
  */
 export interface MindForgeConfig {
     host: string;
@@ -11,6 +10,8 @@ export interface MindForgeConfig {
     mindforgePath?: string;
     pythonPath?: string;
     dbPath?: string;
+    maxRetries?: number;
+    retryDelay?: number;
 }
 export interface MemoryEntry {
     id: string;
@@ -56,6 +57,8 @@ export interface HealthResponse {
 export declare class MindForgeClient {
     private baseUrl;
     private config;
+    private maxRetries;
+    private retryDelay;
     constructor(config: MindForgeConfig);
     private request;
     health(): Promise<HealthResponse>;
@@ -76,6 +79,10 @@ export declare class MindForgeClient {
         id: string;
     }>;
     deleteMemory(id: string): Promise<{
+        status: string;
+        id: string;
+    }>;
+    starMemory(id: string, star?: boolean): Promise<{
         status: string;
         id: string;
     }>;
@@ -101,10 +108,5 @@ export declare class MindForgeClient {
         total: number;
         memories: MemoryEntry[];
     }>;
-    /**
-     * Auto-start the MindForge REST API server as a child process.
-     * Only called when autoStart is true and the server is not already running.
-     */
     ensureRunning(): Promise<boolean>;
 }
-//# sourceMappingURL=mindforge-client.d.ts.map

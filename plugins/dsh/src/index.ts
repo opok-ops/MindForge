@@ -1,6 +1,6 @@
 /**
- * MindForge DSH Plugin v0.1.1 (Final)
- * ====================================
+ * MindForge DSH Plugin v0.3.0
+ * ===========================
  *
  * Persistent 4-layer memory engine for DeepSeek Harness agents.
  *
@@ -95,7 +95,7 @@ export function apply(ctx: CordisContext, config: MindForgePluginConfig = {}) {
 
   let initialized = false
 
-  // ===== Tool Definitions (v0.1.1: compact descriptions for token savings) =====
+  // ===== Tool Definitions (compact descriptions for token savings) =====
 
   const toolAdd: ToolDefinition = {
     name: 'memory_add',
@@ -426,12 +426,12 @@ export function apply(ctx: CordisContext, config: MindForgePluginConfig = {}) {
       initialized = false
       throw new Error(
         `[mindforge] Connect failed ${opts.host}:${opts.port}: ${(err as Error).message}. ` +
-        `Manual start: mindforge --db-path ${opts.dbPath} serve --api --port ${opts.port}`
+        `Manual start: python -m mindforge.cli.main --db-path ${opts.dbPath} serve --api --port ${opts.port}`
       )
     }
   }
 
-  console.log('[mindforge] v0.1.1 loaded — 9 tools registered')
+  console.log('[mindforge] v0.3.0 loaded — 9 tools registered')
 }
 
 // ===== Helpers =====

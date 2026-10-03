@@ -1,5 +1,5 @@
 /**
- * MindForge DSH Plugin v0.3.0
+ * MindForge DSH Plugin v0.5.0
  * ===========================
  *
  * Persistent 4-layer memory engine for DeepSeek Harness agents.

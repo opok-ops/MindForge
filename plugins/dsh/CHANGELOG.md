@@ -2,6 +2,32 @@
 
 All notable changes to the mindforge-dsh-plugin are documented here.
 
+## [0.5.0] — 2026-10-03
+
+Version jump from 0.3.0 (0.4.x line merged into this release).
+
+### Changed
+
+- **Dependencies aligned to the DeepSeek Harness 0.2.0 line** —
+  `@deepseek-ai/dsh-session` / `@deepseek-ai/dsh-tools` `^0.1.7-rc.2` → `^0.2.0-rc.2`
+  (DSH's `latest` / `next` dist-tags both point to `0.2.0-rc.2`).
+- Version bumped to **0.5.0** in `package.json`, `.dsh-plugin/plugin.json`,
+  `src/index.ts` header / load log, and `cordis.patch.yml`.
+- Peer `@deepseek-ai/cordis ^4.0.1` kept — DSH v0.2.0-rc.2 uses `cordis@~4.0.4`.
+
+### Docs
+
+- README: DSH requirement `v0.1.7+` → `v0.2.0-rc.2+`.
+
+### Upstream scan (2026-10-03)
+
+- DSH releases: latest is still `dsh-v0.2.0-rc.2` (2026-09-29); no newer release.
+- DSH master commits since v0.3.0: experimental Claude Code mods +
+  runtime fixes (`plugin-manager` package-resolution refresh, HMR manifest
+  invalidation). None change the plugin API surface
+  (`ctx.tools.register`, `ctx.on('turn/start' | 'turn/end')`, `ctx.effect`,
+  `ctx.agentLoop`). No migration required.
+
 ## [0.3.0] — 2026-10-03
 
 Version jump from 0.1.1 (0.2.x line merged into this release).

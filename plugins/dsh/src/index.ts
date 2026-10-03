@@ -1,5 +1,5 @@
 /**
- * MindForge DSH Plugin v0.3.0
+ * MindForge DSH Plugin v0.5.0
  * ===========================
  *
  * Persistent 4-layer memory engine for DeepSeek Harness agents.
@@ -431,7 +431,7 @@ export function apply(ctx: CordisContext, config: MindForgePluginConfig = {}) {
     }
   }
 
-  console.log('[mindforge] v0.3.0 loaded — 9 tools registered')
+  console.log('[mindforge] v0.5.0 loaded — 9 tools registered')
 }
 
 // ===== Helpers =====

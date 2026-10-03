@@ -1,4 +1,4 @@
-# MindForge DSH Plugin v0.3.0 — patch configuration
+# MindForge DSH Plugin v0.5.0 — patch configuration
 # Registers memory tools and hooks into agent lifecycle events.
 
 - id: mindforge-memory

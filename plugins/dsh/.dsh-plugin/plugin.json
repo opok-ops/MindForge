@@ -1,6 +1,6 @@
 {
   "name": "mindforge-dsh-plugin",
-  "version": "0.3.0",
+  "version": "0.5.0",
   "description": "MindForge memory engine plugin for DeepSeek Harness",
   "entry": "lib/index.js",
   "type": "bundle",

@@ -1,5 +1,5 @@
 /**
- * MindForge REST API Client v0.3.0
+ * MindForge REST API Client v0.5.0
  * --------------------------------
  * Thin HTTP wrapper with retry logic and connection resilience.
  */

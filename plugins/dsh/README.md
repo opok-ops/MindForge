@@ -180,7 +180,7 @@ dsh web
 
 ## Requirements
 
-- DeepSeek Harness v0.1.7+ (`npx @deepseek-ai/dsh web`; compatible with v0.2.0-rc.x)
+- DeepSeek Harness v0.2.0-rc.2+ (`npx @deepseek-ai/dsh web`)
 - Node.js 22.19+ (DSH requirement)
 - Python 3.10+ (for MindForge backend)
 - MindForge v5.8.13+

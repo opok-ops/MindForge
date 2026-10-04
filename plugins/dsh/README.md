@@ -4,7 +4,7 @@
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![dsh-plugin](https://img.shields.io/badge/dsh-plugin-purple.svg)](https://github.com/topics/dsh-plugin)
-[![MindForge v5.8.13](https://img.shields.io/badge/MindForge-v5.8.13-green.svg)](https://github.com/opok-ops/MindForge)
+[![MindForge v5.8.15](https://img.shields.io/badge/MindForge-v5.8.15-green.svg)](https://github.com/opok-ops/MindForge)
 
 ## What it does
 
@@ -183,7 +183,7 @@ dsh web
 - DeepSeek Harness v0.2.0-rc.2+ (`npx @deepseek-ai/dsh web`)
 - Node.js 22.19+ (DSH requirement)
 - Python 3.10+ (for MindForge backend)
-- MindForge v5.8.13+
+- MindForge v5.8.15+
 
 ## License
 

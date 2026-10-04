@@ -39,7 +39,7 @@ import mindforge.core.version as core_version
 
 
 _REPO = Path(__file__).resolve().parent.parent
-_EXPECTED_VERSION = "5.8.13"
+_EXPECTED_VERSION = "5.8.15"
 
 # 本轮修复涉及的、必须与 mindforge/core/version.py 保持一致的源码文件
 _VERSION_TRUTH_FILES = (

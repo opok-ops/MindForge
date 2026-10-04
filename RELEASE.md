@@ -2,15 +2,15 @@
 
 本文件记录 MindForge 的 PyPI 发布启用步骤与当前状态，供后续任何版本发布复用。
 
-## 当前状态（v5.8.13）
+## 当前状态（v5.8.15）
 
 - 发行名：**`mindforge-memory`**（PyPI 项目名大小写不敏感，规范名 `mindforge`
   已被 mindforge.ai 的第三方客户端占用，故改名发布；Python 模块名
   `mindforge.*`、CLI 入口、`MindForge.py` 兼容层均不受影响）。
-- 代码/标签/CI 全部就绪：`master` 与标签 `v5.8.13` 指向同一发布提交；
+- 代码/标签/CI 全部就绪：`master` 与标签 `v5.8.15` 指向同一发布提交；
   本地全量测试 938 通过；`python -m build --wheel` 产出
-  `mindforge_memory-5.8.13-py3-none-any.whl`（METADATA `Name: mindforge-memory` /
-  `Version: 5.8.13`）。
+  `mindforge_memory-5.8.15-py3-none-any.whl`（METADATA `Name: mindforge-memory` /
+  `Version: 5.8.15`）。
 - **尚未发布**：PyPI 项目未注册（`mindforge-memory` 在 pypi.org 为 404），
   发布工作流失败属预期（`invalid-publisher`）。
 

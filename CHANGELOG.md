@@ -1,3 +1,18 @@
+## [5.8.15] - 2026-10-04
+
+### 合成发布：v5.8.13 之后的未发版改动汇总
+
+- **docs**：新增 `RELEASE.md`（PyPI 发布接口，发行名 `mindforge-memory`，
+  Trusted Publisher 配置与验证步骤）。
+- **feat(dsh)**：`mindforge-dsh-plugin` v0.1.1 → v0.3.0 → v0.5.0。
+  适配 v5.8.13 命名空间重构：CLI 启动命令改为
+  `python -m mindforge.cli.main --db-path <path> serve --api --port <port>`；
+  DeepSeek Harness 依赖升级至 `@deepseek-ai/* 0.1.7-rc.2`。
+- **perf(tests)**：`test_v568_fixes` 守卫用例对 `_code_text` 加 `lru_cache`，
+  同环境耗时 42.56s → 24.18s（-43%）；AST 全仓扫描排除 `build/`。
+- **docs**：官网新增 social preview card 与架构图；发布 v5.8.13 性能测试报告。
+- 全量 938 项通过（938 passed）。
+
 ## [5.8.13] - 2026-10-02
 
 ### 重构：全部源码迁入 mindforge.* 命名空间 + 打包/文档一致性修复

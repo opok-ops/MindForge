@@ -38,8 +38,8 @@ class TestVersionTruth(unittest.TestCase):
     """版本号真值必须收敛在 core/version.py，且各处投影一致。"""
 
     def test_core_version_matches_release(self):
-        self.assertEqual(core_version.__version__, "5.8.13")
-        self.assertEqual(core_version.VERSION_INFO, (5, 8, 13))
+        self.assertEqual(core_version.__version__, "5.8.15")
+        self.assertEqual(core_version.VERSION_INFO, (5, 8, 15))
 
     def test_pyproject_matches_core_version(self):
         # v5.8.13 起 pyproject 不再写死静态版本：

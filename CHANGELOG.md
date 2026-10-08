@@ -1,3 +1,24 @@
+## [5.9.0] - 2026-10-08
+
+### 新功能
+- **记忆健康报告 `memory_report()`**：四层规模 / TTL 过期 / 回收站 / 冲突审计 /
+  FTS 一致性 / 数据库健康（page_count / journal_mode / WAL）/ 加密状态，
+  不含任何明文内容，可安全暴露给已认证端点（REST `GET /api/meta/report`）。
+- **审计日志导出 `export_audit()`**：机器可读 JSON（limit / since / actor 过滤），
+  用于 GDPR 取证与审计（REST `GET /api/audit`）。
+
+### Bug 修复
+- `get()` / `get_memory()` 传非 str memory_id 报友好 ValueError（替代
+  unhashable TypeError 崩溃）。
+- REST 超大 body：先有界 drain 再响应 413，修复客户端 Broken pipe（P3-3）。
+
+### 安全加固
+- memory_report / export_audit 均不含密钥与明文内容；新增端点位于鉴权网关之后。
+
+### 测试
+- 新增 tests/test_v590_features.py（16 项：类型校验 / 报告结构 / 过滤 / REST 端点）；
+  全量 954 项通过。
+
 ## [5.8.16] - 2026-10-08
 
 ### 审计基线确认版：全面检查 bug / 安全 / 一致性后发布

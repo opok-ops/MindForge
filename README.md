@@ -8,7 +8,7 @@ MindForge gives AI agents a persistent, structured long-term memory: a four-tier
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-5.8.16-green.svg)](https://github.com/opok-ops/MindForge/releases)
+[![Version](https://img.shields.io/badge/version-5.9.0-green.svg)](https://github.com/opok-ops/MindForge/releases)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
 [![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
@@ -86,6 +86,8 @@ MindForge stats
 - **At-rest encryption** — AES-256-GCM with PBKDF2-SHA256 key derivation.
 - **Encrypted export / import** — `export-json --password` and `import-json --password` produce encrypted backups that remain unreadable even if the file leaks (v5.7.3).
 - **GDPR toolkit** — `gdpr-report` / `gdpr-export-all` / `gdpr-erase` for data portability and the right to be forgotten, with automatic backup before erasure (v5.7.6).
+- **Memory health report** — `memory_report()` aggregates four-tier counts, TTL expirations, trash, conflict events, FTS consistency, database health, and encryption status, without exposing any plaintext memory content (v5.9.0).
+- **Audit export** — `export_audit()` returns machine-readable audit entries (limit / since / actor filters) for GDPR and forensics; exposed as `GET /api/audit` (v5.9.0).
 
 **Integration**
 
@@ -101,7 +103,7 @@ MindForge stats
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│           MindForge v5.8.16            │
+│           MindForge v5.9.0            │
 │  Cognitive Layer  Personality · KnowledgeGraph       │
 │                   MemoryEvolution · FederatedMemory  │
 ├──────────────────────────────────────────────────────┤

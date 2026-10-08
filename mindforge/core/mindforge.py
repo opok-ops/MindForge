@@ -2751,6 +2751,23 @@ class MindForge:
         """
         return self._storage.detect_conflicts(memory_ids)
 
+    def memory_report(self) -> Dict[str, Any]:
+        """记忆健康报告（v5.9.0 新增）
+
+        统计四层规模、TTL 过期、回收站、冲突审计、FTS 一致性、
+        数据库健康与加密状态；不含任何记忆明文内容，可安全用于
+        已认证的管理端点 / CLI / MCP。
+        """
+        return self._storage.memory_report()
+
+    def export_audit(self, limit: int = 1000, since: float = 0.0,
+                     actor: str = "") -> List[Dict[str, Any]]:
+        """导出审计日志（v5.9.0 新增，GDPR/取证）
+
+        按时间倒序返回机器可读审计条目，支持 limit / since / actor 过滤。
+        """
+        return self._storage.export_audit(limit=limit, since=since, actor=actor)
+
     def resolve_conflict(self, conflict: Dict[str, Any], strategy: str = "auto") -> Optional[str]:
         """解决记忆冲突
 

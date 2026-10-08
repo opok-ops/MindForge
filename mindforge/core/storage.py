@@ -1333,7 +1333,13 @@ class StorageEngine:
         v5.5.2: 自动过期检查——若 expires_at > 0 且已过期，自动移入回收站并返回 None。
         v5.6.3: 接入 v5.5.5 建立但此前读路径从未使用的 MemoryCache（命中时跳过
         SQL 与行反序列化）；缓存项带 _ENTRY_CACHE_TTL 兜底，写路径主动失效。
+        v5.9.0: 参数类型校验——非 str memory_id 报友好 ValueError，替代
+        MemoryCache 内部的 unhashable TypeError（"cannot use 'dict' as a dict key"）。
         """
+        if not isinstance(memory_id, str):
+            raise ValueError(
+                f"memory_id 必须是字符串，收到 {type(memory_id).__name__}"
+            )
         from dataclasses import asdict
 
         entry: Optional[MemoryEntry] = None
@@ -2064,6 +2070,151 @@ class StorageEngine:
             "rights_exercisable": ["export_all", "erase", "delete_memory", "purge_trash"],
             "local_only": True,
         }
+
+    def memory_report(self) -> Dict[str, Any]:
+        """记忆健康报告（v5.9.0 新增）
+
+        面向可观测性：统计四层规模、TTL 过期、回收站、冲突审计、
+        FTS 一致性、数据库健康与加密状态。
+
+        安全约定：只返回统计与元数据，**不含任何记忆明文或密文内容**，
+        可安全暴露给已认证的管理端点。
+        """
+        import os as _os
+        conn = self._get_conn()
+        now = time.time()
+
+        def _one(sql: str, *args) -> int:
+            try:
+                row = conn.execute(sql, args).fetchone()
+                return int(row[0]) if row and row[0] is not None else 0
+            except sqlite3.OperationalError:
+                return 0
+
+        # 四层规模（不含回收站）
+        layer_counts: Dict[str, int] = {}
+        try:
+            for layer, cnt in conn.execute(
+                "SELECT layer, COUNT(*) FROM memories "
+                "WHERE category != 'trash' GROUP BY layer"
+            ):
+                layer_counts[str(layer)] = int(cnt)
+        except sqlite3.OperationalError:
+            pass
+
+        layers = {
+            "sensory": layer_counts.get("sensory", 0),
+            "short_term": layer_counts.get("short_term", 0),
+            "long_term": layer_counts.get("long_term", 0),
+            "permanent": layer_counts.get("permanent", 0),
+        }
+        total_memories = sum(layers.values())
+
+        content_bytes = _one(
+            "SELECT COALESCE(SUM(LENGTH(content)), 0) FROM memories "
+            "WHERE category != 'trash'"
+        )
+        cipher_bytes = _one(
+            "SELECT COALESCE(SUM(LENGTH(ciphertext)), 0) FROM memories "
+            "WHERE category != 'trash'"
+        )
+
+        # FTS 一致性：trigram 虚表 COUNT 可能较慢，失败按不可用处理
+        fts_rows = _one("SELECT COUNT(*) FROM memory_fts")
+        fts_consistent = fts_rows == total_memories
+
+        # 数据库健康
+        page_count = _one("PRAGMA page_count")
+        page_size = _one("PRAGMA page_size")
+        try:
+            journal_mode = str(conn.execute("PRAGMA journal_mode").fetchone()[0])
+        except Exception:
+            journal_mode = "unknown"
+        db_path_str = str(self.db_path)
+        wal_bytes = 0
+        wal_file = db_path_str + "-wal"
+        if _os.path.exists(wal_file):
+            try:
+                wal_bytes = _os.path.getsize(wal_file)
+            except OSError:
+                wal_bytes = 0
+
+        return {
+            "generated_at": now,
+            "version": getattr(self, "version", None) or self._schema_version(),
+            "encrypted_at_rest": bool(self.encrypted),
+            "layers": layers,
+            "total_memories": total_memories,
+            "trash_count": _one(
+                "SELECT COUNT(*) FROM memories WHERE category = 'trash'"),
+            "expired_ttl_count": _one(
+                "SELECT COUNT(*) FROM memories WHERE expires_at > 0 "
+                "AND expires_at <= ? AND category != 'trash'", now),
+            "size_bytes": {
+                "content_bytes": content_bytes,
+                "ciphertext_bytes": cipher_bytes,
+            },
+            "fts": {
+                "rows": fts_rows,
+                "consistent": fts_consistent,
+            },
+            "conflict_events": _one(
+                "SELECT COUNT(*) FROM audit_log WHERE action IN "
+                "('conflict_detected', 'resolve_conflict')"),
+            "database": {
+                "page_count": page_count,
+                "page_size": page_size,
+                "journal_mode": journal_mode,
+                "wal_bytes": wal_bytes,
+                "schema_version": _one("PRAGMA user_version"),
+            },
+        }
+
+    def export_audit(self, limit: int = 1000, since: float = 0.0,
+                     actor: str = "") -> List[Dict[str, Any]]:
+        """导出审计日志（v5.9.0 新增，GDPR/取证）
+
+        机器可读 JSON：按时间倒序，支持 limit / since（时间戳）/ actor 过滤。
+        返回条目含 action / memory_id / actor / privacy_level / timestamp / details，
+        不含密钥与明文内容。
+        """
+        if not isinstance(limit, int) or limit <= 0:
+            raise ValueError("limit 必须为正整数")
+        if limit > 10000:
+            limit = 10000
+        conn = self._get_conn()
+        sql = ("SELECT id, action, memory_id, actor, session_id, "
+               "privacy_level, timestamp, details FROM audit_log WHERE 1=1")
+        params: List[Any] = []
+        if since and since > 0:
+            sql += " AND timestamp >= ?"
+            params.append(float(since))
+        if actor:
+            sql += " AND actor = ?"
+            params.append(actor)
+        sql += " ORDER BY timestamp DESC LIMIT ?"
+        params.append(limit)
+        rows = conn.execute(sql, params).fetchall()
+        out: List[Dict[str, Any]] = []
+        for row in rows:
+            out.append({
+                "id": row[0],
+                "action": row[1],
+                "memory_id": row[2],
+                "actor": row[3],
+                "session_id": row[4],
+                "privacy_level": row[5],
+                "timestamp": row[6],
+                "details": self._safe_json_loads(row[7] or "{}", default={}),
+            })
+        return out
+
+    def _schema_version(self) -> int:
+        try:
+            conn = self._get_conn()
+            return int(conn.execute("PRAGMA user_version").fetchone()[0])
+        except Exception:
+            return 0
 
     def gdpr_export_all(self) -> Dict[str, Any]:
         """导出全部个人数据（数据可携权，v5.7.6 新增）

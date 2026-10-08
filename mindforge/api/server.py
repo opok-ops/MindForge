@@ -417,6 +417,25 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
             return None
         # v5.4.8 安全修复：请求体大小限制
         if content_length > MAX_BODY_SIZE:
+            # v5.9.0 P3-3：有界 drain 后响应 413——客户端真实在传 body 时
+            # 读掉有限量剩余数据（避免 Broken pipe），但声明大 body 却不
+            # 发送的客户端（挂起攻击）在短超时后立即得到 413，不阻塞。
+            drained = 0
+            try:
+                self.connection.settimeout(2.0)
+                cap = min(content_length, MAX_BODY_SIZE + 1_048_576)
+                while drained < cap:
+                    chunk = self.rfile.read(min(65536, cap - drained))
+                    if not chunk:
+                        break
+                    drained += len(chunk)
+            except Exception:
+                pass
+            finally:
+                try:
+                    self.connection.settimeout(None)
+                except Exception:
+                    pass
             self._send_json(
                 {
                     "error": f"Request body too large (max {MAX_BODY_SIZE // 1024 // 1024}MB)"
@@ -591,6 +610,27 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
             elif path == "/api/stats":
                 result = self.mindforge.stats()
                 self._send_json(result)
+
+            elif path == "/api/meta/report":
+                # v5.9.0 记忆健康报告：仅统计与元数据，不含明文，位于鉴权网关之后
+                self._send_json(self.mindforge.memory_report())
+
+            elif path == "/api/audit":
+                # v5.9.0 审计日志导出（GDPR/取证）：limit/since/actor 过滤
+                limit = _safe_int(
+                    qs.get("limit", ["100"])[0], default=100, min_val=1, max_val=10000
+                )
+                since = 0.0
+                try:
+                    since = float(qs.get("since", ["0"])[0])
+                except (ValueError, TypeError):
+                    since = 0.0
+                actor = qs.get("actor", [""])[0] or ""
+                self._send_json({
+                    "count": limit,
+                    "entries": self.mindforge.export_audit(
+                        limit=limit, since=since, actor=actor),
+                })
 
             elif path == "/api/tags":
                 conn = self.mindforge.storage._get_conn()

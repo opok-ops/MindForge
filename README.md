@@ -8,7 +8,7 @@ MindForge gives AI agents a persistent, structured long-term memory: a four-tier
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-5.9.2-green.svg)](https://github.com/opok-ops/MindForge/releases)
+[![Version](https://img.shields.io/badge/version-5.9.3-green.svg)](https://github.com/opok-ops/MindForge/releases)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
 [![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
@@ -90,6 +90,8 @@ MindForge stats
 - **Audit export** — `export_audit()` returns machine-readable audit entries (limit / since / actor filters) for GDPR and forensics; exposed as `GET /api/audit` (v5.9.0).
 - **Privacy health check** — `privacy_report()` aggregates privacy-tier distribution, STRICT count, trash, audit events, encryption / key-file state, and the federated sharing surface, without exposing any plaintext memory content (v5.9.2).
 - **Knowledge-graph export** — `export_graph()` exports entities and relations as structured JSON (schema `mindforge-knowledge-graph/1.0`, memory IDs attached, no plaintext) for external visualization, audit, and migration (v5.9.2).
+- **Privacy-filtered graph export** — `export_graph(max_privacy="INTERNAL")` drops edges sourced from STRICT/PRIVATE memories (fail-closed, isolated nodes pruned); CLI `--privacy` and REST `GET /api/meta/graph?max_privacy=` support the same filter (v5.9.3).
+- **Unknown-privacy grouping** — `privacy_report()` buckets unknown/malformed privacy levels into `unknown_privacy_count` instead of leaking raw level names into the distribution (v5.9.3).
 
 **Integration**
 
@@ -105,7 +107,7 @@ MindForge stats
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│           MindForge v5.9.2            │
+│           MindForge v5.9.3            │
 │  Cognitive Layer  Personality · KnowledgeGraph       │
 │                   MemoryEvolution · FederatedMemory  │
 ├──────────────────────────────────────────────────────┤

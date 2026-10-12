@@ -1,3 +1,24 @@
+## [5.9.3] - 2026-10-12
+
+### 安全加固
+- **知识图谱导出隐私过滤（fail-closed）**：`export_graph(max_privacy)`
+  新增隐私过滤，默认 `INTERNAL`——STRICT/PRIVATE 来源的实体关系结构
+  不随导出外泄；孤立节点一并裁剪。CLI `mf export-graph --privacy`、
+  REST `GET /api/meta/graph?max_privacy=` 同步支持。
+- **图谱导出 schema 修复**：边输出增加 `source_name`/`target_name`
+  （此前仅实体 UUID，外部无法识别）；节点裁剪改为按实体 ID 匹配。
+- **隐私报告未知等级归类**：`privacy_report()` 将未知/异常隐私等级
+  （含 NULL）归入 `unknown_privacy_count`，不泄漏原始等级名、不污染
+  四档分布，仍计入活跃记忆总数。
+
+### 新功能
+- 新增 REST 端点 `GET /api/meta/graph`（鉴权网关后，图谱结构化导出，
+  不含明文）。
+
+### 测试
+- 新增 tests/test_v593_features.py（12 项：图谱隐私过滤 / schema /
+  未知等级归类 / CLI --privacy / REST 端点与鉴权）；全量 979 项通过。
+
 ## [5.9.2] - 2026-10-12
 
 ### 新功能

@@ -2216,6 +2216,36 @@ class StorageEngine:
         except Exception:
             return 0
 
+    def memory_privacy_map(self, memory_ids) -> Dict[str, str]:
+        """批量查询记忆的隐私等级（v5.9.3 新增，供图谱导出隐私过滤使用）
+
+        返回 {memory_id: PRIVACY_LEVEL}；未找到或 NULL 的记忆按默认
+        INTERNAL 处理（fail-closed 语义：无法确认来源时按内部等级）。
+        入参必须是可迭代的 str id 列表；全程 ? 占位符，无注入面。
+        """
+        ids = [mid for mid in (memory_ids or []) if isinstance(mid, str)]
+        if not ids:
+            return {}
+        out: Dict[str, str] = {}
+        conn = self._get_conn()
+        # 分批查询，避免单条 SQL 过长
+        _BATCH = 400
+        for i in range(0, len(ids), _BATCH):
+            chunk = ids[i:i + _BATCH]
+            placeholders = ",".join("?" * len(chunk))
+            try:
+                rows = conn.execute(
+                    "SELECT id, privacy FROM memories "
+                    "WHERE id IN (%s)" % placeholders, chunk).fetchall()
+            except sqlite3.OperationalError:
+                continue
+            for row in rows:
+                level = str(row[1]).upper() if row[1] else "INTERNAL"
+                if level not in ("PUBLIC", "INTERNAL", "PRIVATE", "STRICT"):
+                    level = "INTERNAL"
+                out[row[0]] = level
+        return out
+
     def privacy_report(self) -> Dict[str, Any]:
         """隐私健康体检（v5.9.2 新增）
 
@@ -2236,19 +2266,26 @@ class StorageEngine:
                 return 0
 
         # 隐私等级分布（排除回收站）
+        # v5.9.3：未知/异常等级（含 NULL、自定义值）单独归入
+        # unknown_privacy_count，不泄漏原始等级名，也不污染四档分布。
         known_levels = ("PUBLIC", "INTERNAL", "PRIVATE", "STRICT")
         privacy_dist: Dict[str, int] = {"PUBLIC": 0, "INTERNAL": 0,
                                         "PRIVATE": 0, "STRICT": 0}
+        unknown_count = 0
         try:
             for level, cnt in conn.execute(
                 "SELECT privacy, COUNT(*) FROM memories "
                 "WHERE category != 'trash' GROUP BY privacy"
             ):
-                key = str(level).upper()
-                privacy_dist[key] = int(cnt)
+                key = str(level).upper() if level is not None else ""
+                if key in privacy_dist:
+                    privacy_dist[key] = int(cnt)
+                else:
+                    unknown_count += int(cnt)
         except sqlite3.OperationalError:
             pass
-        total_active = sum(privacy_dist.get(k, 0) for k in known_levels)
+        total_active = sum(privacy_dist.get(k, 0) for k in known_levels) \
+            + unknown_count
 
         # 密钥文件权限（加密态）
         key_file_mode = None
@@ -2265,6 +2302,7 @@ class StorageEngine:
             "version": getattr(self, "version", None) or self._schema_version(),
             "privacy_distribution": privacy_dist,
             "total_active_memories": total_active,
+            "unknown_privacy_count": unknown_count,
             "strict_count": privacy_dist.get("STRICT", 0),
             "trash_count": _one(
                 "SELECT COUNT(*) FROM memories WHERE category = 'trash'"),

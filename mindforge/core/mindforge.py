@@ -571,15 +571,69 @@ class MindForge:
                         "created_at": e.created_at})
         return out
 
-    def export_graph(self) -> Dict[str, Any]:
-        """导出知识图谱（v5.9.2 新增）
+    def export_graph(self, max_privacy: str = "INTERNAL") -> Dict[str, Any]:
+        """导出知识图谱（v5.9.2 新增；v5.9.3 隐私过滤）
 
         返回节点（实体）与边（关系）的结构化 JSON，包含实体名/类型、
         关系类型/权重与关联记忆 ID；**不含记忆明文**，可用于外部可视化、
         审计与迁移。格式 schema 为 ``mindforge-knowledge-graph/1.0``。
+
+        v5.9.3 安全加固（fail-closed）：新增 ``max_privacy`` 隐私过滤。
+        边的来源隐私取其关联记忆隐私的最高档；超过 ``max_privacy`` 的边
+        不导出，孤立节点一并裁剪。默认 ``INTERNAL``——即默认只导出
+        PUBLIC/INTERNAL 来源的结构，STRICT/PRIVATE 记忆的实体关系
+        结构不会随导出外泄。历史遗留无关联记忆的边（memory_ids 为空）
+        无法判断来源，按兼容处理保留；调用方传 ``max_privacy="STRICT"``
+        可导出全部。
+
+        Args:
+            max_privacy: 允许导出的最高隐私等级
+                （PUBLIC/INTERNAL/PRIVATE/STRICT，默认 INTERNAL）。
         """
         kg = self._knowledge_graph
         import time as _t
+        level_rank = {"PUBLIC": 0, "INTERNAL": 1, "PRIVATE": 2, "STRICT": 3}
+        max_rank = level_rank.get(str(max_privacy).upper(), 1)
+
+        # 收集全部边关联的记忆 ID，一次轻量查询隐私等级
+        all_ids: List[str] = []
+        for r in kg.relations.values():
+            if r.memory_ids:
+                all_ids.extend(r.memory_ids)
+        priv_map = self._storage.memory_privacy_map(all_ids) if all_ids else {}
+
+        def _edge_allowed(r) -> bool:
+            if not r.memory_ids:
+                return True  # 历史遗留无来源关联的边：无法判断，保留
+            mx = 1
+            for mid in r.memory_ids:
+                rank = level_rank.get(priv_map.get(mid, "INTERNAL"), 1)
+                if rank > mx:
+                    mx = rank
+            return mx <= max_rank
+
+        # v5.9.3：实体 id -> 名称映射（边输出 source_name/target_name，
+        # 节点裁剪按实体 id 匹配——from_entity/to_entity 存的是实体 id）
+        id2name = {eid: e.name for eid, e in kg.entities.items()}
+        edges = [
+            {
+                "id": r.id,
+                "source": r.from_entity,
+                "source_name": id2name.get(r.from_entity, r.from_entity),
+                "target": r.to_entity,
+                "target_name": id2name.get(r.to_entity, r.to_entity),
+                "type": r.relation_type,
+                "weight": float(r.weight),
+                "memory_ids": list(r.memory_ids),
+            }
+            for r in kg.relations.values()
+            if _edge_allowed(r)
+        ]
+        # 裁剪孤立节点：仅保留出现在导出边中的实体
+        edge_names = set()
+        for e in edges:
+            edge_names.add(e["source"])
+            edge_names.add(e["target"])
         nodes = [
             {
                 "id": e.id,
@@ -588,21 +642,12 @@ class MindForge:
                 "description": e.description or "",
             }
             for e in kg.entities.values()
-        ]
-        edges = [
-            {
-                "id": r.id,
-                "source": r.from_entity,
-                "target": r.to_entity,
-                "type": r.relation_type,
-                "weight": float(r.weight),
-                "memory_ids": list(r.memory_ids),
-            }
-            for r in kg.relations.values()
+            if e.id in edge_names
         ]
         return {
             "schema": "mindforge-knowledge-graph/1.0",
             "generated_at": _t.time(),
+            "max_privacy": str(max_privacy).upper(),
             "total_entities": len(nodes),
             "total_relations": len(edges),
             "nodes": nodes,

@@ -957,9 +957,10 @@ def cmd_privacy_report(args):
 
 
 def cmd_export_graph(args):
-    """导出知识图谱 JSON（v5.9.2 新增，不含记忆明文）"""
+    """导出知识图谱 JSON（v5.9.2 新增，不含记忆明文；v5.9.3 支持隐私过滤）"""
     cm = _get_memory(args)
-    graph = cm.export_graph()
+    max_privacy = getattr(args, "privacy", "") or "INTERNAL"
+    graph = cm.export_graph(max_privacy=max_privacy)
     if getattr(args, "output", "") and args.output:
         try:
             import io as _io
@@ -3539,11 +3540,17 @@ def main(argv=None):
     )
     p_export_graph = sub.add_parser(
         "export-graph",
-        help="导出知识图谱 JSON（不含记忆明文，v5.9.2 新增）",
+        help="导出知识图谱 JSON（不含记忆明文，v5.9.2 新增；支持隐私过滤）",
         parents=[json_parser],
     )
     p_export_graph.add_argument(
         "--output", default="", help="输出文件路径（缺省打印到 stdout）"
+    )
+    p_export_graph.add_argument(
+        "--privacy", default="INTERNAL",
+        choices=["PUBLIC", "INTERNAL", "PRIVATE", "STRICT"],
+        help="允许导出的最高隐私等级（v5.9.3，默认 INTERNAL："
+             "STRICT/PRIVATE 来源的结构不导出）",
     )
     p_gdpr_export_all = sub.add_parser(
         "gdpr-export-all",

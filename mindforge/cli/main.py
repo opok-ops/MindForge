@@ -926,6 +926,57 @@ def cmd_gdpr_report(args):
     return 0
 
 
+def cmd_privacy_report(args):
+    """隐私健康体检（v5.9.2 新增）"""
+    cm = _get_memory(args)
+    rep = cm.privacy_report()
+    if getattr(args, "json_output", False):
+        _json_out(rep)
+        cm.close()
+        return 0
+    print(c("\n🔐 隐私健康体检", "bold"))
+    print("=" * 56)
+    print(f"静态加密: {'是' if rep.get('encrypted_at_rest') else '否'}"
+          + (f"（密钥文件权限 {rep.get('key_file_mode')}）"
+             if rep.get('key_file_mode') else ""))
+    print(f"活跃记忆: {rep.get('total_active_memories', 0)}"
+          f"（STRICT: {rep.get('strict_count', 0)}）")
+    print(f"回收站可擦除: {rep.get('trash_count', 0)}")
+    print(f"联邦共享面: {rep.get('federated_shared_count', 0)}")
+    print(c("\n隐私等级分布", "cyan"))
+    for k, v in rep.get("privacy_distribution", {}).items():
+        print(f"  {k:<10} {v}")
+    print(c("\n审计事件", "cyan"))
+    audit = rep.get("audit_events", {})
+    print(f"  总量: {audit.get('total', 0)}  "
+          f"近7天: {audit.get('last_7d', 0)}  "
+          f"近30天: {audit.get('last_30d', 0)}")
+    print(c("\n说明：本报告仅含统计与元数据，不含任何记忆内容。", "yellow"))
+    cm.close()
+    return 0
+
+
+def cmd_export_graph(args):
+    """导出知识图谱 JSON（v5.9.2 新增，不含记忆明文）"""
+    cm = _get_memory(args)
+    graph = cm.export_graph()
+    if getattr(args, "output", "") and args.output:
+        try:
+            import io as _io
+            with _io.open(args.output, "w", encoding="utf-8") as f:
+                json.dump(graph, f, ensure_ascii=False, indent=2)
+            print(c(f"图谱已导出: {args.output}", "green"))
+            print(f"实体 {graph['total_entities']} 个，关系 {graph['total_relations']} 条")
+        except OSError as e:
+            print(c(f"写入失败: {e}", "red"))
+            cm.close()
+            return 1
+    else:
+        _json_out(graph)
+    cm.close()
+    return 0
+
+
 def cmd_gdpr_export_all(args):
     """导出全部个人数据（数据可携权，v5.7.6 新增）"""
     cm = _get_memory(args)
@@ -3480,6 +3531,19 @@ def main(argv=None):
 
     p_gdpr_report = sub.add_parser(
         "gdpr-report", help="GDPR 数据合规报告（v5.7.6 新增）", parents=[json_parser]
+    )
+    p_privacy_report = sub.add_parser(
+        "privacy-report",
+        help="隐私健康体检（隐私等级分布/审计事件/加密状态，v5.9.2 新增）",
+        parents=[json_parser],
+    )
+    p_export_graph = sub.add_parser(
+        "export-graph",
+        help="导出知识图谱 JSON（不含记忆明文，v5.9.2 新增）",
+        parents=[json_parser],
+    )
+    p_export_graph.add_argument(
+        "--output", default="", help="输出文件路径（缺省打印到 stdout）"
     )
     p_gdpr_export_all = sub.add_parser(
         "gdpr-export-all",
@@ -6893,6 +6957,9 @@ def _main_dispatch(args, parser=None):
         "gdpr-report": cmd_gdpr_report,
         "gdpr-export-all": cmd_gdpr_export_all,
         "gdpr-erase": cmd_gdpr_erase,
+        # v5.9.2 新增：隐私健康体检 + 图谱导出
+        "privacy-report": cmd_privacy_report,
+        "export-graph": cmd_export_graph,
         # v5.2.8 新增
         "export-csv": cmd_export_csv,
         "diff": cmd_diff,

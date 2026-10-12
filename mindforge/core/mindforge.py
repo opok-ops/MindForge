@@ -571,6 +571,44 @@ class MindForge:
                         "created_at": e.created_at})
         return out
 
+    def export_graph(self) -> Dict[str, Any]:
+        """导出知识图谱（v5.9.2 新增）
+
+        返回节点（实体）与边（关系）的结构化 JSON，包含实体名/类型、
+        关系类型/权重与关联记忆 ID；**不含记忆明文**，可用于外部可视化、
+        审计与迁移。格式 schema 为 ``mindforge-knowledge-graph/1.0``。
+        """
+        kg = self._knowledge_graph
+        import time as _t
+        nodes = [
+            {
+                "id": e.id,
+                "name": e.name,
+                "type": e.entity_type,
+                "description": e.description or "",
+            }
+            for e in kg.entities.values()
+        ]
+        edges = [
+            {
+                "id": r.id,
+                "source": r.from_entity,
+                "target": r.to_entity,
+                "type": r.relation_type,
+                "weight": float(r.weight),
+                "memory_ids": list(r.memory_ids),
+            }
+            for r in kg.relations.values()
+        ]
+        return {
+            "schema": "mindforge-knowledge-graph/1.0",
+            "generated_at": _t.time(),
+            "total_entities": len(nodes),
+            "total_relations": len(edges),
+            "nodes": nodes,
+            "edges": edges,
+        }
+
     def get(self, memory_id: str, actor: str = "", session_id: str = "") -> Optional[MemoryEntry]:
         """获取记忆"""
         entry = self._storage.get_memory(memory_id, actor, session_id)
@@ -2759,6 +2797,26 @@ class MindForge:
         已认证的管理端点 / CLI / MCP。
         """
         return self._storage.memory_report()
+
+    def privacy_report(self) -> Dict[str, Any]:
+        """隐私健康体检（v5.9.2 新增）
+
+        隐私等级分布、STRICT 保护、回收站可擦除、审计事件概览、
+        加密与密钥文件状态、联邦共享面；不含任何记忆明文内容。
+        """
+        rep = self._storage.privacy_report()
+        try:
+            rep["federated_shared_count"] = len(self.federated.shared_memories)
+        except Exception:
+            rep["federated_shared_count"] = 0
+        if rep.get("encrypted_at_rest") and rep.get("key_file_mode") is None:
+            try:
+                kf = Path(getattr(self.config, "key_file", "") or "")
+                if kf.exists():
+                    rep["key_file_mode"] = oct(kf.stat().st_mode & 0o777)
+            except (OSError, TypeError):
+                rep["key_file_mode"] = None
+        return rep
 
     def export_audit(self, limit: int = 1000, since: float = 0.0,
                      actor: str = "") -> List[Dict[str, Any]]:

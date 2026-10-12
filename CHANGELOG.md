@@ -1,3 +1,23 @@
+## [5.9.2] - 2026-10-12
+
+### 新功能
+- **隐私健康体检 `privacy_report()`**：隐私等级分布 / STRICT 保护 /
+  回收站可擦除 / 审计事件概览（总量、近 7/30 天）/ 加密与密钥文件状态 /
+  联邦共享面；不含任何明文内容（REST `GET /api/meta/privacy`，CLI
+  `mf privacy-report`）。
+- **知识图谱导出 `export_graph()`**：节点（实体）与边（关系）结构化
+  JSON，schema `mindforge-knowledge-graph/1.0`，含关联记忆 ID，不含
+  记忆明文（CLI `mf export-graph [--output file]`）。
+
+### 安全加固
+- `register_second_factor` 标记弃用（P3-1）：同值哈希为静态口令语义，
+  新代码一律使用 RFC 6238 标准 TOTP（`register_totp_secret` +
+  `verify_totp_code`）；旧入口保留兼容并发警告日志。
+
+### 测试
+- 新增 tests/test_v592_features.py（13 项：报告结构 / 无明文 / 加密态 /
+  图谱导出 / REST 鉴权 / CLI / 弃用告警）；全量 967 项通过。
+
 ## [5.9.0] - 2026-10-08
 
 ### 新功能

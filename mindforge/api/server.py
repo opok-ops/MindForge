@@ -615,6 +615,10 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                 # v5.9.0 记忆健康报告：仅统计与元数据，不含明文，位于鉴权网关之后
                 self._send_json(self.mindforge.memory_report())
 
+            elif path == "/api/meta/privacy":
+                # v5.9.2 隐私健康体检：仅统计与元数据，不含明文，位于鉴权网关之后
+                self._send_json(self.mindforge.privacy_report())
+
             elif path == "/api/audit":
                 # v5.9.0 审计日志导出（GDPR/取证）：limit/since/actor 过滤
                 limit = _safe_int(

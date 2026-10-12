@@ -2216,6 +2216,73 @@ class StorageEngine:
         except Exception:
             return 0
 
+    def privacy_report(self) -> Dict[str, Any]:
+        """隐私健康体检（v5.9.2 新增）
+
+        面向隐私合规与审计：按隐私等级统计记忆分布、STRICT 保护、
+        回收站可擦除、审计事件概览与加密/密钥状态。
+
+        安全约定：只返回统计与元数据，**不含任何记忆明文或密文内容**，
+        可安全暴露给已认证的管理端点。
+        """
+        conn = self._get_conn()
+        now = time.time()
+
+        def _one(sql: str, *args) -> int:
+            try:
+                row = conn.execute(sql, args).fetchone()
+                return int(row[0]) if row and row[0] is not None else 0
+            except sqlite3.OperationalError:
+                return 0
+
+        # 隐私等级分布（排除回收站）
+        known_levels = ("PUBLIC", "INTERNAL", "PRIVATE", "STRICT")
+        privacy_dist: Dict[str, int] = {"PUBLIC": 0, "INTERNAL": 0,
+                                        "PRIVATE": 0, "STRICT": 0}
+        try:
+            for level, cnt in conn.execute(
+                "SELECT privacy, COUNT(*) FROM memories "
+                "WHERE category != 'trash' GROUP BY privacy"
+            ):
+                key = str(level).upper()
+                privacy_dist[key] = int(cnt)
+        except sqlite3.OperationalError:
+            pass
+        total_active = sum(privacy_dist.get(k, 0) for k in known_levels)
+
+        # 密钥文件权限（加密态）
+        key_file_mode = None
+        if getattr(self, "encrypted", False):
+            try:
+                kp = getattr(self, "key_path", None)
+                if kp and os.path.exists(kp):
+                    key_file_mode = oct(os.stat(kp).st_mode & 0o777)
+            except (OSError, TypeError):
+                key_file_mode = None
+
+        return {
+            "generated_at": now,
+            "version": getattr(self, "version", None) or self._schema_version(),
+            "privacy_distribution": privacy_dist,
+            "total_active_memories": total_active,
+            "strict_count": privacy_dist.get("STRICT", 0),
+            "trash_count": _one(
+                "SELECT COUNT(*) FROM memories WHERE category = 'trash'"),
+            "audit_events": {
+                "total": _one("SELECT COUNT(*) FROM audit_log"),
+                "last_7d": _one(
+                    "SELECT COUNT(*) FROM audit_log WHERE timestamp >= ?",
+                    now - 7 * 86400),
+                "last_30d": _one(
+                    "SELECT COUNT(*) FROM audit_log WHERE timestamp >= ?",
+                    now - 30 * 86400),
+            },
+            "encrypted_at_rest": bool(getattr(self, "encrypted", False)),
+            "key_file_mode": key_file_mode,
+            # 联邦共享面由 MindForge 层填充（避免 storage -> federated 循环依赖）
+            "federated_shared_count": None,
+        }
+
     def gdpr_export_all(self) -> Dict[str, Any]:
         """导出全部个人数据（数据可携权，v5.7.6 新增）
 

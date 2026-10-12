@@ -449,6 +449,12 @@ class PrivacyEngine:
         v5.4.2 安全加固：令牌以 SHA-256 hash 存储，不明文持久化。
         v5.6.2 安全加固：内存中也只存 hash，不明文驻留。
 
+        .. deprecated:: v5.8.3
+            本入口为同值哈希校验（静态口令语义）：若上层把长期共享密钥
+            当作 code 传入，2FA 会退化为静态口令。请改用标准 TOTP
+            （RFC 6238）：:meth:`register_totp_secret` + :meth:`verify_totp_code`。
+            本方法仅保留兼容，新代码不得使用。
+
         Args:
             actor: 需要二次验证的用户/Agent
             token: 验证令牌（如 TOTP 密钥、一次性密码）
@@ -458,6 +464,10 @@ class PrivacyEngine:
         """
         if not actor or not token:
             return False
+        logger.warning(
+            "register_second_factor 已弃用（静态口令语义，P3-1）；"
+            "请改用 register_totp_secret + verify_totp_code（RFC 6238）"
+        )
         token_hash = hashlib.sha256(token.encode()).hexdigest()
         self._second_factor_token_hashes[actor] = token_hash
         # v5.4.2：持久化 hash 到 SQLite（不明文存储）

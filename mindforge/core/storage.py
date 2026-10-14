@@ -7188,6 +7188,49 @@ class StorageEngine:
             details=self._safe_json_loads(row["details"], {}),
         ) for row in rows]
 
+    def _online_backup_to(self, dest_path: Path) -> Path:
+        """SQLite 官方在线备份 API 热拷贝（v5.9.5 数据完整性修复）。
+
+        背景：本库默认 WAL 模式运行（见 __init__ PRAGMA journal_mode=WAL）。
+        此前 backup()/create_backup() 直接 shutil.copy2 主库文件，会丢失
+        尚未 checkpoint 到主库的 -wal 事务，造成备份比线上旧、恢复后数据回退。
+
+        正确做法：用 source_conn.backup(dest_conn)——SQLite 官方在线备份 API，
+        它在读取一致性快照的前提下把主库 + WAL 内容完整拷贝到目标库，
+        即使拷贝期间有并发写也能得到一致状态。写完 .tmp 后 os.replace 原子
+        改名，避免半截文件被 restore 读到。
+
+        Returns:
+            写入完成的目标 Path（与入参一致）
+        """
+        import hashlib
+        dest_path = Path(dest_path)
+        tmp_path = dest_path.with_suffix(dest_path.suffix + ".tmp")
+        if tmp_path.exists():
+            tmp_path.unlink()
+
+        src = self._get_conn()
+        dst = sqlite3.connect(str(tmp_path))
+        try:
+            # pages=-1 / sleep=0：单拍拷贝，WAL 下也能拿到一致快照
+            src.backup(dst, pages=-1, sleep=0.0)
+        finally:
+            dst.close()
+
+        # 备份后立即对目标做完整性校验，损坏的备份不允许落盘
+        chk = sqlite3.connect(str(tmp_path))
+        try:
+            row = chk.execute("PRAGMA integrity_check").fetchone()
+        finally:
+            chk.close()
+        if row is None or str(row[0]).lower() != "ok":
+            tmp_path.unlink(missing_ok=True)
+            raise sqlite3.DatabaseError(
+                f"备份完整性校验失败: {row[0] if row else '无结果'}")
+
+        os.replace(str(tmp_path), str(dest_path))
+        return dest_path
+
     def backup(self, backup_dir: str) -> Path:
         """备份数据库
 
@@ -7204,8 +7247,8 @@ class StorageEngine:
         # 最终文件路径也做一次校验
         _safe_path(str(dest), must_exist=False, allow_symlinks=False)
 
-        import shutil
-        shutil.copy2(self.db_path, dest)
+        # v5.9.5：用 SQLite 在线备份 API 替代裸 copy2，WAL 模式下不丢未 checkpoint 事务
+        self._online_backup_to(dest)
         # v5.6.5 P2 #14：与 create_backup 对齐，备份后自动轮转（保留最新 10 份）
         try:
             self.delete_old_backups(str(backup_path), keep_count=10)
@@ -11036,7 +11079,8 @@ class StorageEngine:
         backup_file = backup_path / f"memory_backup_{timestamp}.db"
 
         try:
-            shutil.copy2(str(self.db_path), str(backup_file))
+            # v5.9.5：在线备份 API（WAL 一致快照）+ 原子 rename
+            self._online_backup_to(backup_file)
             size_mb = round(backup_file.stat().st_size / (1024 * 1024), 2)
             # v5.6.5 P2 #14：备份成功后自动轮转，默认只保留最新 10 份，
             # 避免长期运行备份无限堆积占满磁盘。轮转失败不影响本次备份。

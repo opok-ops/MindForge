@@ -1,3 +1,17 @@
+## [5.9.5] - 2026-10-14
+
+### 稳定性（P0 数据完整性修复）
+- **WAL 在线备份一致性**：`backup()` / `create_backup()` 此前直接
+  `shutil.copy2` 主库文件。本库默认 WAL 模式运行，未 checkpoint 到主库
+  的 -wal 事务会被丢失，恢复后数据回退。改用 SQLite 官方在线备份 API
+  `Connection.backup()` 读取一致性快照，写完 `.tmp` 后 `os.replace`
+  原子改名；备份落盘前对目标库跑 `PRAGMA integrity_check`，损坏备份
+  自动丢弃不污染目录。
+
+### 测试
+- 新增 tests/test_v595_features.py（3 项：WAL 备份含全部已提交行、
+  无 .tmp 残留、create/restore 往返数据完整）；全量 982 项通过。
+
 ## [5.9.3] - 2026-10-12
 
 ### 安全加固

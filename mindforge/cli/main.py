@@ -4925,6 +4925,66 @@ def main(argv=None):
     p_import.add_argument("--target-layer", help="目标记忆层级")
     p_import.add_argument("--force", action="store_true", help="强制导入（覆盖重复）")
 
+    # --- v6.0.0 功能 1-8 命令 ---
+    p_import_chat = sub.add_parser("import-chat", help="一键导入 ChatGPT/Claude 对话（v6.0.0）")
+    p_import_chat.add_argument("input", help="导出 JSON 文件路径")
+    p_import_chat.add_argument("--dry-run", action="store_true", help="试运行不写入")
+
+    p_timeline = sub.add_parser("timeline-viz", help="记忆时间线可视化（v6.0.0）")
+    p_timeline.add_argument("--category", "-c", help="按分类筛选")
+    p_timeline.add_argument("--days", type=int, default=365, help="时间窗口天数")
+    p_timeline.add_argument("--json", action="store_true", help="输出 JSON")
+
+    p_skill_pack_export = sub.add_parser("skill-pack-export", help="导出技能包（v6.0.0）")
+    p_skill_pack_export.add_argument("--output", "-o", default="skill_pack.json", help="输出文件")
+
+    p_skill_pack_import = sub.add_parser("skill-pack-import", help="导入技能包（v6.0.0）")
+    p_skill_pack_import.add_argument("input", help="技能包 JSON 文件")
+    p_skill_pack_import.add_argument("--mode", default="merge", choices=["merge", "replace"])
+
+    p_evolve_memory = sub.add_parser("evolve-memory", help="记忆演变（保留旧版本，v6.0.0）")
+    p_evolve_memory.add_argument("memory_id", help="记忆 ID")
+    p_evolve_memory.add_argument("--content", help="新内容")
+    p_evolve_memory.add_argument("--reason", help="演变原因")
+
+    p_evolution_history = sub.add_parser("evolution-history", help="记忆演变历史（v6.0.0）")
+    p_evolution_history.add_argument("memory_id", help="记忆 ID")
+    p_evolution_history.add_argument("--limit", type=int, default=50)
+    p_evolution_history.add_argument("--json", action="store_true", help="输出 JSON")
+
+    p_learn_outcome = sub.add_parser("learn-outcome", help="按结果学习的记忆（v6.0.0）")
+    p_learn_outcome.add_argument("memory_id", help="记忆 ID")
+    p_learn_outcome.add_argument("--outcome", default="success",
+                                 choices=["success", "partial", "failure"])
+    p_learn_outcome.add_argument("--note", default="", help="结果说明")
+
+    p_passport_export = sub.add_parser("passport-export", help="导出记忆护照（v6.0.0）")
+    p_passport_export.add_argument("--output", "-o", default="memory_passport.json", help="输出文件")
+
+    p_passport_import = sub.add_parser("passport-import", help="导入记忆护照（v6.0.0）")
+    p_passport_import.add_argument("input", help="护照 JSON 文件")
+    p_passport_import.add_argument("--mode", default="merge", choices=["merge", "replace"])
+
+    p_passport_revoke = sub.add_parser("passport-revoke", help="撤销记忆护照（v6.0.0）")
+    p_passport_revoke.add_argument("passport_id", help="护照 ID")
+
+    p_forget_explain = sub.add_parser("forget-explain", help="解释遗忘原因（v6.0.0）")
+    p_forget_explain.add_argument("memory_id", help="记忆 ID")
+
+    p_forget_run = sub.add_parser("forget-run", help="执行有原则遗忘 GC（v6.0.0）")
+    p_forget_run.add_argument("--dry-run", action="store_true", help="试运行不归档")
+
+    p_follow_up_create = sub.add_parser("follow-up-create", help="登记跟进（v6.0.0）")
+    p_follow_up_create.add_argument("memory_id", help="记忆 ID")
+    p_follow_up_create.add_argument("--note", default="", help="跟进说明")
+
+    p_follow_up_due = sub.add_parser("follow-up-due", help="到期跟进（v6.0.0）")
+    p_follow_up_due.add_argument("--limit", type=int, default=20)
+    p_follow_up_due.add_argument("--json", action="store_true", help="输出 JSON")
+
+    p_follow_up_resolve = sub.add_parser("follow-up-resolve", help="办结跟进（v6.0.0）")
+    p_follow_up_resolve.add_argument("follow_up_id", help="跟进 ID")
+
     p_compliance = sub.add_parser("compliance", help="合规报告")
 
     p_serve = sub.add_parser("serve", help="启动 Web UI 或 REST API")
@@ -7004,6 +7064,22 @@ def _main_dispatch(args, parser=None):
         "share-conflict-resolve": cmd_share_conflict_resolve,
         "share-conflict-dismiss": cmd_share_conflict_dismiss,
         "share-conflict-stats": cmd_share_conflict_stats,
+        # v6.0.0 功能 1-8
+        "import-chat": cmd_import_chat,
+        "timeline-viz": cmd_timeline_viz,
+        "skill-pack-export": cmd_skill_pack_export,
+        "skill-pack-import": cmd_skill_pack_import,
+        "evolve-memory": cmd_evolve_memory,
+        "evolution-history": cmd_evolution_history,
+        "learn-outcome": cmd_learn_outcome,
+        "passport-export": cmd_passport_export,
+        "passport-import": cmd_passport_import,
+        "passport-revoke": cmd_passport_revoke,
+        "forget-explain": cmd_forget_explain,
+        "forget-run": cmd_forget_run,
+        "follow-up-create": cmd_follow_up_create,
+        "follow-up-due": cmd_follow_up_due,
+        "follow-up-resolve": cmd_follow_up_resolve,
         # v5.4.3 新增
         "agent-influence": cmd_agent_influence,
         "memory-overlap": cmd_memory_overlap,
@@ -7032,6 +7108,253 @@ def _main_dispatch(args, parser=None):
         else:
             print(f"未知命令: {args.command}")
         sys.exit(1)
+
+
+def cmd_import_chat(args):
+    """功能 1：一键导入记忆（ChatGPT/Claude 导出，v6.0.0）"""
+    cm = _get_memory(args)
+    path = args.input
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        print(c(f"❌ 读取导出文件失败: {e}", "red"))
+        cm.close()
+        return 1
+    r = cm.import_chat_history(data, dry_run=args.dry_run)
+    if not r.get("success"):
+        print(c(f"❌ 导入失败: {r.get('error', '未知错误')}", "red"))
+        cm.close()
+        return 1
+    print(c(f"✅ 平台识别: {r['platform']}，已导入 {r['imported']} 条记忆", "green"))
+    print(f"   解析消息 {r['messages_parsed']} 条，噪音跳过 {r['skipped_noise']} 条")
+    if args.dry_run:
+        print("   （dry-run，未写入）")
+    cm.close()
+    return 0
+
+
+def cmd_timeline_viz(args):
+    """功能 2：记忆时间线可视化（聚合统计，v6.0.0）"""
+    cm = _get_memory(args)
+    r = cm.timeline_visual(category=args.category, days=args.days)
+    if args.json:
+        print(json.dumps(r, ensure_ascii=False, default=str))
+    else:
+        print(c(f"✅ 时间线（近 {r['days']} 天）", "green"))
+        print(f"   记忆总数: {r['total_memories']}，活跃: {r['active_memories']}")
+        print(f"   分类: {r['categories']}")
+        print(f"   偏好主题: {[t['name'] for t in r['preferences']['themes']]}")
+        print(f"   知识图谱: {r['graph']['entities']} 实体 / {r['graph']['relations']} 关系")
+    cm.close()
+    return 0
+
+
+def cmd_skill_pack_export(args):
+    """功能 3：导出技能包（v6.0.0）"""
+    cm = _get_memory(args)
+    r = cm.skill_pack_export()
+    if not r.get("success"):
+        print(c(f"❌ 导出失败: {r.get('error', '未知错误')}", "red"))
+        cm.close()
+        return 1
+    output = _safe_export_path(args.output, "skill_pack.json", ".json")
+    with open(str(output), "w", encoding="utf-8") as f:
+        json.dump(r["pack"], f, ensure_ascii=False, indent=2)
+    print(c(f"✅ 技能包已导出: {output}（{r['skill_count']} 个技能）", "green"))
+    cm.close()
+    return 0
+
+
+def cmd_skill_pack_import(args):
+    """功能 3：导入技能包（v6.0.0）"""
+    cm = _get_memory(args)
+    try:
+        with open(args.input, "r", encoding="utf-8") as f:
+            pack = json.load(f)
+    except Exception as e:
+        print(c(f"❌ 读取技能包失败: {e}", "red"))
+        cm.close()
+        return 1
+    v = cm.skill_pack_validate(pack)
+    if not v.get("valid"):
+        print(c(f"❌ 技能包校验失败: {v.get('errors')}", "red"))
+        cm.close()
+        return 1
+    r = cm.skill_pack_import(pack, mode=args.mode)
+    if not r.get("success"):
+        print(c(f"❌ 导入失败: {r.get('error', '未知错误')}", "red"))
+        cm.close()
+        return 1
+    print(c(f"✅ 技能包导入成功: {r['skills_imported']} 个技能", "green"))
+    cm.close()
+    return 0
+
+
+def cmd_evolve_memory(args):
+    """功能 4：记忆演变（v6.0.0）"""
+    cm = _get_memory(args)
+    r = cm.evolve_memory(args.memory_id, content=args.content,
+                         reason=args.reason)
+    if not r.get("success"):
+        print(c(f"❌ 演变失败: {r.get('error', '未知错误')}", "red"))
+        cm.close()
+        return 1
+    print(c(f"✅ 记忆已演变: v{r['from_version']} → v{r['to_version']}", "green"))
+    print(f"   原因: {r.get('reason', '')}")
+    cm.close()
+    return 0
+
+
+def cmd_evolution_history(args):
+    """功能 4：记忆演变历史（v6.0.0）"""
+    cm = _get_memory(args)
+    evos = cm.list_evolutions(args.memory_id, limit=args.limit)
+    if args.json:
+        print(json.dumps(evos, ensure_ascii=False, default=str))
+        cm.close()
+        return 0
+    print(c(f"✅ 演变历史（{len(evos)} 条）", "green"))
+    for e in evos:
+        print(f"   v{e['from_version']}→v{e['to_version']}  {e['reason']}  "
+              f"({e['created_at']:.0f})")
+    cm.close()
+    return 0
+
+
+def cmd_learn_outcome(args):
+    """功能 5：按结果学习的记忆（v6.0.0）"""
+    cm = _get_memory(args)
+    r = cm.learn_from_outcome(args.memory_id, outcome=args.outcome, note=args.note)
+    if not r.get("success"):
+        print(c(f"❌ 标记失败: {r.get('error', '未知错误')}", "red"))
+        cm.close()
+        return 1
+    print(c(f"✅ 结果已标记: {args.outcome}（重要度 {r['importance_before']}→{r['importance_after']}）", "green"))
+    cm.close()
+    return 0
+
+
+def cmd_passport_export(args):
+    """功能 6：导出记忆护照（v6.0.0）"""
+    cm = _get_memory(args)
+    r = cm.passport_export()
+    if not r.get("success"):
+        print(c(f"❌ 导出失败: {r.get('error', '未知错误')}", "red"))
+        cm.close()
+        return 1
+    output = _safe_export_path(args.output, "memory_passport.json", ".json")
+    with open(str(output), "w", encoding="utf-8") as f:
+        json.dump(r["passport"], f, ensure_ascii=False, indent=2)
+    print(c(f"✅ 记忆护照已导出: {output}", "green"))
+    print(f"   passport_id: {r['passport_id']}，记忆 {r['counts']['memories']} 条")
+    cm.close()
+    return 0
+
+
+def cmd_passport_import(args):
+    """功能 6：导入记忆护照（v6.0.0）"""
+    cm = _get_memory(args)
+    try:
+        with open(args.input, "r", encoding="utf-8") as f:
+            pp = json.load(f)
+    except Exception as e:
+        print(c(f"❌ 读取护照失败: {e}", "red"))
+        cm.close()
+        return 1
+    r = cm.passport_import(pp, mode=args.mode)
+    if not r.get("success"):
+        print(c(f"❌ 导入失败: {r.get('errors', r.get('error', '未知错误'))}", "red"))
+        cm.close()
+        return 1
+    print(c(f"✅ 护照导入成功: 记忆 {r['memories_imported']} 条，偏好 {r['preferences_imported']} 条", "green"))
+    cm.close()
+    return 0
+
+
+def cmd_passport_revoke(args):
+    """功能 6：撤销记忆护照（v6.0.0）"""
+    cm = _get_memory(args)
+    r = cm.passport_revoke(args.passport_id)
+    if not r.get("success"):
+        print(c(f"❌ 撤销失败: {r.get('error', '未知错误')}", "red"))
+        cm.close()
+        return 1
+    print(c(f"✅ 护照已撤销，删除 {r['memories_removed']} 条来源记忆", "green"))
+    cm.close()
+    return 0
+
+
+def cmd_forget_explain(args):
+    """功能 7：解释遗忘（v6.0.0）"""
+    cm = _get_memory(args)
+    r = cm.forget_explain(args.memory_id)
+    if not r.get("success"):
+        print(c(f"❌ 查询失败: {r.get('error', '未知错误')}", "red"))
+        cm.close()
+        return 1
+    print(c(f"✅ 遗忘评分: {r['forget_tendency']}（阈值 0.72）", "green"))
+    for s in r["explanation"]:
+        print(f"   • {s}")
+    cm.close()
+    return 0
+
+
+def cmd_forget_run(args):
+    """功能 7：执行有原则遗忘 GC（v6.0.0）"""
+    cm = _get_memory(args)
+    r = cm.forget_run(dry_run=args.dry_run)
+    if not r.get("success"):
+        print(c(f"❌ 执行失败: {r.get('error', '未知错误')}", "red"))
+        cm.close()
+        return 1
+    mode = "dry-run" if r["dry_run"] else "执行"
+    print(c(f"✅ 遗忘 GC（{mode}）：扫描 {r['scanned']}，候选 {r['candidates']}，实际归档 {r['archived']}", "green"))
+    for d in r["decisions"][:10]:
+        print(f"   • {d['memory_id'][:12]}… tendency={d['tendency']}: {'; '.join(d['reasons'][:2])}")
+    cm.close()
+    return 0
+
+
+def cmd_follow_up_create(args):
+    """功能 8：登记跟进（v6.0.0）"""
+    cm = _get_memory(args)
+    r = cm.follow_up_create(args.memory_id, note=args.note)
+    if not r.get("success"):
+        print(c(f"❌ 登记失败: {r.get('error', '未知错误')}", "red"))
+        cm.close()
+        return 1
+    print(c(f"✅ 跟进已登记: {r['follow_up_id']}（到期 {r['due_at']:.0f}）", "green"))
+    cm.close()
+    return 0
+
+
+def cmd_follow_up_due(args):
+    """功能 8：到期跟进（v6.0.0）"""
+    cm = _get_memory(args)
+    due = cm.follow_up_due(limit=args.limit)
+    if args.json:
+        print(json.dumps(due, ensure_ascii=False, default=str))
+        cm.close()
+        return 0
+    print(c(f"✅ 到期未办结 {len(due)} 条", "green"))
+    for d in due:
+        print(f"   • {d['follow_up_id']} 记忆[{d['memory_id'][:12]}…] {d['note']}")
+    cm.close()
+    return 0
+
+
+def cmd_follow_up_resolve(args):
+    """功能 8：办结跟进（v6.0.0）"""
+    cm = _get_memory(args)
+    r = cm.follow_up_resolve(args.follow_up_id)
+    if not r.get("success"):
+        print(c(f"❌ 办结失败: {r.get('error', '未知错误')}", "red"))
+        cm.close()
+        return 1
+    print(c(f"✅ 跟进已办结: {r['follow_up_id']}", "green"))
+    cm.close()
+    return 0
 
 
 def cmd_rebuild_embeddings(args):

@@ -215,6 +215,22 @@ class SkillStore:
         conn.commit()
         return cur.rowcount > 0
 
+    def delete_skill(self, name: str) -> bool:
+        """删除指定技能（v6.0.0 技能包功能：replace 模式先删后写）"""
+        if self.storage is None or not name:
+            return False
+        conn = self.storage._get_conn()
+        cur = conn.execute("DELETE FROM experience_skills WHERE name = ?", (name,))
+        conn.commit()
+        if cur.rowcount > 0:
+            self._skills.pop(name, None)
+            return True
+        # 大小写不敏感兜底：get_skill 已按小写匹配，这里同步删内存态
+        for key in [k for k in self._skills if k.lower() == name.lower()]:
+            self._skills.pop(key, None)
+            return True
+        return False
+
     # -- skills -----------------------------------------------------------
 
     def save_skills(self, templates: List[SkillTemplate]) -> int:

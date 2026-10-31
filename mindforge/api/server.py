@@ -896,6 +896,68 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
             elif path == "/api/connectors":
                 from mindforge.modules.connectors import list_connectors
                 self._send_json({"connectors": list_connectors()})
+            elif path == "/api/timeline":
+                # v6.0.0 功能 2：记忆时间线可视化（聚合统计，不含明文）
+                try:
+                    days = int(qs.get("days", ["365"])[0] or 365)
+                except (ValueError, TypeError):
+                    days = 365
+                self._send_json(self.mindforge.timeline_visual(
+                    category=qs.get("category", [""])[0] or None, days=days))
+            elif path == "/api/skill-pack/export":
+                # v6.0.0 功能 3：导出技能包
+                self._send_json(self.mindforge.skill_pack_export())
+            elif path == "/api/passport/export":
+                # v6.0.0 功能 6：导出记忆护照
+                self._send_json(self.mindforge.passport_export())
+            elif path == "/api/passport/status":
+                # v6.0.0 功能 6：护照状态
+                self._send_json(self.mindforge.passport_status())
+            elif path == "/api/evolution/stats":
+                # v6.0.0 功能 4：演变统计
+                self._send_json(self.mindforge.evolution_stats())
+            elif path == "/api/evolution/history":
+                # v6.0.0 功能 4：演变历史
+                mid = qs.get("memory_id", [""])[0]
+                if not mid:
+                    self._send_json({"error": "Missing 'memory_id' param"}, 400)
+                    return
+                try:
+                    limit = int(qs.get("limit", ["50"])[0] or 50)
+                except (ValueError, TypeError):
+                    limit = 50
+                self._send_json({"memory_id": mid,
+                                 "evolutions": self.mindforge.list_evolutions(mid, limit=limit)})
+            elif path == "/api/outcome/stats":
+                # v6.0.0 功能 5：结果学习统计
+                self._send_json(self.mindforge.outcome_stats())
+            elif path == "/api/forget/stats":
+                # v6.0.0 功能 7：遗忘统计
+                self._send_json(self.mindforge.forget_stats())
+            elif path == "/api/forget/explain":
+                # v6.0.0 功能 7：解释遗忘
+                mid = qs.get("memory_id", [""])[0]
+                if not mid:
+                    self._send_json({"error": "Missing 'memory_id' param"}, 400)
+                    return
+                self._send_json(self.mindforge.forget_explain(mid))
+            elif path == "/api/follow-ups/due":
+                # v6.0.0 功能 8：到期跟进
+                try:
+                    limit = int(qs.get("limit", ["20"])[0] or 20)
+                except (ValueError, TypeError):
+                    limit = 20
+                self._send_json({"due": self.mindforge.follow_up_due(limit=limit)})
+            elif path == "/api/follow-ups":
+                # v6.0.0 功能 8：跟进列表
+                try:
+                    limit = int(qs.get("limit", ["50"])[0] or 50)
+                except (ValueError, TypeError):
+                    limit = 50
+                include_resolved = qs.get("include_resolved", ["false"])[0].lower() == "true"
+                self._send_json({"follow_ups": self.mindforge.follow_up_list(
+                    include_resolved=include_resolved, limit=limit)})
+
             elif path == "/":
                 # v5.6.5 P2 #16：根路径不再枚举完整 API 端点清单，
                 # 避免在信息探测阶段向未授权方暴露攻击面。
@@ -1097,6 +1159,90 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                     except Exception:
                         failed += 1
                 self._send_json({"imported": imported, "failed": failed})
+
+            elif path == "/api/import-chat":
+                # v6.0.0 功能 1：一键导入 ChatGPT/Claude 对话
+                data = body.get("data")
+                if not isinstance(data, dict):
+                    self._send_json({"error": "Field 'data' must be a JSON object"}, 400)
+                    return
+                if not self._check_rate_limit(heavy=True):
+                    return
+                self._send_json(self.mindforge.import_chat_history(
+                    data, dry_run=bool(body.get("dry_run", False))))
+            elif path == "/api/skill-pack/import":
+                # v6.0.0 功能 3：导入技能包
+                pack = body.get("pack")
+                if not isinstance(pack, dict):
+                    self._send_json({"error": "Field 'pack' must be a JSON object"}, 400)
+                    return
+                mode = body.get("mode", "merge")
+                if mode not in ("merge", "replace"):
+                    self._send_json({"error": "mode must be 'merge' or 'replace'"}, 400)
+                    return
+                v = self.mindforge.skill_pack_validate(pack)
+                if not v.get("valid"):
+                    self._send_json({"error": "Invalid skill pack",
+                                     "details": v.get("errors")}, 400)
+                    return
+                self._send_json(self.mindforge.skill_pack_import(pack, mode=mode))
+            elif path == "/api/passport/import":
+                # v6.0.0 功能 6：导入记忆护照
+                pp = body.get("passport")
+                if not isinstance(pp, dict):
+                    self._send_json({"error": "Field 'passport' must be a JSON object"}, 400)
+                    return
+                mode = body.get("mode", "merge")
+                if mode not in ("merge", "replace"):
+                    self._send_json({"error": "mode must be 'merge' or 'replace'"}, 400)
+                    return
+                self._send_json(self.mindforge.passport_import(pp, mode=mode))
+            elif path == "/api/passport/revoke":
+                # v6.0.0 功能 6：撤销记忆护照
+                pid = body.get("passport_id", "")
+                if not isinstance(pid, str) or not pid:
+                    self._send_json({"error": "Missing 'passport_id' field"}, 400)
+                    return
+                self._send_json(self.mindforge.passport_revoke(pid))
+            elif path == "/api/evolve":
+                # v6.0.0 功能 4：记忆演变
+                mid = body.get("memory_id", "")
+                if not isinstance(mid, str) or not mid:
+                    self._send_json({"error": "Missing 'memory_id' field"}, 400)
+                    return
+                self._send_json(self.mindforge.evolve_memory(
+                    mid, content=body.get("content"), reason=body.get("reason", "")))
+            elif path == "/api/learn-outcome":
+                # v6.0.0 功能 5：按结果学习
+                mid = body.get("memory_id", "")
+                if not isinstance(mid, str) or not mid:
+                    self._send_json({"error": "Missing 'memory_id' field"}, 400)
+                    return
+                outcome = body.get("outcome", "success")
+                if outcome not in ("success", "partial", "failure"):
+                    self._send_json({"error": "outcome must be success/partial/failure"}, 400)
+                    return
+                self._send_json(self.mindforge.learn_from_outcome(
+                    mid, outcome=outcome, note=body.get("note", "")))
+            elif path == "/api/forget/run":
+                # v6.0.0 功能 7：有原则遗忘 GC
+                self._send_json(self.mindforge.forget_run(
+                    dry_run=bool(body.get("dry_run", False))))
+            elif path == "/api/follow-ups":
+                # v6.0.0 功能 8：登记跟进
+                mid = body.get("memory_id", "")
+                if not isinstance(mid, str) or not mid:
+                    self._send_json({"error": "Missing 'memory_id' field"}, 400)
+                    return
+                self._send_json(self.mindforge.follow_up_create(
+                    mid, note=body.get("note", "")))
+            elif path == "/api/follow-ups/resolve":
+                # v6.0.0 功能 8：办结跟进
+                fid = body.get("follow_up_id", "")
+                if not isinstance(fid, str) or not fid:
+                    self._send_json({"error": "Missing 'follow_up_id' field"}, 400)
+                    return
+                self._send_json(self.mindforge.follow_up_resolve(fid))
 
             else:
                 self._send_json({"error": "Not found"}, 404)

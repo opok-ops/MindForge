@@ -23,6 +23,20 @@ from .session_focus import SessionFocus, TopicCluster, FocusSummary
 # v5.4.2 新增两大能力
 from .federated_acl import FederatedACLManager
 from .share_conflict import SharedConflictResolver
+# v6.0.0 新增：一键导入 / 时间线可视化 / 技能包 / 演变 / 结果学习 / 护照 / 遗忘 / 收尾
+from .importer import import_chat_history, parse_export, detect_platform
+from .timeline_viz import build_timeline_visual
+from .skill_pack import export_skill_pack, validate_skill_pack, import_skill_pack
+from .outcome_learning import apply_outcome, outcome_stats, search_weighted
+from .memory_passport import (
+    export_passport, import_passport, revoke_passport, passport_status,
+)
+from .principled_forgetting import (
+    explain_forgetting, run_principled_gc, forgetting_stats,
+)
+from .follow_up import (
+    create_follow_up, list_due, resolve_follow_up, list_follow_ups,
+)
 # v6.0.0 扩展端口预留（默认不启用，不引入任何行为变更）
 from .v6 import (
     V6_TARGET_VERSION,
@@ -85,6 +99,28 @@ __all__ = [
     # v5.4.2
     "FederatedACLManager",
     "SharedConflictResolver",
+    # v6.0.0 功能 1-8
+    "import_chat_history",
+    "parse_export",
+    "detect_platform",
+    "build_timeline_visual",
+    "export_skill_pack",
+    "validate_skill_pack",
+    "import_skill_pack",
+    "apply_outcome",
+    "outcome_stats",
+    "search_weighted",
+    "export_passport",
+    "import_passport",
+    "revoke_passport",
+    "passport_status",
+    "explain_forgetting",
+    "run_principled_gc",
+    "forgetting_stats",
+    "create_follow_up",
+    "list_due",
+    "resolve_follow_up",
+    "list_follow_ups",
     # v6.0.0 端口预留
     "V6_TARGET_VERSION",
     "V6Capability",

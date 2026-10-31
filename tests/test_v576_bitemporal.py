@@ -305,7 +305,7 @@ class TestMCP(unittest.TestCase):
         from mindforge.mcp.server import _handle_tools_list, _handle_tools_call
         tools = _handle_tools_list({})["tools"]
         names = [t["name"] for t in tools]
-        self.assertEqual(len(tools), 56)
+        self.assertEqual(len(tools), 71)
         self.assertIn("memory_supersede", names)
         self.assertIn("memory_valid_at", names)
 

@@ -1020,6 +1020,21 @@ class StorageEngine:
             CREATE INDEX IF NOT EXISTS idx_archived_layer ON archived_memories(layer);
             CREATE INDEX IF NOT EXISTS idx_archived_category ON archived_memories(category);
             CREATE INDEX IF NOT EXISTS idx_archived_at ON archived_memories(archived_at);
+            -- v6.0.0: 记忆演变记录（保留旧版本 + 讲清楚为什么变了）
+            CREATE TABLE IF NOT EXISTS memory_evolutions (
+                id TEXT PRIMARY KEY,
+                memory_id TEXT NOT NULL,
+                from_version INTEGER DEFAULT 0,
+                to_version INTEGER DEFAULT 0,
+                from_preview TEXT DEFAULT '',
+                to_preview TEXT DEFAULT '',
+                reason TEXT DEFAULT '',
+                category TEXT DEFAULT '',
+                actor TEXT DEFAULT '',
+                created_at REAL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_evolutions_memory ON memory_evolutions(memory_id);
+            CREATE INDEX IF NOT EXISTS idx_evolutions_created ON memory_evolutions(created_at);
         """)
         conn.commit()
 
@@ -7473,7 +7488,12 @@ class StorageEngine:
                           # v5.7.9 新增：知识图谱抽取
                           "graph_extract",
                           # v5.8.0 新增：经验蒸馏
-                          "experience_record", "experience_distill"}
+                          "experience_record", "experience_distill",
+                          # v6.0.0 新增：一键导入 / 结果学习 / 护照 / 遗忘 / 收尾
+                          "import_chat", "outcome_learn",
+                          "passport_import", "passport_revoke",
+                          "follow_up_create", "follow_up_resolve",
+                          "principled_forgetting"}
         # v5.4.2：高敏感操作，审计失败时 fail-closed
         HIGH_SENSITIVE_ACTIONS = {"delete", "purge", "grant", "revoke", "forget",
                                   "agent_purge", "agent_forget"}
@@ -12543,6 +12563,157 @@ class StorageEngine:
         except Exception as e:
             conn.rollback()
             return {"success": False, "error": str(e)}
+
+    # ------------------------------------------------------------------
+    # v6.0.0 记忆演变（保留旧版本 + 讲清楚为什么变了）
+    # ------------------------------------------------------------------
+
+    def save_evolution(self, memory_id: str, from_version: int = 0,
+                       to_version: int = 0, from_preview: str = "",
+                       to_preview: str = "", reason: str = "",
+                       category: str = "", actor: str = "") -> Dict[str, Any]:
+        """记录一次记忆演变（v6.0.0）"""
+        if not memory_id or len(memory_id) > 128:
+            return {"success": False, "error": "记忆 ID 无效"}
+        evo_id = f"evo_{uuid.uuid4().hex[:12]}"
+        now = time.time()
+        conn = self._get_conn()
+        try:
+            conn.execute(
+                "INSERT INTO memory_evolutions (id, memory_id, from_version, to_version, "
+                " from_preview, to_preview, reason, category, actor, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (evo_id, memory_id, int(from_version or 0), int(to_version or 0),
+                 (from_preview or "")[:200], (to_preview or "")[:200],
+                 (reason or "")[:500], (category or "")[:100], (actor or "")[:100], now))
+            conn.commit()
+            return {"success": True, "evolution_id": evo_id, "memory_id": memory_id,
+                    "from_version": int(from_version or 0), "to_version": int(to_version or 0)}
+        except Exception as e:
+            conn.rollback()
+            return {"success": False, "error": str(e)}
+
+    def evolve_memory(self, memory_id: str, content: str = None,
+                      category: str = None, tags=None, importance=None,
+                      layer=None, reason: str = "",
+                      actor: str = "", session_id: str = "") -> Dict[str, Any]:
+        """记忆演变：保留旧版本、写入新内容、记录演变原因（v6.0.0）。
+
+        复用 v5.2.7 update_memory 的自动版本存档（内容变更时自动 save_version），
+        避免重复保存旧版本；仅记录一次 evolution 条目。
+        """
+        if not memory_id or len(memory_id) > 128:
+            return {"success": False, "error": "记忆 ID 无效"}
+        conn = self._get_conn()
+        try:
+            row = conn.execute(
+                "SELECT id, content, category, tags, importance, layer FROM memories WHERE id = ?",
+                (memory_id,)).fetchone()
+        except Exception:
+            row = None
+        if not row:
+            return {"success": False, "error": "记忆不存在"}
+        old_content = row[1] or ""
+        old_category = row[2] or ""
+        old_tags_raw = row[3]
+        old_importance = row[4] or ""
+        try:
+            old_tags = json.loads(old_tags_raw) if old_tags_raw and old_tags_raw.startswith("[") else []
+        except Exception:
+            old_tags = []
+
+        # 演变前版本号
+        try:
+            vrow = conn.execute(
+                "SELECT MAX(version_number) FROM memory_versions WHERE memory_id = ?",
+                (memory_id,)).fetchone()
+            from_version = vrow[0] or 0
+        except Exception:
+            from_version = 0
+
+        # 执行更新（update_memory 在 content 变更时自动 save_version）
+        try:
+            ok = self.update_memory(
+                entry_id=memory_id, content=content, category=category,
+                tags=tags, importance=importance, layer=layer,
+                actor=actor or "", session_id=session_id)
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+        if not ok:
+            return {"success": False, "error": "更新失败"}
+
+        # 演变后版本号
+        try:
+            vrow2 = conn.execute(
+                "SELECT MAX(version_number) FROM memory_versions WHERE memory_id = ?",
+                (memory_id,)).fetchone()
+            to_version = vrow2[0] or from_version
+        except Exception:
+            to_version = from_version
+
+        new_content = content if content is not None else old_content
+        evo = self.save_evolution(
+            memory_id, from_version=from_version, to_version=to_version,
+            from_preview=old_content, to_preview=new_content,
+            reason=reason, category=category or old_category, actor=actor or "")
+        if not evo.get("success"):
+            return {"success": False, "error": evo.get("error", "记录演变失败")}
+        self._add_audit("evolve", memory_id, actor or "", session_id or "",
+                        "", {"from": from_version, "to": to_version,
+                             "reason": (reason or "")[:200]})
+        return {"success": True, "memory_id": memory_id,
+                "from_version": from_version, "to_version": to_version,
+                "evolution_id": evo["evolution_id"], "reason": reason or ""}
+
+    def list_evolutions(self, memory_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """列出记忆的演变历史（v6.0.0）"""
+        if not memory_id or len(memory_id) > 128:
+            return []
+        limit = max(1, min(limit, 500))
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT id, from_version, to_version, from_preview, to_preview, reason, "
+            " category, actor, created_at FROM memory_evolutions "
+            "WHERE memory_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?",
+            (memory_id, limit)).fetchall()
+        out = []
+        for r in rows:
+            out.append({
+                "evolution_id": r[0],
+                "memory_id": memory_id,
+                "from_version": r[1],
+                "to_version": r[2],
+                "from_preview": r[3],
+                "to_preview": r[4],
+                "reason": r[5],
+                "category": r[6],
+                "actor": r[7],
+                "created_at": r[8],
+            })
+        return out
+
+    def evolution_stats(self) -> Dict[str, Any]:
+        """记忆演变统计（v6.0.0）"""
+        conn = self._get_conn()
+        total = 0
+        mem_ids = set()
+        reasons = {}
+        try:
+            rows = conn.execute(
+                "SELECT memory_id, reason FROM memory_evolutions").fetchall()
+            total = len(rows)
+            for mid, reason in rows:
+                mem_ids.add(mid)
+                key = (reason or "")[:50] or "(无原因)"
+                reasons[key] = reasons.get(key, 0) + 1
+        except Exception:
+            pass
+        return {
+            "total_evolutions": total,
+            "memories_evolved": len(mem_ids),
+            "top_reasons": [{"reason": k, "count": v} for k, v in
+                            sorted(reasons.items(), key=lambda kv: -kv[1])[:10]],
+        }
 
     def list_versions(self, memory_id: str, limit: int = 50) -> List[Dict[str, Any]]:
         """列出记忆的所有历史版本（v5.2.7 新增）"""

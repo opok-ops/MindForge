@@ -1,3 +1,52 @@
+## [6.0.0] - 2026-10-31
+
+### 新增：8 大功能（用户路线图全部落地）
+
+1. **一键导入记忆（冷启动）**：`import_chat_history` 解析 ChatGPT（mapping 树）
+   与 Claude（accounts/conversations）对话导出，第一人称画像信号自动识别为
+   HIGH 重要度偏好；噪音过滤 + dry_run 试运行 + 审计记录。
+2. **记忆时间线可视化**：`timeline_visual` 输出按日聚合的聚合统计
+   （privacy: aggregate-only，不含明文）：层分布 / 分类 / 偏好主题 / 偏好趋势 /
+   知识图谱规模 / 四层摘要。
+3. **可分享技能包**：`skill_pack_export/validate/import` 一键导出、分享、安装
+   技能包（mindforge-skill-pack/1.0），merge/replace 两种导入模式。
+4. **记忆演变**：`evolve_memory` 保留旧版本 + 记录演变原因（memory_evolutions
+   表），复用 v5.2.7 自动版本存档；`list_evolutions` / `evolution_stats`。
+5. **按结果学习的记忆**：`learn_from_outcome` 给记忆标记 success/partial/failure，
+   成功上调重要度、失败降权；`search_weighted_by_outcome` 优先返回带来好结果的记忆。
+6. **记忆护照（跨模型迁移）**：`passport_export/import/revoke/status` 一次授权、
+   记忆跟你走、随时可撤销（按 passport_id 删除来源记忆，可逆）。
+7. **有原则的遗忘**：`forget_explain` 输出遗忘评分分解（时效/频率/重要度保护/
+   结果标记/噪音），`forget_run` 执行可解释 GC，HIGH 重要度受保护。
+8. **记忆主动收尾**：`follow_up_create/due/resolve/list` 登记跟进事项、到期提醒、
+   办结闭环（独立 follow_ups 表）。
+
+### 接口接入
+
+- CLI：15 个新命令（import-chat / timeline-viz / skill-pack-export|import /
+  evolve-memory / evolution-history / learn-outcome / passport-export|import|revoke /
+  forget-explain|run / follow-up-create|due|resolve）。
+- REST：15 个新端点（GET: /api/timeline /api/skill-pack/export /api/passport/export|status
+  /api/evolution/stats|history /api/outcome/stats /api/forget/stats|explain
+  /api/follow-ups|due；POST: /api/import-chat /api/skill-pack/import
+  /api/passport/import|revoke /api/evolve /api/learn-outcome /api/forget/run
+  /api/follow-ups|resolve）。
+- MCP：15 个新工具（chat_import / timeline_viz / skill_pack_export|import /
+  memory_evolve / memory_evolution_history / memory_learn_outcome /
+  passport_export|import|revoke / forget_explain|run / follow_up_create|due|resolve）。
+
+### 修复
+
+- 审计动作白名单新增 v6 动作（import_chat / outcome_learn / passport_import /
+  passport_revoke / follow_up_create / follow_up_resolve / principled_forgetting），
+  不再被降级为 other。
+- 版本同步：版本唯一真值升至 6.0.0，MCP 工具数 56→71，官网/README/RELEASE 同步。
+
+### 测试
+
+- 新增 v6 功能与端口测试（test_v600_import_timeline / outcome_passport /
+  skillpack_evolution / forgetting_followup / test_v6_ports）；全量 1016 项通过。
+
 ## [5.9.5] - 2026-10-14
 
 ### 稳定性（P0 数据完整性修复）

@@ -5393,6 +5393,176 @@ class MindForge:
         """删除经验案例（v5.8.0）"""
         return self._skill_store.delete_case(case_id)
 
+    # ------------------------------------------------------------------
+    # v6.0.0 功能 1-8：一键导入 / 时间线 / 技能包 / 演变 / 结果学习 /
+    # 记忆护照 / 有原则遗忘 / 主动收尾
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _auto_evolve_reason(content) -> str:
+        """自动生成演变原因（未显式提供时）"""
+        if not content:
+            return "属性调整（无内容变更）"
+        return "记忆内容更新（v6.0.0 演变）"
+
+    def import_chat_history(self, data, dry_run: bool = False,
+                            actor: str = "", session_id: str = "") -> Dict[str, Any]:
+        """功能 1：一键导入记忆（ChatGPT/Claude 导出，v6.0.0）"""
+        from mindforge.modules.importer import import_chat_history as _do_import
+        return _do_import(self, data, dry_run=dry_run,
+                          actor=actor, session_id=session_id)
+
+    def timeline_visual(self, category: str = None, layer: str = None,
+                        days: int = 365, limit: int = 20000) -> Dict[str, Any]:
+        """功能 2：记忆时间线可视化（聚合统计，不含明文，v6.0.0）"""
+        from mindforge.modules.timeline_viz import build_timeline_visual
+        return build_timeline_visual(self._storage, category=category,
+                                     layer=layer, days=days, limit=limit)
+
+    def skill_pack_export(self, names=None, include_cases: bool = True,
+                          max_cases: int = 200) -> Dict[str, Any]:
+        """功能 3：导出可分享技能包（v6.0.0）"""
+        from mindforge.modules.skill_pack import export_skill_pack
+        return export_skill_pack(self._skill_store, names=names,
+                                 include_cases=include_cases, max_cases=max_cases)
+
+    def skill_pack_validate(self, pack) -> Dict[str, Any]:
+        """功能 3：校验技能包（v6.0.0）"""
+        from mindforge.modules.skill_pack import validate_skill_pack
+        return validate_skill_pack(pack)
+
+    def skill_pack_import(self, pack, mode: str = "merge",
+                          actor: str = "") -> Dict[str, Any]:
+        """功能 3：导入技能包（merge/replace，v6.0.0）"""
+        from mindforge.modules.skill_pack import import_skill_pack
+        return import_skill_pack(self._skill_store, pack, mode=mode, actor=actor)
+
+    def evolve_memory(self, memory_id: str, content: str = None,
+                      category: str = None, tags=None, importance=None,
+                      layer=None, reason: str = "", actor: str = "",
+                      session_id: str = "") -> Dict[str, Any]:
+        """功能 4：记忆演变（保留旧版本 + 记录原因，v6.0.0）"""
+        # v5.7.3 隐私规则：本机调用不传 actor；传入 actor 则须通过访问检查
+        entry = self._storage.get_memory(memory_id, actor, session_id)
+        if entry is None:
+            return {"success": False, "error": "记忆不存在"}
+        ok, _reason = self.privacy_engine.check_access(entry, actor, session_id)
+        if not ok:
+            return {"success": False, "error": "无权限访问该记忆"}
+        return self._storage.evolve_memory(
+            memory_id=memory_id, content=content, category=category,
+            tags=tags, importance=importance, layer=layer,
+            reason=reason or self._auto_evolve_reason(content),
+            actor=actor, session_id=session_id)
+
+    def list_evolutions(self, memory_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """功能 4：查看记忆演变历史（v6.0.0）"""
+        return self._storage.list_evolutions(memory_id, limit=limit)
+
+    def evolution_stats(self) -> Dict[str, Any]:
+        """功能 4：记忆演变统计（v6.0.0）"""
+        return self._storage.evolution_stats()
+
+    # -- 功能 5：按结果学习的记忆（v6.0.0） --
+    def learn_from_outcome(self, memory_id: str, outcome: str = "success",
+                           note: str = "", actor: str = "",
+                           session_id: str = "") -> Dict[str, Any]:
+        """按结果学习：给记忆标记结果并调整重要度权重。
+
+        outcome: success（重要度上调）/ partial（微调）/ failure（下调）
+        """
+        from mindforge.modules.outcome_learning import apply_outcome
+        return apply_outcome(self._storage, memory_id, outcome=outcome,
+                             note=note, actor=actor, session_id=session_id)
+
+    def outcome_stats(self) -> Dict[str, Any]:
+        """按结果学习统计（v6.0.0）"""
+        from mindforge.modules.outcome_learning import outcome_stats
+        return outcome_stats(self._storage)
+
+    def search_weighted_by_outcome(self, query: str, max_results: int = 10,
+                                   outcome: str = "success",
+                                   min_relevance: float = 0.0) -> List[Dict[str, Any]]:
+        """按结果加权检索：优先返回带来好结果的记忆（v6.0.0）"""
+        from mindforge.modules.outcome_learning import search_weighted
+        return search_weighted(self, query, max_results=max_results,
+                               outcome=outcome, min_relevance=min_relevance)
+
+    # -- 功能 6：记忆护照（跨模型迁移，v6.0.0） --
+    def passport_export(self, include_skills: bool = True,
+                        include_preferences: bool = True,
+                        max_memories: int = 5000) -> Dict[str, Any]:
+        """导出记忆护照：跨模型迁移的结构化记忆包（v6.0.0）"""
+        from mindforge.modules.memory_passport import export_passport
+        return export_passport(self, include_skills=include_skills,
+                               include_preferences=include_preferences,
+                               max_memories=max_memories)
+
+    def passport_import(self, passport, mode: str = "merge",
+                        actor: str = "", session_id: str = "") -> Dict[str, Any]:
+        """导入记忆护照（跨模型迁移恢复，v6.0.0）"""
+        from mindforge.modules.memory_passport import import_passport
+        return import_passport(self, passport, mode=mode,
+                               actor=actor, session_id=session_id)
+
+    def passport_revoke(self, passport_id: str, actor: str = "",
+                        session_id: str = "") -> Dict[str, Any]:
+        """撤销记忆护照导入（删除来源标记与关联记忆，v6.0.0）"""
+        from mindforge.modules.memory_passport import revoke_passport
+        return revoke_passport(self, passport_id, actor=actor,
+                               session_id=session_id)
+
+    def passport_status(self) -> Dict[str, Any]:
+        """记忆护照状态（v6.0.0）"""
+        from mindforge.modules.memory_passport import passport_status
+        return passport_status(self)
+
+    # -- 功能 7：有原则的遗忘（可解释，v6.0.0） --
+    def forget_explain(self, memory_id: str,
+                       actor: str = "", session_id: str = "") -> Dict[str, Any]:
+        """解释某条记忆为什么（可能）被遗忘：可解释的遗忘决策（v6.0.0）"""
+        from mindforge.modules.principled_forgetting import explain_forgetting
+        return explain_forgetting(self._storage, memory_id,
+                                  actor=actor, session_id=session_id)
+
+    def forget_run(self, dry_run: bool = False,
+                   days: int = 30) -> Dict[str, Any]:
+        """执行有原则的遗忘 GC：噪音淡出、重要模式保留，输出解释（v6.0.0）"""
+        from mindforge.modules.principled_forgetting import run_principled_gc
+        return run_principled_gc(self, dry_run=dry_run, days=days)
+
+    def forget_stats(self) -> Dict[str, Any]:
+        """遗忘引擎统计（v6.0.0）"""
+        from mindforge.modules.principled_forgetting import forgetting_stats
+        return forgetting_stats(self)
+
+    # -- 功能 8：记忆主动收尾（v6.0.0） --
+    def follow_up_create(self, memory_id: str, due_at: float = 0.0,
+                         note: str = "", actor: str = "",
+                         session_id: str = "") -> Dict[str, Any]:
+        """登记一条待跟进事项（主动收尾，v6.0.0）"""
+        from mindforge.modules.follow_up import create_follow_up
+        return create_follow_up(self, memory_id, due_at=due_at, note=note,
+                                actor=actor, session_id=session_id)
+
+    def follow_up_due(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """查询已到期未办结的跟进事项（v6.0.0）"""
+        from mindforge.modules.follow_up import list_due
+        return list_due(self, limit=limit)
+
+    def follow_up_resolve(self, follow_up_id: str, actor: str = "",
+                          session_id: str = "") -> Dict[str, Any]:
+        """办结一条跟进事项（v6.0.0）"""
+        from mindforge.modules.follow_up import resolve_follow_up
+        return resolve_follow_up(self, follow_up_id, actor=actor,
+                                 session_id=session_id)
+
+    def follow_up_list(self, include_resolved: bool = False,
+                       limit: int = 50) -> List[Dict[str, Any]]:
+        """列出跟进事项（v6.0.0）"""
+        from mindforge.modules.follow_up import list_follow_ups
+        return list_follow_ups(self, include_resolved=include_resolved, limit=limit)
+
     # --- 4. 混合检索增强：查询扩展 + Cross-Encoder 重排 ---
     def search_enhanced(self, query: str,
                         max_results: int = 20,

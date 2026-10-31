@@ -786,6 +786,159 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
             "properties": {}
         },
     },
+    # ---- v6.0.0 功能 1-8 ----
+    {
+        "name": "chat_import",
+        "description": "功能 1：一键导入记忆（ChatGPT/Claude 对话导出，v6.0.0）。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["data"],
+            "properties": {
+                "data": {"type": "object", "description": "ChatGPT/Claude 导出 JSON"},
+                "dry_run": {"type": "boolean"}
+            }
+        },
+    },
+    {
+        "name": "timeline_viz",
+        "description": "功能 2：记忆时间线可视化（聚合统计，不含明文，v6.0.0）。",
+        "inputSchema": {
+            "type": "object",
+            "required": [],
+            "properties": {
+                "category": {"type": "string"},
+                "days": {"type": "integer"}
+            }
+        },
+    },
+    {
+        "name": "skill_pack_export",
+        "description": "功能 3：导出可分享技能包（v6.0.0）。",
+        "inputSchema": {"type": "object", "required": [], "properties": {}},
+    },
+    {
+        "name": "skill_pack_import",
+        "description": "功能 3：导入技能包（v6.0.0）。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["pack"],
+            "properties": {
+                "pack": {"type": "object"},
+                "mode": {"type": "string", "enum": ["merge", "replace"]}
+            }
+        },
+    },
+    {
+        "name": "memory_evolve",
+        "description": "功能 4：记忆演变（保留旧版本 + 记录原因，v6.0.0）。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["memory_id"],
+            "properties": {
+                "memory_id": {"type": "string"},
+                "content": {"type": "string"},
+                "category": {"type": "string"},
+                "reason": {"type": "string"}
+            }
+        },
+    },
+    {
+        "name": "memory_evolution_history",
+        "description": "功能 4：记忆演变历史（v6.0.0）。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["memory_id"],
+            "properties": {"memory_id": {"type": "string"}, "limit": {"type": "integer"}}
+        },
+    },
+    {
+        "name": "memory_learn_outcome",
+        "description": "功能 5：按结果学习的记忆（v6.0.0）。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["memory_id"],
+            "properties": {
+                "memory_id": {"type": "string"},
+                "outcome": {"type": "string", "enum": ["success", "partial", "failure"]},
+                "note": {"type": "string"}
+            }
+        },
+    },
+    {
+        "name": "passport_export",
+        "description": "功能 6：导出记忆护照（跨模型迁移，v6.0.0）。",
+        "inputSchema": {"type": "object", "required": [], "properties": {}},
+    },
+    {
+        "name": "passport_import",
+        "description": "功能 6：导入记忆护照（v6.0.0）。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["passport"],
+            "properties": {
+                "passport": {"type": "object"},
+                "mode": {"type": "string", "enum": ["merge", "replace"]}
+            }
+        },
+    },
+    {
+        "name": "passport_revoke",
+        "description": "功能 6：撤销记忆护照导入（可逆，v6.0.0）。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["passport_id"],
+            "properties": {"passport_id": {"type": "string"}}
+        },
+    },
+    {
+        "name": "forget_explain",
+        "description": "功能 7：解释记忆的遗忘原因（v6.0.0）。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["memory_id"],
+            "properties": {"memory_id": {"type": "string"}}
+        },
+    },
+    {
+        "name": "forget_run",
+        "description": "功能 7：执行有原则遗忘 GC（v6.0.0）。",
+        "inputSchema": {
+            "type": "object",
+            "required": [],
+            "properties": {"dry_run": {"type": "boolean"}}
+        },
+    },
+    {
+        "name": "follow_up_create",
+        "description": "功能 8：登记跟进事项（主动收尾，v6.0.0）。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["memory_id"],
+            "properties": {
+                "memory_id": {"type": "string"},
+                "note": {"type": "string"},
+                "due_at": {"type": "number"}
+            }
+        },
+    },
+    {
+        "name": "follow_up_due",
+        "description": "功能 8：查询到期未办结跟进（v6.0.0）。",
+        "inputSchema": {
+            "type": "object",
+            "required": [],
+            "properties": {"limit": {"type": "integer"}}
+        },
+    },
+    {
+        "name": "follow_up_resolve",
+        "description": "功能 8：办结跟进事项（v6.0.0）。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["follow_up_id"],
+            "properties": {"follow_up_id": {"type": "string"}}
+        },
+    },
 ]
 
 
@@ -1381,6 +1534,160 @@ def h_experience_record(mf, args):
         return {"ok": False, "error": _safe_error_msg(e)}
 
 
+def h_chat_import(mf, args):
+    data = args.get("data")
+    if not isinstance(data, dict):
+        return {"ok": False, "error": "Field 'data' must be an object"}
+    try:
+        return {"ok": True, **mf.import_chat_history(
+            data, dry_run=bool(args.get("dry_run", False)))}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_timeline_viz(mf, args):
+    try:
+        return {"ok": True, **mf.timeline_visual(
+            category=args.get("category") or None,
+            days=int(args.get("days", 365) or 365))}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_skill_pack_export(mf, _args):
+    try:
+        return {"ok": True, **mf.skill_pack_export()}
+    except Exception as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_skill_pack_import(mf, args):
+    pack = args.get("pack")
+    if not isinstance(pack, dict):
+        return {"ok": False, "error": "Field 'pack' must be an object"}
+    try:
+        v = mf.skill_pack_validate(pack)
+        if not v.get("valid"):
+            return {"ok": False, "error": "Invalid skill pack",
+                    "details": v.get("errors")}
+        return {"ok": True, **mf.skill_pack_import(
+            pack, mode=args.get("mode", "merge"))}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_memory_evolve(mf, args):
+    err = _require_args(args, "memory_id")
+    if err:
+        return err
+    try:
+        return {"ok": True, **mf.evolve_memory(
+            args["memory_id"], content=args.get("content"),
+            category=args.get("category"), reason=args.get("reason", ""))}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_memory_evolution_history(mf, args):
+    err = _require_args(args, "memory_id")
+    if err:
+        return err
+    try:
+        return {"ok": True, "memory_id": args["memory_id"],
+                "evolutions": mf.list_evolutions(
+                    args["memory_id"], limit=int(args.get("limit", 50) or 50))}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_memory_learn_outcome(mf, args):
+    err = _require_args(args, "memory_id")
+    if err:
+        return err
+    try:
+        return {"ok": True, **mf.learn_from_outcome(
+            args["memory_id"], outcome=args.get("outcome", "success"),
+            note=args.get("note", ""))}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_passport_export(mf, _args):
+    try:
+        return {"ok": True, **mf.passport_export()}
+    except Exception as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_passport_import(mf, args):
+    pp = args.get("passport")
+    if not isinstance(pp, dict):
+        return {"ok": False, "error": "Field 'passport' must be an object"}
+    try:
+        return {"ok": True, **mf.passport_import(
+            pp, mode=args.get("mode", "merge"))}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_passport_revoke(mf, args):
+    err = _require_args(args, "passport_id")
+    if err:
+        return err
+    try:
+        return {"ok": True, **mf.passport_revoke(args["passport_id"])}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_forget_explain(mf, args):
+    err = _require_args(args, "memory_id")
+    if err:
+        return err
+    try:
+        return {"ok": True, **mf.forget_explain(args["memory_id"])}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_forget_run(mf, args):
+    try:
+        return {"ok": True, **mf.forget_run(
+            dry_run=bool(args.get("dry_run", False)))}
+    except Exception as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_follow_up_create(mf, args):
+    err = _require_args(args, "memory_id")
+    if err:
+        return err
+    try:
+        return {"ok": True, **mf.follow_up_create(
+            args["memory_id"], note=args.get("note", ""),
+            due_at=float(args.get("due_at", 0) or 0))}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_follow_up_due(mf, args):
+    try:
+        return {"ok": True, "due": mf.follow_up_due(
+            limit=int(args.get("limit", 20) or 20))}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_follow_up_resolve(mf, args):
+    err = _require_args(args, "follow_up_id")
+    if err:
+        return err
+    try:
+        return {"ok": True, **mf.follow_up_resolve(args["follow_up_id"])}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
 def h_skill_distill(mf, args):
     try:
         stats = mf.distill_skills(
@@ -1592,6 +1899,22 @@ HANDLERS: Dict[str, Any] = {
     "fed_memory_list_shared": h_fed_memory_list_shared,
     "fed_search": h_fed_search,
     "fed_stats": h_fed_stats,
+    # v6.0.0 功能 1-8
+    "chat_import": h_chat_import,
+    "timeline_viz": h_timeline_viz,
+    "skill_pack_export": h_skill_pack_export,
+    "skill_pack_import": h_skill_pack_import,
+    "memory_evolve": h_memory_evolve,
+    "memory_evolution_history": h_memory_evolution_history,
+    "memory_learn_outcome": h_memory_learn_outcome,
+    "passport_export": h_passport_export,
+    "passport_import": h_passport_import,
+    "passport_revoke": h_passport_revoke,
+    "forget_explain": h_forget_explain,
+    "forget_run": h_forget_run,
+    "follow_up_create": h_follow_up_create,
+    "follow_up_due": h_follow_up_due,
+    "follow_up_resolve": h_follow_up_resolve,
 }
 
 

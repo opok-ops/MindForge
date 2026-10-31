@@ -326,7 +326,7 @@ class TestMCP(unittest.TestCase):
         from mindforge.mcp.server import _handle_tools_list, _handle_tools_call
         tools = _handle_tools_list({})["tools"]
         names = [t["name"] for t in tools]
-        self.assertEqual(len(tools), 56)
+        self.assertEqual(len(tools), 71)
         for n in ("memory_agent_pin", "memory_agent_forget",
                   "memory_agent_decay_boost", "memory_connector_ingest",
                   "conflict_reconcile"):

@@ -1,9 +1,9 @@
 """
-MindForge 多 Agent 记忆空间（实验性 — v6.0.0 全量推送预览）
+MindForge 多 Agent 记忆空间（正式 — v6.0.0）
 
 多 Agent 共享记忆空间：权限隔离、角色协作、冲突解决。
 
-EXPERIMENTAL: 本模块为 v6.0.0 前瞻预览，API 在全量发布前可能发生变化。
+v6.0.0 起本模块为正式能力（此前为 v6.0.0 前瞻预览）。
 与联邦记忆（federated.py，跨节点对等共享）不同，本模块面向同一本地库内的
 多 Agent 协作场景：多个 Agent 在共享空间中交换记忆，并按角色隔离权限。
 
@@ -89,7 +89,7 @@ class MultiAgentMemoryManager:
     所有变更操作都会写入审计日志（复用 storage._add_audit）。
     """
 
-    EXPERIMENTAL = True
+    EXPERIMENTAL = False
     TARGET_VERSION = "6.0.0"
 
     def __init__(self, storage):
@@ -530,6 +530,5 @@ class MultiAgentMemoryManager:
             "total_memberships": members,
             "total_shared_items": items,
             "participating_agents": agents,
-            "experimental": True,
-            "target_version": self.TARGET_VERSION,
+            "version": "6.0.0",
         }

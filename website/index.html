@@ -39,7 +39,7 @@
   "softwareVersion": "6.0.0",
   "toolCount": 56,
   "moduleCount": 15,
-  "testCount": 1016,
+  "testCount": 1032,
   "url": "https://opok-ops.github.io/MindForge/",
   "codeRepository": "https://github.com/opok-ops/MindForge",
   "license": "https://github.com/opok-ops/MindForge/blob/master/LICENSE",
@@ -272,7 +272,7 @@
         <div class="stat glass"><div class="stat-num">4</div><div class="stat-lbl">记忆层级</div></div>
         <div class="stat glass"><div class="stat-num">15</div><div class="stat-lbl">功能模块</div></div>
         <div class="stat glass"><div class="stat-num">56</div><div class="stat-lbl">MCP 工具</div></div>
-        <div class="stat glass"><div class="stat-num">1016</div><div class="stat-lbl">测试用例</div></div>
+        <div class="stat glass"><div class="stat-num">1032</div><div class="stat-lbl">测试用例</div></div>
         <div class="stat glass"><div class="stat-num">100%</div><div class="stat-lbl">本地加密</div></div>
       </div>
     </div>
@@ -467,10 +467,10 @@
         </div>
       </div>
       <p style="color:var(--text-dim);line-height:1.8;margin-bottom:18px">MindForge 是我一个人打磨的 AI Agent 终身记忆系统：四层记忆架构、知识图谱、六路混合检索、端侧 AES-256-GCM 加密、联邦网络，全部本地运行、数据不上云。没有名校背景，也没有大厂履历，每一行代码都是自己敲出来的。</p>
-      <p style="color:var(--text-dim);line-height:1.8;margin-bottom:22px">从第一行代码到现在 v6.0.0，没有团队，没有融资，就一个人、一台电脑，一个版本一个版本往上堆。1016 个测试用例全部通过，71 个 MCP 工具，15 个核心模块，GitHub Actions CI 全绿。学历不能定义一个人的上限，但代码可以证明一个人的态度。</p>
+      <p style="color:var(--text-dim);line-height:1.8;margin-bottom:22px">从第一行代码到现在 v6.0.0，没有团队，没有融资，就一个人、一台电脑，一个版本一个版本往上堆。1032 个测试用例全部通过，86 个 MCP 工具，15 个核心模块，GitHub Actions CI 全绿。学历不能定义一个人的上限，但代码可以证明一个人的态度。</p>
 
       <div class="about-stats">
-        <div class="about-stat"><b>1016</b><span>测试用例全绿</span></div>
+        <div class="about-stat"><b>1032</b><span>测试用例全绿</span></div>
         <div class="about-stat"><b>56</b><span>MCP 工具</span></div>
         <div class="about-stat"><b>15</b><span>核心模块</span></div>
         <div class="about-stat"><b>100%</b><span>本地加密 · 不上云</span></div>
@@ -685,51 +685,51 @@
   <div class="container">
     <div class="section-head reveal">
       <span class="tag"><span class="tag-dot" aria-hidden="true"></span>路线图 · v6.0.0</span>
-      <h2 id="v6-title">下一代记忆引擎，正在锻造</h2>
-      <p>v6.0.0 的两个旗舰方向已经开工：多 Agent 协作与记忆引擎预览。以下能力<b class="hl">尚未发布</b>，接口与行为在开发期可能调整。</p>
+      <h2 id="v6-title">下一代记忆引擎，正式发布</h2>
+      <p>v6.0.0 的两个旗舰方向已随正式版落地：多 Agent 协作与 6G AI 记忆预览。CLI / REST / MCP 三层接口全部接入，v6 端口状态 AVAILABLE。</p>
     </div>
 
     <div class="v6-grid">
       <article class="v6-card glass reveal">
         <header class="v6-head">
           <span class="v6-ico" aria-hidden="true"><svg class="icon"><use href="#i-federated"/></svg></span>
-          <span class="chip-badge"><i class="badge-dot" aria-hidden="true"></i>开发中</span>
+          <span class="chip-badge"><i class="badge-dot" aria-hidden="true"></i>已发布</span>
         </header>
         <h3 class="v6-name">多 Agent 协作</h3>
         <p class="v6-en">Multi-Agent Orchestration</p>
-        <p class="v6-desc">让多个 Agent 共用同一份记忆底座：角色化的读写权限、共享记忆黑板、写入冲突自动仲裁，以及可回溯的协同链路。从一个人记，到一群人会记。</p>
+        <p class="v6-desc">让多个 Agent 共用同一份记忆底座：角色化的读写权限（owner / editor / reader）、共享记忆空间、last-write-wins 写入冲突仲裁，以及 PRIVATE / STRICT 隐私护栏。从一个人记，到一群人会记。</p>
         <ul class="v6-list">
-          <li><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check"/></svg><span>角色与权限矩阵：Owner / Writer / Reader / Guest 四级</span></li>
-          <li><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check"/></svg><span>共享记忆黑板，写入冲突检测与自动仲裁策略</span></li>
-          <li><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check"/></svg><span>任务编排：拆分 → 派发 → 汇总 → 回溯全链路</span></li>
-          <li><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check"/></svg><span>跨 Agent 记忆溯源与贡献度归因</span></li>
+          <li><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check"/></svg><span>三级角色权限：Owner / Editor / Reader（空间正式化）</span></li>
+          <li><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check"/></svg><span>共享记忆空间 + 写入冲突自动仲裁（last-write-wins）</span></li>
+          <li><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check"/></svg><span>CLI space-* / REST / MCP 三层接口，审计动作正式化</span></li>
+          <li><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check"/></svg><span>v6 端口状态 AVAILABLE（MultiAgentAdapterPort）</span></li>
         </ul>
-        <div class="v6-tags"><span class="chip">任务编排</span><span class="chip">权限矩阵</span><span class="chip">共享黑板</span></div>
-        <footer class="v6-foot"><span class="v6-status"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-clock"/></svg>开发中</span><span class="v6-eta">目标版本 <b>v6.0.0</b></span></footer>
+        <div class="v6-tags"><span class="chip">共享空间</span><span class="chip">三级角色</span><span class="chip">冲突仲裁</span></div>
+        <footer class="v6-foot"><span class="v6-status"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check-circle"/></svg>已发布</span><span class="v6-eta">v6.0.0</span></footer>
       </article>
 
       <article class="v6-card glass reveal">
         <header class="v6-head">
           <span class="v6-ico" aria-hidden="true"><svg class="icon"><use href="#i-spark"/></svg></span>
-          <span class="chip-badge"><i class="badge-dot" aria-hidden="true"></i>开发中</span>
+          <span class="chip-badge"><i class="badge-dot" aria-hidden="true"></i>已发布</span>
         </header>
-        <h3 class="v6-name">记忆引擎预览</h3>
-        <p class="v6-en">Next-gen Engine Preview</p>
-        <p class="v6-desc">第六代记忆引擎的预览通道：与稳定版并行的实验分支，提前开放上下文蒸馏、增量索引与记忆可视化，让新能力先被看见、再被合并。</p>
+        <h3 class="v6-name">6G AI 记忆预览</h3>
+        <p class="v6-en">Memory Preview Engine</p>
+        <p class="v6-desc">第六代记忆引擎的预览通道：与稳定版并行的实验分支（独立 SQLite 预览库，互不污染主库），完整实现上下文蒸馏、增量索引与记忆时间线。</p>
         <ul class="v6-list">
-          <li><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check"/></svg><span>Preview Channel：实验特性与稳定版并行安装、互不污染</span></li>
-          <li><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check"/></svg><span>上下文蒸馏：长程记忆分层摘要与 Token 压缩</span></li>
-          <li><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check"/></svg><span>增量索引：写入即索引，大规模库下的近实时召回</span></li>
-          <li><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check"/></svg><span>记忆时间线可视化预览与调试面板</span></li>
+          <li><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check"/></svg><span>Preview Channel：open / close / snapshot，独立库并行、一键清理</span></li>
+          <li><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check"/></svg><span>上下文蒸馏：HIGH 保留全文 / MEDIUM 摘要 / LOW 标签 + Token 预算</span></li>
+          <li><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check"/></svg><span>增量索引：写入即索引，总量 / 24h / FTS / 嵌入覆盖近实时统计</span></li>
+          <li><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check"/></svg><span>记忆时间线：版本历史 + 演变记录 + 审计足迹</span></li>
         </ul>
         <div class="v6-tags"><span class="chip">预览通道</span><span class="chip">上下文蒸馏</span><span class="chip">增量索引</span></div>
-        <footer class="v6-foot"><span class="v6-status"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-clock"/></svg>开发中</span><span class="v6-eta">目标版本 <b>v6.0.0</b></span></footer>
+        <footer class="v6-foot"><span class="v6-status"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-check-circle"/></svg>已发布</span><span class="v6-eta">v6.0.0</span></footer>
       </article>
     </div>
 
     <p class="v6-note">
       <svg class="icon icon-sm" aria-hidden="true"><use href="#i-alert"/></svg>
-      <span>以上为规划中的能力，尚未在任何已发布版本中提供。想跟进进度，请关注仓库的 <a href="https://github.com/opok-ops/MindForge/milestones" target="_blank" rel="noopener noreferrer" class="cl-link">Milestones</a>。</span>
+      <span>v6.0.0 已发布：两项能力状态 AVAILABLE，详见 <a href="CHANGELOG.md" class="cl-link">CHANGELOG</a> 与仓库 <a href="https://github.com/opok-ops/MindForge" target="_blank" rel="noopener noreferrer" class="cl-link">MindForge</a>。规划中的下一步：任务编排全链路与跨 Agent 记忆溯源。</span>
     </p>
   </div>
 </section>
@@ -786,7 +786,7 @@
           <span class="arch-mod"><i class="dotm" aria-hidden="true"></i>Claude Code</span>
           <span class="arch-mod"><i class="dotm" aria-hidden="true"></i>Generic API</span>
           <span class="arch-mod"><i class="dotm" aria-hidden="true"></i>CLI / SDK</span>
-          <span class="arch-mod"><i class="dotm" aria-hidden="true"></i>MCP Server (56 tools)</span>
+          <span class="arch-mod"><i class="dotm" aria-hidden="true"></i>MCP Server (86 tools)</span>
         </div>
       </article>
     </div>
@@ -847,7 +847,7 @@
       <article class="eco glass"><span class="eco-ico" aria-hidden="true"><svg class="icon"><use href="#i-terminal"/></svg></span><h3>Claude Code</h3><p>命令行编码助手的记忆后端</p><span class="eco-badge">ADAPTER</span></article>
       <article class="eco glass"><span class="eco-ico" aria-hidden="true"><svg class="icon"><use href="#i-api"/></svg></span><h3>Generic REST API</h3><p>CRUD / search / stats 标准端点</p><span class="eco-badge">HTTP</span></article>
       <article class="eco glass"><span class="eco-ico" aria-hidden="true"><svg class="icon"><use href="#i-plug"/></svg></span><h3>CLI / SDK</h3><p>Python SDK 与命令行工具，含 Shell 补全</p><span class="eco-badge">PYTHON</span></article>
-      <article class="eco glass"><span class="eco-ico" aria-hidden="true"><svg class="icon"><use href="#i-server"/></svg></span><h3>MCP Server</h3><p>Model Context Protocol，暴露 56 个工具</p><span class="eco-badge">56 TOOLS</span></article>
+      <article class="eco glass"><span class="eco-ico" aria-hidden="true"><svg class="icon"><use href="#i-server"/></svg></span><h3>MCP Server</h3><p>Model Context Protocol，暴露 86 个工具</p><span class="eco-badge">86 TOOLS</span></article>
     </div>
 
     <div class="embed-backends reveal">
@@ -921,7 +921,7 @@
         <div class="cl-meta"><span class="cl-ver">v6.0.0</span><span class="cl-date">2026-10-31</span><span class="cl-kind cl-kind-latest">最新</span></div>
         <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
         <div class="cl-body">
-          <h4>记忆路线图 8 大功能全部落地</h4>
+          <h4>记忆路线图 8 大功能全部落地 + 多 Agent 正式化 + 6G 预览发布</h4>
           <ul>
             <li><b>一键导入记忆</b>：ChatGPT / Claude 对话导出一键冷启动，第一人称画像自动识别。</li>
             <li><b>时间线可视化</b>：按日聚合的层/分类/偏好主题/知识图谱统计（不含明文）。</li>
@@ -931,7 +931,9 @@
             <li><b>记忆护照</b>：跨模型迁移一次授权，随时可撤销（可逆）。</li>
             <li><b>有原则的遗忘</b>：遗忘评分可解释，HIGH 重要度受保护。</li>
             <li><b>主动收尾</b>：跟进事项登记、到期提醒、办结闭环。</li>
-            <li><b>接口</b>：CLI 15 命令 / REST 15 端点 / MCP 15 工具全量接入。</li>
+            <li><b>多 Agent 记忆空间正式化</b>：三级角色 + last-write-wins + 隐私护栏，v6 端口 AVAILABLE。</li>
+            <li><b>6G AI 记忆预览</b>：Preview Channel / 上下文蒸馏 / 增量索引 / 记忆时间线完整实现。</li>
+            <li><b>接口</b>：CLI 22 命令 / REST 23 端点 / MCP 30 工具全量接入（含 v6-status 与 space-* / preview-*）。</li>
           </ul>
         </div>
       </article>

@@ -30,7 +30,7 @@ MindForge 为 AI Agent 提供持久、结构化的长期记忆：四层记忆生
 - **结构化记忆。** 四层模型（感官 / 短期 / 长期 / 永久），依据艾宾浩斯遗忘曲线自动晋升与衰减。
 - **检索质量。** 六条互补检索通路融合为一份排序结果，而非单一向量索引。
 - **默认加密。** 落盘 AES-256-GCM + PBKDF2 密钥派生；支持导出受信任的加密备份。
-- **开放接口。** MCP Server（56 个工具）、Python SDK、带 Shell 补全的 CLI，以及面向非 Python 应用的 REST API。
+- **开放接口。** MCP Server（86 个工具）、Python SDK、带 Shell 补全的 CLI，以及面向非 Python 应用的 REST API。
 
 ## 快速开始
 
@@ -61,6 +61,18 @@ MindForge stats
 
 ## 核心特性
 
+**v6.0.0（已发布）**
+
+- **多 Agent 记忆空间** — 三级角色（owner / editor / reader）共享空间、last-write-wins
+  冲突仲裁、PRIVATE / STRICT 隐私护栏；经 `multi_agent` facade、CLI `space-*`、
+  MCP `space_*` 与 v6 端口（AVAILABLE）暴露。
+- **6G AI 记忆预览** — 与稳定版并行的 Preview Channel（独立 SQLite 预览库）、
+  上下文蒸馏（`distill_context` 按 HIGH / MEDIUM / LOW 分层 + Token 预算）、
+  增量索引统计（写入即索引的近实时召回指标）、单记忆时间线（版本 + 演变 + 审计）；
+  经 CLI `preview-*`、REST `/api/preview/*`、MCP `preview_*` 暴露。
+- **v6 端口注册表** — `v6_status()` 报告两项能力 AVAILABLE；`v6_port(capability)`
+  按能力注入就绪实例（多 Agent 适配器或记忆预览）。
+
 **检索**
 
 - **六路混合检索** — 向量、FTS5、TF-IDF、模糊、查询扩展与 Cross-Encoder 重排，融合为单一排序结果。
@@ -81,7 +93,9 @@ MindForge stats
 
 **集成**
 
-- **MCP Server** — 33 个工具，分钟级接入 Claude Code、OpenClaw 或任意 MCP 客户端。
+- **MCP Server** — 86 个工具，分钟级接入 Claude Code、OpenClaw 或任意 MCP 客户端。
+- **多 Agent 记忆空间** — 三级角色（owner / editor / reader）共享空间、last-write-wins 冲突仲裁、PRIVATE / STRICT 隐私护栏（v6.0.0 正式版）。
+- **6G AI 记忆预览** — Preview Channel（独立预览库）、上下文蒸馏、增量索引统计、记忆时间线（v6.0.0 正式版）。
 - **联邦记忆** — Agent 间 P2P 共享，含信任等级、ACL 与冲突解决。
 - **REST API** — 面向非 Python 应用的标准 HTTP 接口。
 - **CLI** — 200+ 命令，支持 bash / zsh / fish 自动补全。
@@ -184,7 +198,7 @@ memory:
 
 ## 路线图
 
-- [ ] v6.0 — 多 Agent 协作端口、记忆预览流式传输
+- [x] v6.0 — 多 Agent 协作端口、记忆预览流式传输（多 Agent 协作端口 + 6G AI 记忆预览，已正式发布）
 - [ ] 向量数据库后端（Qdrant / Chroma）
 - [ ] Web UI 仪表盘
 - [ ] 插件生态

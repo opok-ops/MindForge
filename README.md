@@ -30,7 +30,7 @@ Key design decisions:
 - **Structured memory.** Four tiers (sensory, short-term, long-term, permanent) with promotion and decay driven by the Ebbinghaus forgetting curve.
 - **Retrieval quality.** Six complementary retrieval paths fused into one ranked result, instead of a single vector index.
 - **Encryption by default.** AES-256-GCM at rest with PBKDF2 key derivation; encrypted backups you can export and trust.
-- **Open interfaces.** MCP server (56 tools), Python SDK, CLI with shell completion, and a REST API for non-Python consumers.
+- **Open interfaces.** MCP server (86 tools), Python SDK, CLI with shell completion, and a REST API for non-Python consumers.
 
 ## Quick Start
 
@@ -60,6 +60,12 @@ MindForge stats
 ```
 
 ## Features
+
+**v6.0.0 (released)**
+
+- **Multi-agent memory spaces** — shared spaces with three-tier roles (owner / editor / reader), last-write-wins conflict resolution, and PRIVATE / STRICT privacy guardrails; exposed via `multi_agent` facade, CLI `space-*`, MCP `space_*`, and v6 ports (AVAILABLE).
+- **6G AI memory preview** — parallel Preview Channels (isolated SQLite, never touches the stable store), context distillation (`distill_context` layers HIGH / MEDIUM / LOW with a token budget), incremental index stats (write-time indexing, near-real-time recall metrics), and per-memory timelines (versions + evolutions + audit trail); exposed via CLI `preview-*`, REST `/api/preview/*`, and MCP `preview_*`.
+- **v6 port registry** — `v6_status()` reports both capabilities as AVAILABLE; `v6_port(capability)` injects the ready instance (multi-agent adapter or memory preview).
 
 **Retrieval**
 
@@ -95,7 +101,7 @@ MindForge stats
 
 **Integration**
 
-- **MCP server** — 56 tools, drop into Claude Code, OpenClaw, or any MCP client.
+- **MCP server** — 86 tools, drop into Claude Code, OpenClaw, or any MCP client.
 - **Federated memory** — P2P sharing between agents with trust levels, ACLs, and conflict resolution.
 - **REST API** — standard HTTP endpoints for non-Python applications.
 - **CLI** — 200+ commands with bash / zsh / fish completion.
@@ -205,7 +211,7 @@ See [SECURITY.md](SECURITY.md) for the full security policy.
 
 ## Roadmap
 
-- [ ] v6.0 — multi-agent collaboration ports, memory preview streaming
+- [x] v6.0 — multi-agent collaboration ports, memory preview streaming（多 Agent 协作端口 + 6G AI 记忆预览，已正式发布）
 - [ ] Vector database backend (Qdrant / Chroma)
 - [ ] Web UI dashboard
 - [ ] Plugin ecosystem

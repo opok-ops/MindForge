@@ -37,7 +37,7 @@ from .principled_forgetting import (
 from .follow_up import (
     create_follow_up, list_due, resolve_follow_up, list_follow_ups,
 )
-# v6.0.0 扩展端口预留（默认不启用，不引入任何行为变更）
+# v6.0.0 扩展端口（多 Agent 协作 + 6G AI 记忆预览，正式发布）
 from .v6 import (
     V6_TARGET_VERSION,
     V6Capability,

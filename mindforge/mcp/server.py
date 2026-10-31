@@ -939,6 +939,174 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
             "properties": {"follow_up_id": {"type": "string"}}
         },
     },
+    # ---- v6.0.0 正式版：v6 端口总览 ----
+    {
+        "name": "v6_status",
+        "description": "v6.0.0 正式版：查看 v6 端口总览（多 Agent 协作 + 6G AI 记忆预览）。",
+        "inputSchema": {
+            "type": "object",
+            "required": [],
+            "properties": {}
+        },
+    },
+    # ---- v6.0.0 正式版：多 Agent 记忆空间 ----
+    {
+        "name": "space_create",
+        "description": "v6.0.0 正式版：创建多 Agent 共享记忆空间（owner 自动加入）。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["name", "owner_agent"],
+            "properties": {
+                "name": {"type": "string"},
+                "owner_agent": {"type": "string"},
+                "description": {"type": "string"},
+                "policy": {"type": "string", "enum": ["shared", "restricted"], "default": "shared"}
+            }
+        },
+    },
+    {
+        "name": "space_list",
+        "description": "v6.0.0 正式版：列出多 Agent 记忆空间（可只看我加入的）。",
+        "inputSchema": {
+            "type": "object",
+            "required": [],
+            "properties": {
+                "agent_id": {"type": "string"},
+                "mine": {"type": "boolean", "default": False}
+            }
+        },
+    },
+    {
+        "name": "space_join",
+        "description": "v6.0.0 正式版：以 reader 身份加入多 Agent 记忆空间。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["space", "agent_id"],
+            "properties": {
+                "space": {"type": "string"},
+                "agent_id": {"type": "string"}
+            }
+        },
+    },
+    {
+        "name": "space_add_member",
+        "description": "v6.0.0 正式版：向空间添加成员并分配角色（仅 owner，editor/reader）。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["space", "member_agent", "actor"],
+            "properties": {
+                "space": {"type": "string"},
+                "member_agent": {"type": "string"},
+                "role": {"type": "string", "enum": ["editor", "reader"], "default": "reader"},
+                "actor": {"type": "string"}
+            }
+        },
+    },
+    {
+        "name": "space_share",
+        "description": "v6.0.0 正式版：把记忆共享进多 Agent 空间（PRIVATE/STRICT 禁止）。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["space", "memory_id", "actor"],
+            "properties": {
+                "space": {"type": "string"},
+                "memory_id": {"type": "string"},
+                "actor": {"type": "string"}
+            }
+        },
+    },
+    {
+        "name": "space_memories",
+        "description": "v6.0.0 正式版：列出空间中的共享记忆。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["space", "actor"],
+            "properties": {
+                "space": {"type": "string"},
+                "actor": {"type": "string"},
+                "limit": {"type": "integer", "default": 50}
+            }
+        },
+    },
+    {
+        "name": "space_stats",
+        "description": "v6.0.0 正式版：多 Agent 记忆空间统计（单空间或全局）。",
+        "inputSchema": {
+            "type": "object",
+            "required": [],
+            "properties": {"space": {"type": "string"}}
+        },
+    },
+    # ---- v6.0.0 正式版：6G AI 记忆预览 ----
+    {
+        "name": "preview_open",
+        "description": "6G：开启预览通道（与稳定版并行、互不污染，独立 SQLite 预览库）。",
+        "inputSchema": {
+            "type": "object",
+            "required": [],
+            "properties": {"config": {"type": "object"}}
+        },
+    },
+    {
+        "name": "preview_close",
+        "description": "6G：关闭并清理预览通道。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["channel_id"],
+            "properties": {"channel_id": {"type": "string"}}
+        },
+    },
+    {
+        "name": "preview_channels",
+        "description": "6G：列出预览通道。",
+        "inputSchema": {
+            "type": "object",
+            "required": [],
+            "properties": {"include_closed": {"type": "boolean", "default": False}}
+        },
+    },
+    {
+        "name": "preview_snapshot",
+        "description": "6G：把主库记忆快照进预览通道（不修改主库）。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["channel_id", "memory_id"],
+            "properties": {
+                "channel_id": {"type": "string"},
+                "memory_id": {"type": "string"}
+            }
+        },
+    },
+    {
+        "name": "preview_distill",
+        "description": "6G：上下文蒸馏（分层摘要 HIGH 保留全文 + Token 压缩）。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["memory_ids"],
+            "properties": {
+                "memory_ids": {"type": "array", "items": {"type": "string"}},
+                "max_tokens": {"type": "integer", "default": 2000}
+            }
+        },
+    },
+    {
+        "name": "preview_index",
+        "description": "6G：增量索引统计（写入即索引的近实时召回指标）。",
+        "inputSchema": {
+            "type": "object",
+            "required": [],
+            "properties": {}
+        },
+    },
+    {
+        "name": "preview_timeline",
+        "description": "6G：单记忆时间线（版本历史 + 演变记录 + 审计足迹）。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["memory_id"],
+            "properties": {"memory_id": {"type": "string"}}
+        },
+    },
 ]
 
 
@@ -1688,6 +1856,165 @@ def h_follow_up_resolve(mf, args):
         return {"ok": False, "error": _safe_error_msg(e)}
 
 
+# ---------------------------------------------------------------------------
+# v6.0.0 正式版：v6 端口总览 + 多 Agent 空间 + 6G AI 记忆预览 handlers
+# ---------------------------------------------------------------------------
+
+def h_v6_status(mf, _args):
+    try:
+        return {"ok": True, **mf.v6_status()}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_space_create(mf, args):
+    err = _require_args(args, "name", "owner_agent")
+    if err:
+        return err
+    try:
+        return {"ok": True, **mf.multi_agent.create_space(
+            name=args["name"], owner_agent=args["owner_agent"],
+            description=args.get("description", ""),
+            policy=args.get("policy", "shared"))}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_space_list(mf, args):
+    try:
+        agent_id = args.get("agent_id", "")
+        if args.get("mine") and not agent_id:
+            agent_id = "mcp"
+        return {"ok": True, "spaces": mf.multi_agent.list_spaces(
+            agent_id=agent_id)}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_space_join(mf, args):
+    err = _require_args(args, "space", "agent_id")
+    if err:
+        return err
+    try:
+        return {"ok": True, **mf.multi_agent.add_member(
+            space_ref=args["space"], agent_id=args["agent_id"],
+            role="reader", actor=args["agent_id"])}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_space_add_member(mf, args):
+    err = _require_args(args, "space", "member_agent", "actor")
+    if err:
+        return err
+    try:
+        return {"ok": True, **mf.multi_agent.add_member(
+            space_ref=args["space"], agent_id=args["member_agent"],
+            role=args.get("role", "reader"), actor=args["actor"])}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_space_share(mf, args):
+    err = _require_args(args, "space", "memory_id", "actor")
+    if err:
+        return err
+    try:
+        return {"ok": True, **mf.multi_agent.share_memory(
+            space_ref=args["space"], memory_id=args["memory_id"],
+            actor=args["actor"])}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_space_memories(mf, args):
+    err = _require_args(args, "space", "actor")
+    if err:
+        return err
+    try:
+        return {"ok": True, **mf.multi_agent.list_space_memories(
+            space_ref=args["space"], actor=args["actor"],
+            limit=int(args.get("limit", 50) or 50))}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_space_stats(mf, args):
+    try:
+        return {"ok": True, **mf.multi_agent.space_stats(
+            space_ref=args.get("space", ""))}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_preview_open(mf, args):
+    try:
+        cfg = args.get("config")
+        if cfg is not None and not isinstance(cfg, dict):
+            return {"ok": False, "error": "Field 'config' must be an object"}
+        return {"ok": True, **mf.memory_preview.open_preview_channel(cfg)}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_preview_close(mf, args):
+    err = _require_args(args, "channel_id")
+    if err:
+        return err
+    try:
+        return {"ok": True, **mf.memory_preview.close_preview_channel(
+            args["channel_id"])}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_preview_channels(mf, args):
+    try:
+        return {"ok": True, "channels": mf.memory_preview.list_preview_channels(
+            include_closed=bool(args.get("include_closed", False)))}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_preview_snapshot(mf, args):
+    err = _require_args(args, "channel_id", "memory_id")
+    if err:
+        return err
+    try:
+        return {"ok": True, **mf.memory_preview.snapshot_memory(
+            args["channel_id"], args["memory_id"])}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_preview_distill(mf, args):
+    mids = args.get("memory_ids")
+    if not isinstance(mids, list) or not mids:
+        return {"ok": False, "error": "Missing 'memory_ids' array field"}
+    try:
+        return {"ok": True, **mf.memory_preview.distill_context(
+            mids, max_tokens=int(args.get("max_tokens", 2000) or 2000))}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_preview_index(mf, _args):
+    try:
+        return {"ok": True, **mf.memory_preview.incremental_index_stats()}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_preview_timeline(mf, args):
+    err = _require_args(args, "memory_id")
+    if err:
+        return err
+    try:
+        return {"ok": True, **mf.memory_preview.timeline(args["memory_id"])}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
 def h_skill_distill(mf, args):
     try:
         stats = mf.distill_skills(
@@ -1915,6 +2242,22 @@ HANDLERS: Dict[str, Any] = {
     "follow_up_create": h_follow_up_create,
     "follow_up_due": h_follow_up_due,
     "follow_up_resolve": h_follow_up_resolve,
+    # v6.0.0 正式版：v6 端口总览 + 多 Agent 空间 + 6G AI 记忆预览
+    "v6_status": h_v6_status,
+    "space_create": h_space_create,
+    "space_list": h_space_list,
+    "space_join": h_space_join,
+    "space_add_member": h_space_add_member,
+    "space_share": h_space_share,
+    "space_memories": h_space_memories,
+    "space_stats": h_space_stats,
+    "preview_open": h_preview_open,
+    "preview_close": h_preview_close,
+    "preview_channels": h_preview_channels,
+    "preview_snapshot": h_preview_snapshot,
+    "preview_distill": h_preview_distill,
+    "preview_index": h_preview_index,
+    "preview_timeline": h_preview_timeline,
 }
 
 

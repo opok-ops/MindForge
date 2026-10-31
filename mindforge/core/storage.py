@@ -7493,7 +7493,12 @@ class StorageEngine:
                           "import_chat", "outcome_learn",
                           "passport_import", "passport_revoke",
                           "follow_up_create", "follow_up_resolve",
-                          "principled_forgetting"}
+                          "principled_forgetting",
+                          # v6.0.0 新增：多 Agent 空间（正式化）与 6G 预览
+                          "space_create", "space_delete", "space_join",
+                          "space_leave", "space_share", "space_unshare",
+                          "preview_channel_open", "preview_channel_close",
+                          "preview_snapshot"}
         # v5.4.2：高敏感操作，审计失败时 fail-closed
         HIGH_SENSITIVE_ACTIONS = {"delete", "purge", "grant", "revoke", "forget",
                                   "agent_purge", "agent_forget"}

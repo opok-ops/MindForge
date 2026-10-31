@@ -32,6 +32,16 @@ MindForge REST API Server
   PUT     /api/memories/{id}      更新记忆（JSON body）       do_PUT
   DELETE  /api/memories/{id}      删除记忆                    do_DELETE
 
+  # ---- v6.0.0 正式版：v6 端口 + 6G AI 记忆预览 ----
+  GET     /api/v6/status           v6 端口总览（多 Agent + 6G）  do_GET
+  GET     /api/preview/channels    6G 预览通道列表              do_GET
+  GET     /api/preview/index       6G 增量索引统计              do_GET
+  GET     /api/preview/timeline    6G 单记忆时间线（?memory_id=） do_GET
+  POST    /api/preview/open        开启 6G 预览通道             do_POST
+  POST    /api/preview/close       关闭并清理 6G 预览通道        do_POST
+  POST    /api/preview/snapshot    快照记忆进预览通道            do_POST
+  POST    /api/preview/distill     6G 上下文蒸馏                do_POST
+
 启动方式：
   MindForge serve --api
   MindForge serve --api --port 9000
@@ -958,6 +968,27 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                 self._send_json({"follow_ups": self.mindforge.follow_up_list(
                     include_resolved=include_resolved, limit=limit)})
 
+            elif path == "/api/v6/status":
+                # v6.0.0 正式版：v6 端口总览（多 Agent 协作 + 6G AI 记忆预览）
+                self._send_json(self.mindforge.v6_status())
+            elif path == "/api/preview/channels":
+                # v6.0.0 正式版：6G 预览通道列表
+                include_closed = qs.get("include_closed", ["false"])[0].lower() == "true"
+                self._send_json({
+                    "channels": self.mindforge.memory_preview.list_preview_channels(
+                        include_closed=include_closed),
+                })
+            elif path == "/api/preview/index":
+                # v6.0.0 正式版：6G 增量索引统计
+                self._send_json(self.mindforge.memory_preview.incremental_index_stats())
+            elif path == "/api/preview/timeline":
+                # v6.0.0 正式版：6G 单记忆时间线
+                mid = qs.get("memory_id", [""])[0]
+                if not mid:
+                    self._send_json({"error": "Missing 'memory_id' param"}, 400)
+                    return
+                self._send_json(self.mindforge.memory_preview.timeline(mid))
+
             elif path == "/":
                 # v5.6.5 P2 #16：根路径不再枚举完整 API 端点清单，
                 # 避免在信息探测阶段向未授权方暴露攻击面。
@@ -1243,6 +1274,44 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                     self._send_json({"error": "Missing 'follow_up_id' field"}, 400)
                     return
                 self._send_json(self.mindforge.follow_up_resolve(fid))
+
+            elif path == "/api/preview/open":
+                # v6.0.0 正式版：开启 6G 预览通道（与稳定版并行，互不污染）
+                cfg = body.get("config")
+                if cfg is not None and not isinstance(cfg, dict):
+                    self._send_json({"error": "Field 'config' must be an object"}, 400)
+                    return
+                self._send_json(self.mindforge.memory_preview.open_preview_channel(cfg))
+            elif path == "/api/preview/close":
+                # v6.0.0 正式版：关闭并清理 6G 预览通道
+                cid = body.get("channel_id", "")
+                if not isinstance(cid, str) or not cid:
+                    self._send_json({"error": "Missing 'channel_id' field"}, 400)
+                    return
+                self._send_json(self.mindforge.memory_preview.close_preview_channel(cid))
+            elif path == "/api/preview/snapshot":
+                # v6.0.0 正式版：把主库记忆快照进预览通道（不修改主库）
+                cid = body.get("channel_id", "")
+                mid = body.get("memory_id", "")
+                if not isinstance(cid, str) or not cid:
+                    self._send_json({"error": "Missing 'channel_id' field"}, 400)
+                    return
+                if not isinstance(mid, str) or not mid:
+                    self._send_json({"error": "Missing 'memory_id' field"}, 400)
+                    return
+                self._send_json(self.mindforge.memory_preview.snapshot_memory(cid, mid))
+            elif path == "/api/preview/distill":
+                # v6.0.0 正式版：6G 上下文蒸馏（分层摘要 + Token 压缩）
+                mids = body.get("memory_ids", [])
+                if not isinstance(mids, list) or not mids:
+                    self._send_json({"error": "Missing 'memory_ids' array field"}, 400)
+                    return
+                try:
+                    max_tokens = int(body.get("max_tokens", 2000))
+                except (ValueError, TypeError):
+                    max_tokens = 2000
+                self._send_json(self.mindforge.memory_preview.distill_context(
+                    mids, max_tokens=max_tokens))
 
             else:
                 self._send_json({"error": "Not found"}, 404)

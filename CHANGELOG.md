@@ -35,17 +35,47 @@
   memory_evolve / memory_evolution_history / memory_learn_outcome /
   passport_export|import|revoke / forget_explain|run / follow_up_create|due|resolve）。
 
+### 多 Agent 记忆空间正式化（v6.0.0）
+
+- `multi_agent.py` 从实验性升级为正式能力：`EXPERIMENTAL=False`、`TARGET_VERSION="6.0.0"`、
+  `space_stats()` 移除 experimental 字段。
+- v6 端口正式发布：`MultiAgentAdapterPort` 把既有 `MultiAgentMemoryManager`
+  （三级角色 owner/editor/reader + last-write-wins + PRIVATE/STRICT 隐私护栏）挂载到
+  `v6_status()["ports"]`，状态 AVAILABLE（此前 PLANNED）。
+- facade 新增 `v6_status()`（v6 端口总览）与 `v6_port(capability)`（按能力注入依赖实例）。
+- 审计白名单补齐 space_*（space_create/delete/join/leave/share/unshare），不再降级为 other。
+- 三层接口补齐：MCP 新增 space_create/list/join/add_member/share/memories/stats 7 个工具；
+  CLI 既有 space-* 7 命令正式化（去掉实验性横幅，v6-status 展示双端口）。
+
+### 6G AI 记忆预览完整开发（v6.0.0）
+
+- `MemoryPreviewPort` 五项能力全部实现（此前为占位 NotImplementedError）：
+  - **Preview Channel**：`open_preview_channel` / `close_preview_channel` /
+    `list_preview_channels` / `channel_stats` / `snapshot_memory`——与稳定版并行的
+    独立 SQLite 预览库（互不污染主库），关闭通道一键清理。
+  - **上下文蒸馏**：`distill_context` 按重要度分层（HIGH 保留全文 / MEDIUM 摘要 /
+    LOW 仅标签+首句）+ Token 预算配额（HIGH 40% / MEDIUM 40% / LOW 20%）。
+  - **增量索引统计**：`incremental_index_stats` 写入即索引的近实时召回指标
+    （总量 / 近 24h / 近 7d / FTS 与嵌入覆盖 / 最新写入延迟）。
+  - **记忆时间线**：`timeline` 单记忆的版本历史 + 演变记录 + 审计足迹。
+- 三层接口接入：CLI 新增 v6-status / preview-open|close|list|distill|index|timeline
+  7 命令；REST 新增 GET /api/v6/status /api/preview/channels|index|timeline 与
+  POST /api/preview/open|close|snapshot|distill 8 端点；MCP 新增 v6_status 与
+  preview_open|close|channels|snapshot|distill|index|timeline 8 工具。
+
 ### 修复
 
 - 审计动作白名单新增 v6 动作（import_chat / outcome_learn / passport_import /
-  passport_revoke / follow_up_create / follow_up_resolve / principled_forgetting），
-  不再被降级为 other。
-- 版本同步：版本唯一真值升至 6.0.0，MCP 工具数 56→71，官网/README/RELEASE 同步。
+  passport_revoke / follow_up_create / follow_up_resolve / principled_forgetting /
+  space_create / space_delete / space_join / space_leave / space_share / space_unshare /
+  preview_channel_open / preview_channel_close / preview_snapshot），不再被降级为 other。
+- 版本同步：版本唯一真值升至 6.0.0，MCP 工具数 56→86，官网/README/RELEASE 同步。
 
 ### 测试
 
 - 新增 v6 功能与端口测试（test_v600_import_timeline / outcome_passport /
-  skillpack_evolution / forgetting_followup / test_v6_ports）；全量 1016 项通过。
+  skillpack_evolution / forgetting_followup / test_v6_ports /
+  test_v600_multi_agent_formal）；全量 1032 项通过。
 
 ## [5.9.5] - 2026-10-14
 

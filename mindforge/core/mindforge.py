@@ -118,6 +118,7 @@ class MindForge:
         self._index: Optional[IndexEngine] = None
         self._query: Optional[QueryEngine] = None
         self._multi_agent = None
+        self._memory_preview = None  # v6.0.0 6G AI 记忆预览 lazy
         self._intent_router = None  # v5.3.9 lazy
         self._federated = None          # v5.4.2 lazy
         self._federated_acl = None      # v5.4.2 lazy
@@ -5199,6 +5200,59 @@ class MindForge:
             from mindforge.modules.multi_agent import MultiAgentMemoryManager
             self._multi_agent = MultiAgentMemoryManager(self._storage)
         return self._multi_agent
+
+    @property
+    def memory_preview(self):
+        """6G AI 记忆预览端口（v6.0.0 正式发布）
+
+        提供与稳定版并行的实验分支：Preview Channel（独立预览库）、
+        上下文蒸馏、增量索引统计与单记忆时间线可视化。
+        """
+        if self._memory_preview is None:
+            from mindforge.modules.v6 import MemoryPreviewPort
+            self._memory_preview = MemoryPreviewPort(self._storage)
+        return self._memory_preview
+
+    def v6_status(self) -> Dict[str, Any]:
+        """返回 v6 端口总览（多 Agent 协作 + 6G AI 记忆预览）。
+
+        Returns:
+            {
+                "current_version": 当前版本号,
+                "target_version": "6.0.0",
+                "released": True,
+                "ports": [...]
+            }
+        """
+        from mindforge.modules.v6 import v6_status
+        return v6_status()
+
+    def v6_port(self, capability: str):
+        """按能力名获取 v6 端口实例（含依赖注入）。
+
+        Args:
+            capability: "multi_agent_collaboration" 或 "memory_preview"
+
+        Returns:
+            v6 端口实例（多 Agent 返回适配器，6G 返回 MemoryPreviewPort）
+
+        Raises:
+            ValueError: 未知能力
+        """
+        from mindforge.modules.v6 import (
+            V6Capability, get_v6_port,
+        )
+        cap_map = {
+            "multi_agent_collaboration": V6Capability.MULTI_AGENT_COLLABORATION,
+            "memory_preview": V6Capability.MEMORY_PREVIEW,
+        }
+        if capability not in cap_map:
+            raise ValueError(
+                f"未知 v6 能力: {capability}（可选: {'/'.join(cap_map)}）")
+        cap = cap_map[capability]
+        if cap is V6Capability.MULTI_AGENT_COLLABORATION:
+            return get_v6_port(cap, self.multi_agent)
+        return get_v6_port(cap, self._storage)
 
     # ===== 联邦记忆细粒度 ACL / 共享冲突解决（v5.4.2）=====
 

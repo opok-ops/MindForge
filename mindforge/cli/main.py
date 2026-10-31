@@ -2877,8 +2877,8 @@ def _print_experimental_banner():
         return
     print(
         c(
-            "🧪 实验性功能：多 Agent 记忆空间（v6.0.0 全量推送预览，API 可能变化）",
-            "yellow",
+            "🌐 多 Agent 记忆空间（v6.0.0 正式版）",
+            "cyan",
         )
     )
 
@@ -3074,8 +3074,163 @@ def cmd_space_stats(args):
         print(f"   参与 Agent 数: {result['participating_agents']}")
         print(f"   成员关系总数: {result['total_memberships']}")
         print(f"   共享记忆总数: {result['total_shared_items']}")
-        print(f"   目标正式版本: v{result['target_version']}")
+        print(f"   正式版本: v{result['version']}")
     cm.close()
+    return 0
+
+
+def cmd_v6_status(args):
+    """查看 v6 端口总览（多 Agent 协作 + 6G AI 记忆预览）"""
+    cm = _get_memory(args)
+    try:
+        status = cm.v6_status()
+    finally:
+        cm.close()
+    print(c(f"\n🚀 MindForge v6 端口总览（v{status['current_version']}）", "cyan"))
+    print("=" * 66)
+    print(f"   目标版本: v{status['target_version']} | 已发布: {'✅' if status['released'] else '❌'}")
+    for p in status["ports"]:
+        badge = "🟢" if p["available"] else ("🟡" if p["status"] == "experimental" else "⚪")
+        print(
+            f"   {badge} {p['capability']}: {p['status']}"
+            f"（{p['port']}{'，需注入参数' if p['requires_args'] else ''}）"
+        )
+    return 0
+
+
+def cmd_preview_open(args):
+    """开启 6G 预览通道（与稳定版并行，互不污染）"""
+    cm = _get_memory(args)
+    try:
+        result = cm.memory_preview.open_preview_channel(
+            config={"name": args.name} if args.name else None)
+    finally:
+        cm.close()
+    if result.get("success"):
+        print(c("\n🧪 6G 预览通道已开启", "green"))
+        print(f"   通道 ID: {result['channel_id']}")
+        print(f"   名称: {result['name']}")
+        print(f"   状态: {result['status']}")
+    else:
+        print(c(f"\n❌ 开启失败: {result.get('error')}", "red"))
+        return 1
+    return 0
+
+
+def cmd_preview_close(args):
+    """关闭并清理 6G 预览通道"""
+    cm = _get_memory(args)
+    try:
+        result = cm.memory_preview.close_preview_channel(args.channel)
+    finally:
+        cm.close()
+    if result.get("success"):
+        print(c(f"\n🗑️ 预览通道 {args.channel} 已关闭并清理", "green"))
+    else:
+        print(c(f"\n❌ 关闭失败: {result.get('error')}", "red"))
+        return 1
+    return 0
+
+
+def cmd_preview_list(args):
+    """列出 6G 预览通道"""
+    cm = _get_memory(args)
+    try:
+        channels = cm.memory_preview.list_preview_channels(
+            include_closed=args.all)
+    finally:
+        cm.close()
+    if not channels:
+        print(c("\n📭 暂无预览通道", "yellow"))
+        return 0
+    print(c(f"\n🧪 预览通道列表（{len(channels)} 个）", "cyan"))
+    print("=" * 66)
+    for ch in channels:
+        print(
+            f"📦 {ch['name']} [{ch['channel_id']}]"
+            f" | {ch['status']} | {format_time(ch['created_at'])}"
+        )
+    return 0
+
+
+def cmd_preview_distill(args):
+    """6G 上下文蒸馏：分层摘要 + Token 压缩"""
+    cm = _get_memory(args)
+    try:
+        result = cm.memory_preview.distill_context(
+            memory_ids=args.memory_ids, max_tokens=args.max_tokens)
+    finally:
+        cm.close()
+    if not result.get("success"):
+        print(c(f"\n❌ 蒸馏失败: {result.get('error')}", "red"))
+        return 1
+    print(c("\n🧠 上下文蒸馏结果", "cyan"))
+    print("=" * 66)
+    print(
+        f"   原始 {result['total_original_tokens']} tokens → "
+        f"蒸馏后 {result['total_distilled_tokens']} tokens"
+        f"（压缩 {result['compression_ratio'] * 100:.1f}%）"
+    )
+    print(f"   预算: {result['budget']} tokens | 裁掉: {result['omitted_count']} 条")
+    for layer in ("HIGH", "MEDIUM", "LOW"):
+        items = result["layers"].get(layer, [])
+        if not items:
+            continue
+        print(f"\n   [{layer}] {len(items)} 条")
+        for it in items:
+            print(f"     · {it['memory_id']}: {it['content'][:80]}…" if len(it["content"]) > 80
+                  else f"     · {it['memory_id']}: {it['content']}")
+    return 0
+
+
+def cmd_preview_index(args):
+    """6G 增量索引统计：写入即索引的近实时召回指标"""
+    cm = _get_memory(args)
+    try:
+        result = cm.memory_preview.incremental_index_stats()
+    finally:
+        cm.close()
+    if not result.get("success"):
+        print(c(f"\n❌ 统计失败: {result.get('error')}", "red"))
+        return 1
+    print(c("\n⚡ 增量索引统计（近实时）", "cyan"))
+    print("=" * 66)
+    print(f"   记忆总量: {result['total_memories']}")
+    print(f"   近 24h 新增: {result['new_24h']} | 近 7d 新增: {result['new_7d']}")
+    print(
+        f"   索引覆盖: FTS {'✅' if result['index']['fts_available'] else '❌'}"
+        f" | 嵌入 {'✅' if result['index']['embedding_available'] else '❌'}"
+    )
+    print(f"   最新写入延迟: {result['latest_write_lag_seconds']}s")
+    return 0
+
+
+def cmd_preview_timeline(args):
+    """6G 单记忆时间线：版本历史 + 演变 + 审计足迹"""
+    cm = _get_memory(args)
+    try:
+        result = cm.memory_preview.timeline(args.memory_id)
+    finally:
+        cm.close()
+    if not result.get("success"):
+        print(c(f"\n❌ 时间线失败: {result.get('error')}", "red"))
+        return 1
+    print(c(f"\n🕰️ 记忆时间线: {args.memory_id}", "cyan"))
+    print("=" * 66)
+    cur = result.get("current")
+    if cur:
+        print(f"   当前: [{cur['category']}] {cur['content_preview']}")
+        print(
+            f"   标签: {', '.join(cur['tags']) if cur['tags'] else '无'}"
+            f" | 重要度: {cur['importance']}"
+        )
+    print(f"   版本历史: {len(result['versions'])} 条")
+    for v in result["versions"][:10]:
+        print(f"     · v{v.get('version', '?')}: {v.get('content_preview', '')[:60]}")
+    print(f"   演变记录: {len(result['evolutions'])} 条")
+    print(f"   审计足迹: {len(result['audit_trail'])} 条")
+    for a in result["audit_trail"][:5]:
+        print(f"     · {a['action']} by {a['actor']} @ {format_time(a['at'])}")
     return 0
 
 
@@ -5219,6 +5374,48 @@ def main(argv=None):
     )
     p_space_stats.add_argument("--agent", default="cli", help="Agent ID")
 
+    # ===== v6.0.0 正式版：v6 端口 + 6G AI 记忆预览命令 =====
+    p_v6_status = sub.add_parser(
+        "v6-status", help="查看 v6 端口总览（多 Agent 协作 + 6G AI 记忆预览，正式版）"
+    )
+
+    p_preview_open = sub.add_parser(
+        "preview-open", help="开启 6G 预览通道（与稳定版并行，互不污染）"
+    )
+    p_preview_open.add_argument("--name", default="", help="通道名称")
+
+    p_preview_close = sub.add_parser(
+        "preview-close", help="关闭并清理 6G 预览通道"
+    )
+    p_preview_close.add_argument("channel", help="预览通道 ID")
+
+    p_preview_list = sub.add_parser(
+        "preview-list", help="列出 6G 预览通道"
+    )
+    p_preview_list.add_argument(
+        "--all", action="store_true", help="包含已关闭通道"
+    )
+
+    p_preview_distill = sub.add_parser(
+        "preview-distill",
+        help="6G 上下文蒸馏：分层摘要 + Token 压缩（HIGH 保留全文）",
+    )
+    p_preview_distill.add_argument(
+        "memory_ids", nargs="+", help="要蒸馏的记忆 ID 列表"
+    )
+    p_preview_distill.add_argument(
+        "--max-tokens", "-t", type=int, default=2000, help="Token 预算上限"
+    )
+
+    p_preview_index = sub.add_parser(
+        "preview-index", help="6G 增量索引统计（写入即索引的近实时召回指标）"
+    )
+
+    p_preview_timeline = sub.add_parser(
+        "preview-timeline", help="6G 单记忆时间线（版本历史 + 演变 + 审计足迹）"
+    )
+    p_preview_timeline.add_argument("memory_id", help="记忆 ID")
+
     # ===== v5.3.7 新增 Agent 记忆命令 =====
     p_mem_importance = sub.add_parser(
         "memory-importance", help="记忆重要度分析（v5.3.7 新增）"
@@ -7038,6 +7235,14 @@ def _main_dispatch(args, parser=None):
         "space-share": cmd_space_share,
         "space-memories": cmd_space_memories,
         "space-stats": cmd_space_stats,
+        # v6.0.0 正式版：v6 端口总览 + 6G AI 记忆预览
+        "v6-status": cmd_v6_status,
+        "preview-open": cmd_preview_open,
+        "preview-close": cmd_preview_close,
+        "preview-list": cmd_preview_list,
+        "preview-distill": cmd_preview_distill,
+        "preview-index": cmd_preview_index,
+        "preview-timeline": cmd_preview_timeline,
         # v5.3.7 新增
         "memory-importance": cmd_memory_importance,
         "memory-context": cmd_memory_context,

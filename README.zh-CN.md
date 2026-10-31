@@ -61,17 +61,22 @@ MindForge stats
 
 ## 核心特性
 
-**v6.0.0（已发布）**
+**v6.0.0 — 2026-10-31 正式发布**
 
-- **多 Agent 记忆空间** — 三级角色（owner / editor / reader）共享空间、last-write-wins
-  冲突仲裁、PRIVATE / STRICT 隐私护栏；经 `multi_agent` facade、CLI `space-*`、
-  MCP `space_*` 与 v6 端口（AVAILABLE）暴露。
-- **6G AI 记忆预览** — 与稳定版并行的 Preview Channel（独立 SQLite 预览库）、
-  上下文蒸馏（`distill_context` 按 HIGH / MEDIUM / LOW 分层 + Token 预算）、
-  增量索引统计（写入即索引的近实时召回指标）、单记忆时间线（版本 + 演变 + 审计）；
-  经 CLI `preview-*`、REST `/api/preview/*`、MCP `preview_*` 暴露。
-- **v6 端口注册表** — `v6_status()` 报告两项能力 AVAILABLE；`v6_port(capability)`
-  按能力注入就绪实例（多 Agent 适配器或记忆预览）。
+- **多 Agent 记忆空间** — 三级角色（owner / editor / reader）的共享空间、last-write-wins
+  冲突仲裁，以及 PRIVATE / STRICT 隐私护栏。本版由实验性能力升级为正式支持能力，
+  通过 `multi_agent` facade、CLI `space-*`、MCP `space_*` 与 v6 端口注册表
+  （状态 `AVAILABLE`）对外提供。
+- **6G AI 记忆预览** — 预览端口的四项能力均由占位实现补全为可用功能：与稳定库并行的
+  Preview Channel（独立 SQLite 预览库，不污染主库）、上下文蒸馏（`distill_context`
+  按 HIGH / MEDIUM / LOW 分层并施加 Token 预算）、增量索引统计（写入即索引，提供近实时
+  召回指标）、单记忆时间线（版本历史 + 演变记录 + 审计足迹）。通过 CLI `preview-*`、
+  REST `/api/preview/*`、MCP `preview_*` 对外提供。
+- **Agent 工作流工具集** — 八项覆盖记忆全生命周期的能力：对话历史导入（冷启动）、
+  时间线可视化、可分享技能包、记忆演变、按结果学习、跨模型迁移的记忆护照、
+  可解释的有原则遗忘，以及跟进事项闭环。八项能力在 CLI、REST、MCP 三层接口上保持一致暴露。
+- **v6 端口注册表** — `v6_status()` 报告各项能力的就绪状态，`v6_port(capability)`
+  按能力注入可直接使用的实例（多 Agent 适配器或记忆预览），使调用方依赖端口而非具体模块。
 
 **检索**
 
@@ -93,9 +98,7 @@ MindForge stats
 
 **集成**
 
-- **MCP Server** — 86 个工具，分钟级接入 Claude Code、OpenClaw 或任意 MCP 客户端。
-- **多 Agent 记忆空间** — 三级角色（owner / editor / reader）共享空间、last-write-wins 冲突仲裁、PRIVATE / STRICT 隐私护栏（v6.0.0 正式版）。
-- **6G AI 记忆预览** — Preview Channel（独立预览库）、上下文蒸馏、增量索引统计、记忆时间线（v6.0.0 正式版）。
+- **MCP Server** — 86 个工具，可直接接入 Claude Code、OpenClaw 或任意 MCP 客户端。
 - **联邦记忆** — Agent 间 P2P 共享，含信任等级、ACL 与冲突解决。
 - **REST API** — 面向非 Python 应用的标准 HTTP 接口。
 - **CLI** — 200+ 命令，支持 bash / zsh / fish 自动补全。
@@ -198,7 +201,7 @@ memory:
 
 ## 路线图
 
-- [x] v6.0 — 多 Agent 协作端口、记忆预览流式传输（多 Agent 协作端口 + 6G AI 记忆预览，已正式发布）
+- [x] **v6.0** — 多 Agent 记忆空间与 6G AI 记忆预览均由实验性端口升级为正式支持能力，并同步落地八项 Agent 工作流功能（2026-10-31 发布）
 - [ ] 向量数据库后端（Qdrant / Chroma）
 - [ ] Web UI 仪表盘
 - [ ] 插件生态

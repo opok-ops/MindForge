@@ -61,11 +61,12 @@ MindForge stats
 
 ## Features
 
-**v6.0.0 (released)**
+**v6.0.0 — released 2026-10-31**
 
-- **Multi-agent memory spaces** — shared spaces with three-tier roles (owner / editor / reader), last-write-wins conflict resolution, and PRIVATE / STRICT privacy guardrails; exposed via `multi_agent` facade, CLI `space-*`, MCP `space_*`, and v6 ports (AVAILABLE).
-- **6G AI memory preview** — parallel Preview Channels (isolated SQLite, never touches the stable store), context distillation (`distill_context` layers HIGH / MEDIUM / LOW with a token budget), incremental index stats (write-time indexing, near-real-time recall metrics), and per-memory timelines (versions + evolutions + audit trail); exposed via CLI `preview-*`, REST `/api/preview/*`, and MCP `preview_*`.
-- **v6 port registry** — `v6_status()` reports both capabilities as AVAILABLE; `v6_port(capability)` injects the ready instance (multi-agent adapter or memory preview).
+- **Multi-agent memory spaces** — shared spaces with three-tier roles (owner / editor / reader), last-write-wins conflict resolution, and PRIVATE / STRICT privacy guardrails. Promoted from experimental to a supported capability; available through the `multi_agent` facade, CLI `space-*`, MCP `space_*`, and the v6 port registry (status `AVAILABLE`).
+- **6G AI memory preview** — four capabilities on the preview port, each replacing a former stub: parallel Preview Channels (isolated SQLite stores that never touch the stable database), context distillation (`distill_context` ranks memories HIGH / MEDIUM / LOW under a token budget), incremental index statistics (write-time indexing with near-real-time recall metrics), and per-memory timelines (versions, evolutions, and audit trail). Available through CLI `preview-*`, REST `/api/preview/*`, and MCP `preview_*`.
+- **Agent workflow toolkit** — eight features covering the full memory lifecycle: chat-history import for cold start, timeline visualization, shareable skill packs, memory evolution, outcome-based learning, memory passports for cross-model migration, explainable principled forgetting, and follow-up tracking. Each is exposed consistently across CLI, REST, and MCP.
+- **v6 port registry** — `v6_status()` reports capability readiness; `v6_port(capability)` injects a ready-to-use instance (multi-agent adapter or memory preview), so callers can depend on ports instead of concrete modules.
 
 **Retrieval**
 
@@ -211,7 +212,7 @@ See [SECURITY.md](SECURITY.md) for the full security policy.
 
 ## Roadmap
 
-- [x] v6.0 — multi-agent collaboration ports, memory preview streaming（多 Agent 协作端口 + 6G AI 记忆预览，已正式发布）
+- [x] **v6.0** — multi-agent memory spaces and the 6G AI memory preview, both promoted from experimental ports to supported capabilities, alongside an eight-feature agent workflow toolkit (released 2026-10-31)
 - [ ] Vector database backend (Qdrant / Chroma)
 - [ ] Web UI dashboard
 - [ ] Plugin ecosystem

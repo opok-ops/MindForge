@@ -1,81 +1,145 @@
+# Changelog
+
+All notable changes to MindForge will be documented in this file.
+
+
 ## [6.0.0] - 2026-10-31
 
-### 新增：8 大功能（用户路线图全部落地）
+v6.0.0 是本项目的第一个大版本：路线图规划的八项 Agent 工作流能力全部落地；
+两项 v6 旗舰能力（多 Agent 记忆空间、6G AI 记忆预览）由实验性端口升级为正式支持能力；
+上述能力统一接入 CLI / REST / MCP 三层接口。版本唯一真值升至 6.0.0，
+MCP 工具数由 56 增至 86，CLI 子命令增至 241 条。
 
-1. **一键导入记忆（冷启动）**：`import_chat_history` 解析 ChatGPT（mapping 树）
-   与 Claude（accounts/conversations）对话导出，第一人称画像信号自动识别为
-   HIGH 重要度偏好；噪音过滤 + dry_run 试运行 + 审计记录。
-2. **记忆时间线可视化**：`timeline_visual` 输出按日聚合的聚合统计
-   （privacy: aggregate-only，不含明文）：层分布 / 分类 / 偏好主题 / 偏好趋势 /
-   知识图谱规模 / 四层摘要。
-3. **可分享技能包**：`skill_pack_export/validate/import` 一键导出、分享、安装
-   技能包（mindforge-skill-pack/1.0），merge/replace 两种导入模式。
-4. **记忆演变**：`evolve_memory` 保留旧版本 + 记录演变原因（memory_evolutions
-   表），复用 v5.2.7 自动版本存档；`list_evolutions` / `evolution_stats`。
-5. **按结果学习的记忆**：`learn_from_outcome` 给记忆标记 success/partial/failure，
-   成功上调重要度、失败降权；`search_weighted_by_outcome` 优先返回带来好结果的记忆。
-6. **记忆护照（跨模型迁移）**：`passport_export/import/revoke/status` 一次授权、
-   记忆跟你走、随时可撤销（按 passport_id 删除来源记忆，可逆）。
-7. **有原则的遗忘**：`forget_explain` 输出遗忘评分分解（时效/频率/重要度保护/
-   结果标记/噪音），`forget_run` 执行可解释 GC，HIGH 重要度受保护。
-8. **记忆主动收尾**：`follow_up_create/due/resolve/list` 登记跟进事项、到期提醒、
-   办结闭环（独立 follow_ups 表）。
+本版未新增运行时依赖（`dependencies` 仍为 `cryptography`）。除下文「兼容性说明」中
+列出的 `space_stats()` 响应字段调整外，既有存储格式、加密方案与对外接口签名保持不变，
+既有数据库文件无需迁移即可直接打开。
+
+### 新增：八项 Agent 工作流能力
+
+1. **一键导入记忆（冷启动）**：`import_chat_history` 解析 ChatGPT（mapping 树结构）
+   与 Claude（accounts / conversations 结构）的对话导出文件，自动识别第一人称画像
+   信号并标记为 HIGH 重要度偏好；内置噪音过滤、`dry_run` 试运行与审计记录。
+2. **记忆时间线可视化**：`timeline_visual` 输出按日聚合的统计视图
+   （层级分布、分类、偏好主题、偏好趋势、知识图谱规模、四层摘要）。
+   仅返回聚合结果（aggregate-only），不含任何记忆明文。
+3. **可分享技能包**：`skill_pack_export` / `skill_pack_validate` / `skill_pack_import`
+   支持技能包的导出、校验与安装，包格式 schema 为 `mindforge-skill-pack/1.0`，
+   导入支持 `merge` 与 `replace` 两种模式。
+4. **记忆演变**：`evolve_memory` 在更新记忆时保留旧版本并记录演变原因
+   （新增 `memory_evolutions` 表），复用 v5.2.7 的自动版本存档机制；
+   配套 `list_evolutions` 与 `evolution_stats` 查询接口。
+5. **按结果学习的记忆**：`learn_from_outcome` 为记忆标记 success / partial / failure，
+   成功结果上调重要度、失败结果降权；`search_weighted_by_outcome` 在检索时
+   优先返回曾带来良好结果的记忆。
+6. **记忆护照（跨模型迁移）**：`passport_export` / `passport_import` /
+   `passport_revoke` / `passport_status` 实现一次授权、记忆随用户迁移、
+   随时可撤销；撤销按 `passport_id` 删除对应来源记忆，操作可逆。
+7. **有原则的遗忘**：`forget_explain` 输出遗忘评分的因子分解
+   （时效、访问频率、重要度保护、结果标记、噪音判定），`forget_run` 据此执行
+   可解释的垃圾回收；HIGH 重要度记忆受保护，不参与回收。
+8. **记忆主动收尾**：`follow_up_create` / `follow_up_due` / `follow_up_resolve` /
+   `follow_up_list` 支持登记跟进事项、到期提醒与办结闭环（新增 `follow_ups` 表）。
 
 ### 接口接入
 
-- CLI：15 个新命令（import-chat / timeline-viz / skill-pack-export|import /
-  evolve-memory / evolution-history / learn-outcome / passport-export|import|revoke /
-  forget-explain|run / follow-up-create|due|resolve）。
-- REST：15 个新端点（GET: /api/timeline /api/skill-pack/export /api/passport/export|status
-  /api/evolution/stats|history /api/outcome/stats /api/forget/stats|explain
-  /api/follow-ups|due；POST: /api/import-chat /api/skill-pack/import
-  /api/passport/import|revoke /api/evolve /api/learn-outcome /api/forget/run
-  /api/follow-ups|resolve）。
-- MCP：15 个新工具（chat_import / timeline_viz / skill_pack_export|import /
-  memory_evolve / memory_evolution_history / memory_learn_outcome /
-  passport_export|import|revoke / forget_explain|run / follow_up_create|due|resolve）。
+八项能力在三层接口上保持一致暴露，均经过参数校验与审计埋点：
 
-### 多 Agent 记忆空间正式化（v6.0.0）
+- **CLI**：新增 15 条子命令（`import-chat` / `timeline-viz` /
+  `skill-pack-export` / `skill-pack-import` / `evolve-memory` / `evolution-history` /
+  `learn-outcome` / `passport-export` / `passport-import` / `passport-revoke` /
+  `forget-explain` / `forget-run` / `follow-up-create` / `follow-up-due` /
+  `follow-up-resolve`）。
+- **REST**：新增 20 个端点处理条目（11 个 GET + 9 个 POST，共涉及 19 个路径；
+  `/api/follow-ups` 同时承载 GET 列表与 POST 创建）。
+  GET：`/api/timeline`、`/api/skill-pack/export`、`/api/passport/export`、
+  `/api/passport/status`、`/api/evolution/stats`、`/api/evolution/history`、
+  `/api/outcome/stats`、`/api/forget/stats`、`/api/forget/explain`、
+  `/api/follow-ups`、`/api/follow-ups/due`。
+  POST：`/api/import-chat`、`/api/skill-pack/import`、`/api/passport/import`、
+  `/api/passport/revoke`、`/api/evolve`、`/api/learn-outcome`、`/api/forget/run`、
+  `/api/follow-ups`、`/api/follow-ups/resolve`。
+- **MCP**：新增 15 个工具（`chat_import` / `timeline_viz` / `skill_pack_export` /
+  `skill_pack_import` / `memory_evolve` / `memory_evolution_history` /
+  `memory_learn_outcome` / `passport_export` / `passport_import` / `passport_revoke` /
+  `forget_explain` / `forget_run` / `follow_up_create` / `follow_up_due` /
+  `follow_up_resolve`）。
 
-- `multi_agent.py` 从实验性升级为正式能力：`EXPERIMENTAL=False`、`TARGET_VERSION="6.0.0"`、
-  `space_stats()` 移除 experimental 字段。
-- v6 端口正式发布：`MultiAgentAdapterPort` 把既有 `MultiAgentMemoryManager`
-  （三级角色 owner/editor/reader + last-write-wins + PRIVATE/STRICT 隐私护栏）挂载到
-  `v6_status()["ports"]`，状态 AVAILABLE（此前 PLANNED）。
-- facade 新增 `v6_status()`（v6 端口总览）与 `v6_port(capability)`（按能力注入依赖实例）。
-- 审计白名单补齐 space_*（space_create/delete/join/leave/share/unshare），不再降级为 other。
-- 三层接口补齐：MCP 新增 space_create/list/join/add_member/share/memories/stats 7 个工具；
-  CLI 既有 space-* 7 命令正式化（去掉实验性横幅，v6-status 展示双端口）。
+### 多 Agent 记忆空间正式化
 
-### 6G AI 记忆预览完整开发（v6.0.0）
+- **能力定级**：`multi_agent.py` 由实验性模块升级为正式支持能力，
+  `EXPERIMENTAL` 置为 `False`，`TARGET_VERSION` 定为 `6.0.0`；模块文档字符串同步移除
+  「API 在全量发布前可能发生变化」的实验性声明。
+- **v6 端口正式发布**：`MultiAgentAdapterPort` 将既有 `MultiAgentMemoryManager`
+  （三级角色 owner / editor / reader、last-write-wins 冲突仲裁、PRIVATE / STRICT
+  隐私护栏）挂载至 `v6_status()["ports"]`，状态由 `PLANNED` 变为 `AVAILABLE`。
+- **门面接口**：facade 新增 `v6_status()`（v6 端口总览）与 `v6_port(capability)`
+  （按能力注入就绪实例），调用方可依赖端口抽象而非具体模块。
+- **审计埋点**：审计动作白名单补齐 `space_create` / `space_delete` / `space_join` /
+  `space_leave` / `space_share` / `space_unshare`，相关操作不再被降级记录为 `other`。
+- **接口补齐**：MCP 新增 7 个工具（`space_create` / `space_list` / `space_join` /
+  `space_add_member` / `space_share` / `space_memories` / `space_stats`）；
+  CLI 新增 `v6-status` 命令，展示双端口的就绪状态。
+- **已知遗留**：CLI 的 7 条 `space-*` 命令仍会打印实验性横幅
+  （`_print_experimental_banner`），其 docstring 与 `--help` 文本也仍标注
+  「实验性 v6.0.0 预览」。底层能力已正式化（`EXPERIMENTAL=False`），
+  但 CLI 层提示文案尚未同步移除，将在后续维护版本中清理。
 
-- `MemoryPreviewPort` 五项能力全部实现（此前为占位 NotImplementedError）：
-  - **Preview Channel**：`open_preview_channel` / `close_preview_channel` /
-    `list_preview_channels` / `channel_stats` / `snapshot_memory`——与稳定版并行的
-    独立 SQLite 预览库（互不污染主库），关闭通道一键清理。
-  - **上下文蒸馏**：`distill_context` 按重要度分层（HIGH 保留全文 / MEDIUM 摘要 /
-    LOW 仅标签+首句）+ Token 预算配额（HIGH 40% / MEDIUM 40% / LOW 20%）。
-  - **增量索引统计**：`incremental_index_stats` 写入即索引的近实时召回指标
-    （总量 / 近 24h / 近 7d / FTS 与嵌入覆盖 / 最新写入延迟）。
-  - **记忆时间线**：`timeline` 单记忆的版本历史 + 演变记录 + 审计足迹。
-- 三层接口接入：CLI 新增 v6-status / preview-open|close|list|distill|index|timeline
-  7 命令；REST 新增 GET /api/v6/status /api/preview/channels|index|timeline 与
-  POST /api/preview/open|close|snapshot|distill 8 端点；MCP 新增 v6_status 与
-  preview_open|close|channels|snapshot|distill|index|timeline 8 工具。
+### 兼容性说明
+
+- **`space_stats()` 响应字段变更（唯一破坏性调整）**：移除 `experimental` 与
+  `target_version` 两个字段，改为返回 `version`（值为 `"6.0.0"`）。
+  该字段此前仅用于标注实验状态，能力正式化后已无意义。
+  影响面：仓库内除测试外无其他消费方；官网、插件与文档均未读取这两个字段。
+  如外部代码断言了 `stats["experimental"]`，请改读 `stats["version"]`。
+- 数据库 schema、加密格式、既有 CLI / REST / MCP 接口签名均未变更，无需数据迁移。
+
+### 6G AI 记忆预览完整实现
+
+`MemoryPreviewPort` 的四项能力全部由占位实现（`NotImplementedError`）补全为可用功能，
+预览库与稳定库物理隔离：
+
+- **Preview Channel**：`open_preview_channel` / `close_preview_channel` /
+  `list_preview_channels` / `channel_stats` / `snapshot_memory`。
+  每个通道使用独立的 SQLite 预览库，与主库互不污染；关闭通道即清理其预览库文件。
+- **上下文蒸馏**：`distill_context` 按重要度分层组织上下文
+  （HIGH 保留全文、MEDIUM 保留摘要、LOW 仅保留标签与首句），
+  并施加 Token 预算配额（HIGH 40% / MEDIUM 40% / LOW 20%）。
+- **增量索引统计**：`incremental_index_stats` 提供写入即索引的近实时召回指标
+  （记忆总量、近 24 小时、近 7 天、FTS 与嵌入覆盖率、最新写入延迟）。
+- **记忆时间线**：`timeline` 输出单条记忆的版本历史、演变记录与审计足迹。
+
+**接口接入**：CLI 新增 7 条命令（`v6-status`、`preview-open`、`preview-close`、
+`preview-list`、`preview-distill`、`preview-index`、`preview-timeline`）；
+REST 新增 8 个端点（GET `/api/v6/status`、`/api/preview/channels`、
+`/api/preview/index`、`/api/preview/timeline`；POST `/api/preview/open`、
+`/api/preview/close`、`/api/preview/snapshot`、`/api/preview/distill`）；
+MCP 新增 8 个工具（`v6_status`、`preview_open`、`preview_close`、`preview_channels`、
+`preview_snapshot`、`preview_distill`、`preview_index`、`preview_timeline`）。
 
 ### 修复
 
-- 审计动作白名单新增 v6 动作（import_chat / outcome_learn / passport_import /
-  passport_revoke / follow_up_create / follow_up_resolve / principled_forgetting /
-  space_create / space_delete / space_join / space_leave / space_share / space_unshare /
-  preview_channel_open / preview_channel_close / preview_snapshot），不再被降级为 other。
-- 版本同步：版本唯一真值升至 6.0.0，MCP 工具数 56→86，官网/README/RELEASE 同步。
+- **审计动作白名单补齐 v6 动作**：新增 `import_chat`、`outcome_learn`、
+  `passport_import`、`passport_revoke`、`follow_up_create`、`follow_up_resolve`、
+  `principled_forgetting`，以及 `space_create` / `space_delete` / `space_join` /
+  `space_leave` / `space_share` / `space_unshare` 与 `preview_channel_open` /
+  `preview_channel_close` / `preview_snapshot`。此前这些动作不在白名单内，
+  审计记录会被统一降级为 `other`，导致无法按动作维度检索与取证。
+- **测试断言同步工具数**：v5.7.6 / v5.7.7 / v5.7.9 / v5.8.0 四份回归测试中
+  硬编码的 MCP 工具数断言由 56 更新为 86，避免工具数增长后回归测试误报。
+- **版本同步**：版本唯一真值（`mindforge/core/version.py`）升至 6.0.0，
+  MCP 工具数 56 → 86；README、README.zh-CN、RELEASE.md、dsh 插件文档与
+  官网统计数字同步至 v6.0.0。
 
 ### 测试
 
-- 新增 v6 功能与端口测试（test_v600_import_timeline / outcome_passport /
-  skillpack_evolution / forgetting_followup / test_v6_ports /
-  test_v600_multi_agent_formal）；全量 1032 项通过。
+- 新增 6 份测试模块覆盖本版能力：`test_v600_import_timeline`（9 项）、
+  `test_v600_outcome_passport`（9 项）、`test_v600_skillpack_evolution`（8 项）、
+  `test_v600_forgetting_followup`（8 项）、`test_v600_multi_agent_formal`（11 项），
+  以及重写后的 `test_v6_ports`（22 项，由原 17 项扩展）。
+- 全量 1032 项通过。本版测试规模经 `pytest tests/ --collect-only` 实测核对为
+  1032 项，较 v5.9.5 的 982 项净增 50 项；官网四处测试数与该值一致。
+- 文档一致性守卫 `scripts/check_docs_consistency.py` 51 项断言全部通过，
+  含官网四处测试数与 CHANGELOG 声明值的交叉校验。
 
 ## [5.9.5] - 2026-10-14
 

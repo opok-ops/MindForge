@@ -5604,6 +5604,26 @@ class MindForge:
         from mindforge.modules.follow_up import list_due
         return list_due(self, limit=limit)
 
+    def follow_up_nag(self, interval_hours: float = 24.0,
+                      max_nags: int = 3, actor: str = "memory",
+                      session_id: str = "") -> Dict[str, Any]:
+        """主动催办到期未办结事项并生成回执（v6.1.1）。
+
+        v6.0.0 的 follow_up 只能被动查询；本方法把「到期 → 催办 → 回执」
+        串成可自动触发的一步，并向 EventBus 发布 memory.follow_up.due。
+
+        Args:
+            interval_hours: 同一事项两次催办的最小间隔（小时）。
+            max_nags: 单条事项的催办次数上限，防止无限骚扰。
+
+        Returns:
+            {"nagged": [{"follow_up_id", "note", "receipt", "nag_count", ...}],
+             "skipped_recent": int, "skipped_maxed": int}
+        """
+        from mindforge.modules.follow_up import nag_due
+        return nag_due(self, interval_hours=interval_hours, max_nags=max_nags,
+                       actor=actor, session_id=session_id)
+
     def follow_up_resolve(self, follow_up_id: str, actor: str = "",
                           session_id: str = "") -> Dict[str, Any]:
         """办结一条跟进事项（v6.0.0）"""

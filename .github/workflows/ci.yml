@@ -60,7 +60,7 @@ jobs:
           sys.path.insert(0, '.')
           from mindforge.mcp.server import _handle_tools_list
           tools = _handle_tools_list({})['tools']
-          assert len(tools) == 86, f'Expected exactly 86 tools, got {len(tools)}'
+          assert len(tools) == 87, f'Expected exactly 87 tools, got {len(tools)}'
           print(f'MCP tools: {len(tools)} OK')
           "
 

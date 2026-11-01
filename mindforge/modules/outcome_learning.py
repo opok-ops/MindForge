@@ -51,6 +51,48 @@ def _ensure_columns(conn) -> None:
             pass  # 已存在
 
 
+def _normalize_memory_id(memory_id: Any) -> tuple:
+    """接受 str 或 MemoryEntry 对象，返回 (id_or_None, error_or_None)。
+
+    v6.0.0 只接受字符串；但 mf.add() 返回的是 MemoryEntry 对象，
+    把返回值直接传进来会在 len() 处抛 TypeError（对外表现为崩溃而非友好报错）。
+    v6.1.1 起统一收敛：对象取 .id，其余非法类型返回明确错误。
+    """
+    if memory_id is None:
+        return None, "记忆 ID 无效"
+    if not isinstance(memory_id, str):
+        memory_id = getattr(memory_id, "id", None)
+        if not isinstance(memory_id, str):
+            return None, "记忆 ID 必须是字符串或 add() 返回的 MemoryEntry 对象"
+    if not memory_id or len(memory_id) > 128:
+        return None, "记忆 ID 无效"
+    return memory_id, None
+
+
+def _chunk_score(chunk: Any) -> float:
+    """读取召回得分。
+
+    RecallEngine 写入的字段名是 relevance_score（见 modules/recall.py），
+    v6.0.0 的 search_weighted 误读为 score，getattr 取不到就落回 0.0，
+    导致按结果加权检索返回的 relevance 恒为 0.0。
+    """
+    for attr in ("relevance_score", "score", "similarity"):
+        val = getattr(chunk, attr, None)
+        if val is not None:
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                continue
+    if isinstance(chunk, dict):
+        for key in ("relevance_score", "score", "similarity"):
+            if chunk.get(key) is not None:
+                try:
+                    return float(chunk[key])
+                except (TypeError, ValueError):
+                    continue
+    return 0.0
+
+
 def apply_outcome(storage, memory_id: str, outcome: str = "success",
                   note: str = "", actor: str = "",
                   session_id: str = "") -> Dict[str, Any]:
@@ -58,8 +100,9 @@ def apply_outcome(storage, memory_id: str, outcome: str = "success",
     outcome = (outcome or "success").lower()
     if outcome not in ("success", "partial", "failure"):
         return {"success": False, "error": f"无效 outcome: {outcome}"}
-    if not memory_id or len(memory_id) > 128:
-        return {"success": False, "error": "记忆 ID 无效"}
+    memory_id, id_error = _normalize_memory_id(memory_id)
+    if id_error:
+        return {"success": False, "error": id_error}
 
     conn = storage._get_conn()
     _ensure_columns(conn)
@@ -134,7 +177,7 @@ def search_weighted(mf, query: str, max_results: int = 10,
             "content_preview": (getattr(r, "content", "") or "")[:200],
             "outcome": row[0] if row else "",
             "importance": row[1] if row else "",
-            "relevance": round(float(getattr(r, "score", 0.0) or 0.0), 4),
+            "relevance": round(_chunk_score(r), 4),
         })
 
     # 目标 outcome 的记忆前置

@@ -3,6 +3,78 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.1.1] - 2026-11-01
+
+演示链路修复 + 功能补全。本版修复两个 v6.0.0 引入、且被 1032 项测试漏过的
+真实缺陷，并把「记忆主动帮你收尾」从被动查询补全为可自动触发的催办闭环。
+新增 MCP 工具 1 个（86 → 87），测试规模 1032 → 1063（新增 31 项回归）。
+
+### 修复：按结果学习的记忆权重恒为 0（P0，影响演示）
+
+`mindforge/modules/outcome_learning.py` 的 `search_weighted()` 读取召回得分时
+用了字段名 `score`，但 RecallEngine 实际写入的是 `relevance_score`
+（见 `mindforge/modules/recall.py:145/168/182`）。`getattr(chunk, "score", 0.0)`
+取不到属性便落回默认值，导致**返回的 relevance 永远是 0.0**。
+
+影响：「左右分屏对比」这类演示拿不到任何权重数字可展示；排序虽仍正确
+（outcome 分组优先），但分值列全为零。
+
+- 新增 `_chunk_score()`：按 `relevance_score` → `score` → `similarity` 顺序
+  读取，并兼容 dict 形态；取不到才返回 0.0。
+- 实测修复后同一场景得到 0.222 / 0.250 / 0.0925 的真实分值。
+
+### 修复：传入 add() 返回值即崩溃（P0）
+
+`mf.add()` 返回 `MemoryEntry` 对象，但三个 v6.0.0 入口直接执行
+`if not memory_id or len(memory_id) > 128`，把返回值原样传回会抛
+`TypeError: object of type 'MemoryEntry' has no len()`——对外表现为崩溃而非
+友好报错。v5.9.0 曾为 `get()` 修过同类问题（ValueError），v6.0.0 新代码漏了。
+
+- `learn_from_outcome` / `follow_up_create` / `forget_explain` 统一改为接受
+  字符串或 `MemoryEntry`（自动取 `.id`），其余类型返回明确错误文案。
+- 崩溃点：`outcome_learning.py`、`follow_up.py`、`principled_forgetting.py`。
+
+### 新增：跟进事项主动催办与回执（功能 8 的「主动」部分）
+
+`mindforge/modules/follow_up.py` 自 v6.0.0 起，模块文档就写着
+「与 EventBus 联动：到期时 publish `memory.follow_up.due` 事件」，但全文
+**没有任何 publish 调用**；`follow_ups` 表也只有 open / resolved 两态，
+无处记录「已催了几次」。所以「记忆主动帮你收尾」当时只能靠外部轮询，
+无法演示「AI 自己弹出回执」。
+
+- `follow_ups` 幂等补三列：`nag_count` / `last_nagged_at` / `receipt`
+  （`ALTER TABLE ... ADD COLUMN`，旧库首次访问时自动升级，无需迁移）。
+- 新增 `nag_due()`：筛出到期且未办结事项 → 递增催办次数 → 生成中文回执
+  （如「「跟进和老王的合同」到期 3 天 仍无结果，已催了一次。」）→ 审计
+  `follow_up_nag` → 发布 `memory.follow_up.due` 事件。
+- 防骚扰设计：两次催办之间有 `interval_hours`（默认 24h）间隔守卫，
+  单条事项最多催 `max_nags`（默认 3）次；已办结、未到期均跳过。
+  事件发布失败不影响催办落库（事件仅为通知面）。
+- 三层接口接入：CLI `follow-up-nag`、REST `POST /api/follow-ups/nag`、
+  MCP `follow_up_nag`（工具数 86 → 87）；`follow_up_due()` / `follow_up_list()`
+  返回值新增 `nag_count` 与 `receipt`，回执已持久化，进程重启后仍可取用。
+- 审计动作白名单补 `follow_up_nag`，否则会被降级记为 `other`。
+
+### 测试
+
+- 新增 `tests/test_v611_fixes.py` 31 项，覆盖：字段名回归（权重不得全零）、
+  对象入参（含 6 种非法类型不得崩溃）、催办全流程（首次必执行、间隔守卫、
+  上限守卫、已办结/未到期跳过、回执持久化与重启存活）、事件发布与
+  「事件失败不影响催办」、以及 87 工具数与三层注册自洽性。
+- 全量 1063 项通过（`pytest tests/` 收集数与通过数一致）。
+- 修复过程中该文件自身曾有 3 处断言写错（误以为 `export_audit` 返回 dict、
+  未注意事件信封的 `data` 嵌套、tearDown 关闭已被置空的实例），均已按
+  接口实际契约修正，非实现问题。
+- 官网四处测试数与工具数、`ci.yml` 冒烟断言、四份 v5.7x/v5.8 回归测试的
+  工具数断言一并同步（86 → 87，1032 → 1063）。
+
+### 其他
+
+- 版本号推进 6.1.0 → 6.1.1：版本真值、两份测试的版本断言、README 中英文
+  徽章、英文 README 架构图标题行、dsh 插件徽章、官网 6 处受守卫校验位置。
+- 补一处上一轮（6.1.0）漏改：`website/index.html` 开发者正文「从第一行代码
+  到现在 v6.0.0」未被守卫覆盖，本轮一并更正为 v6.1.1。
+
 ## [6.1.0] - 2026-11-01
 
 质量修复版，不新增功能。本版全部改动集中在 **CI 配置、对外数字一致性、

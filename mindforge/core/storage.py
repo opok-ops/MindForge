@@ -7493,6 +7493,7 @@ class StorageEngine:
                           "import_chat", "outcome_learn",
                           "passport_import", "passport_revoke",
                           "follow_up_create", "follow_up_resolve",
+                          "follow_up_nag",
                           "principled_forgetting",
                           # v6.0.0 新增：多 Agent 空间（正式化）与 6G 预览
                           "space_create", "space_delete", "space_join",

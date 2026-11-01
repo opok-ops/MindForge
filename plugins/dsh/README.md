@@ -4,7 +4,7 @@
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![dsh-plugin](https://img.shields.io/badge/dsh-plugin-purple.svg)](https://github.com/topics/dsh-plugin)
-[![MindForge v6.1.0](https://img.shields.io/badge/MindForge-v6.1.0-green.svg)](https://github.com/opok-ops/MindForge)
+[![MindForge v6.1.1](https://img.shields.io/badge/MindForge-v6.1.1-green.svg)](https://github.com/opok-ops/MindForge)
 
 ## What it does
 

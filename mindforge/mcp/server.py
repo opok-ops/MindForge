@@ -939,6 +939,18 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
             "properties": {"follow_up_id": {"type": "string"}}
         },
     },
+    {
+        "name": "follow_up_nag",
+        "description": "功能 8：主动催办到期未办结跟进并生成回执（v6.1.1）。",
+        "inputSchema": {
+            "type": "object",
+            "required": [],
+            "properties": {
+                "interval_hours": {"type": "number"},
+                "max_nags": {"type": "integer"}
+            }
+        },
+    },
     # ---- v6.0.0 正式版：v6 端口总览 ----
     {
         "name": "v6_status",
@@ -1856,6 +1868,15 @@ def h_follow_up_resolve(mf, args):
         return {"ok": False, "error": _safe_error_msg(e)}
 
 
+def h_follow_up_nag(mf, args):
+    try:
+        return {"ok": True, **mf.follow_up_nag(
+            interval_hours=float(args.get("interval_hours", 24.0) or 24.0),
+            max_nags=int(args.get("max_nags", 3) or 3))}
+    except (ValueError, TypeError) as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
 # ---------------------------------------------------------------------------
 # v6.0.0 正式版：v6 端口总览 + 多 Agent 空间 + 6G AI 记忆预览 handlers
 # ---------------------------------------------------------------------------
@@ -2242,6 +2263,7 @@ HANDLERS: Dict[str, Any] = {
     "follow_up_create": h_follow_up_create,
     "follow_up_due": h_follow_up_due,
     "follow_up_resolve": h_follow_up_resolve,
+    "follow_up_nag": h_follow_up_nag,
     # v6.0.0 正式版：v6 端口总览 + 多 Agent 空间 + 6G AI 记忆预览
     "v6_status": h_v6_status,
     "space_create": h_space_create,

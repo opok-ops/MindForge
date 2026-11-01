@@ -108,11 +108,28 @@ def _decay_score(storage, entry, now: float) -> Dict[str, Any]:
             "forget_tendency": forget_tendency}
 
 
+def _coerce_memory_id(memory_id: Any) -> tuple:
+    """接受 str 或 add() 返回的 MemoryEntry，返回 (id, error)。
+
+    v6.0.0 直接 len(memory_id)，传对象会抛 TypeError 而非友好报错（v6.1.1 修）。
+    """
+    if memory_id is None:
+        return None, "记忆 ID 无效"
+    if not isinstance(memory_id, str):
+        memory_id = getattr(memory_id, "id", None)
+        if not isinstance(memory_id, str):
+            return None, "记忆 ID 必须是字符串或 add() 返回的 MemoryEntry 对象"
+    if not memory_id or len(memory_id) > 128:
+        return None, "记忆 ID 无效"
+    return memory_id, None
+
+
 def explain_forgetting(storage, memory_id: str,
                        actor: str = "", session_id: str = "") -> Dict[str, Any]:
     """解释一条记忆的遗忘决策"""
-    if not memory_id or len(memory_id) > 128:
-        return {"success": False, "error": "记忆 ID 无效"}
+    memory_id, id_error = _coerce_memory_id(memory_id)
+    if id_error:
+        return {"success": False, "error": id_error}
     entry = storage.get_memory(memory_id, actor, session_id)
     if entry is None:
         return {"success": False, "error": "记忆不存在"}

@@ -1274,6 +1274,18 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                     self._send_json({"error": "Missing 'follow_up_id' field"}, 400)
                     return
                 self._send_json(self.mindforge.follow_up_resolve(fid))
+            elif path == "/api/follow-ups/nag":
+                # v6.1.1 功能 8：主动催办到期跟进并生成回执
+                try:
+                    interval = float(body.get("interval_hours", 24.0) or 24.0)
+                except (ValueError, TypeError):
+                    interval = 24.0
+                try:
+                    max_nags = int(body.get("max_nags", 3) or 3)
+                except (ValueError, TypeError):
+                    max_nags = 3
+                self._send_json(self.mindforge.follow_up_nag(
+                    interval_hours=interval, max_nags=max_nags))
 
             elif path == "/api/preview/open":
                 # v6.0.0 正式版：开启 6G 预览通道（与稳定版并行，互不污染）

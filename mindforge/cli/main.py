@@ -5140,6 +5140,14 @@ def main(argv=None):
     p_follow_up_resolve = sub.add_parser("follow-up-resolve", help="办结跟进（v6.0.0）")
     p_follow_up_resolve.add_argument("follow_up_id", help="跟进 ID")
 
+    p_follow_up_nag = sub.add_parser(
+        "follow-up-nag", help="主动催办到期跟进并生成回执（v6.1.1）")
+    p_follow_up_nag.add_argument(
+        "--interval", type=float, default=24.0, help="两次催办的最小间隔（小时）")
+    p_follow_up_nag.add_argument(
+        "--max-nags", type=int, default=3, help="单条事项催办次数上限")
+    p_follow_up_nag.add_argument("--json", action="store_true", help="输出 JSON")
+
     p_compliance = sub.add_parser("compliance", help="合规报告")
 
     p_serve = sub.add_parser("serve", help="启动 Web UI 或 REST API")
@@ -7285,6 +7293,7 @@ def _main_dispatch(args, parser=None):
         "follow-up-create": cmd_follow_up_create,
         "follow-up-due": cmd_follow_up_due,
         "follow-up-resolve": cmd_follow_up_resolve,
+        "follow-up-nag": cmd_follow_up_nag,
         # v5.4.3 新增
         "agent-influence": cmd_agent_influence,
         "memory-overlap": cmd_memory_overlap,
@@ -7545,6 +7554,29 @@ def cmd_follow_up_due(args):
     print(c(f"✅ 到期未办结 {len(due)} 条", "green"))
     for d in due:
         print(f"   • {d['follow_up_id']} 记忆[{d['memory_id'][:12]}…] {d['note']}")
+    cm.close()
+    return 0
+
+
+def cmd_follow_up_nag(args):
+    """功能 8：主动催办到期跟进并生成回执（v6.1.1）"""
+    cm = _get_memory(args)
+    res = cm.follow_up_nag(interval_hours=args.interval,
+                           max_nags=args.max_nags)
+    if args.json:
+        print(json.dumps(res, ensure_ascii=False, default=str))
+        cm.close()
+        return 0
+    nagged = res.get("nagged") or []
+    if not nagged:
+        print(c("✅ 没有需要催办的到期事项", "green"))
+    else:
+        print(c(f"🔔 已主动催办 {len(nagged)} 条到期事项", "yellow"))
+        for n in nagged:
+            print(f"   • {n['receipt']}")
+    skipped = res.get("skipped_recent", 0) + res.get("skipped_maxed", 0)
+    if skipped:
+        print(c(f"   （另有 {skipped} 条因未到间隔或已达催办上限而跳过）", "dim"))
     cm.close()
     return 0
 

@@ -2,16 +2,16 @@
 
 本文件记录 MindForge 的 PyPI 发布启用步骤与当前状态，供后续任何版本发布复用。
 
-## 当前状态（v6.1.0）
+## 当前状态（v6.1.1）
 
 - 发行名：**`mindforge-memory`**（PyPI 项目名大小写不敏感，规范名 `mindforge`
   已被 mindforge.ai 的第三方客户端占用，故改名发布；Python 模块名
   `mindforge.*`、CLI 入口、`MindForge.py` 兼容层均不受影响）。
-- 版本真值：`mindforge/core/version.py` 的 `__version__` = `6.1.0`；
+- 版本真值：`mindforge/core/version.py` 的 `__version__` = `6.1.1`；
   `pyproject.toml` 经 dynamic version 读取同一处，打包元数据与运行时一致。
 - **标签尚未创建**：仓库最新标签仍为 `v5.9.5`，v6.0.0 与 v6.1.0 均未打标签。
   发布前需执行 `git tag v6.1.0 && git push origin v6.1.0`，发布工作流由 tag 触发。
-- 测试状态：本地在与 CI 等价的依赖环境下全量 1032 项通过
+- 测试状态：本地在与 CI 等价的依赖环境下全量 1063 项通过
   （`pytest tests/`，Python 3.13 + cryptography 50.0.1 + pytest 8.4.2）。
 - **尚未发布**：PyPI 项目未注册（`mindforge-memory` 在 pypi.org 为 404），
   发布工作流失败属预期（`invalid-publisher`）。

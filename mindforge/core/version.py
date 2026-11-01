@@ -20,20 +20,20 @@ core/mindforge.py、cli/main.py、mcp/server.py），每处都带一份硬编码
 from typing import Tuple
 
 #: 当前发布版本（唯一真值）
-__version__: str = "6.0.0"
+__version__: str = "6.1.0"
 
-#: 结构化版本元组，便于比较（如 `VERSION_INFO >= (6, 0, 0)`）
-VERSION_INFO: Tuple[int, int, int] = (6, 0, 0)
+#: 结构化版本元组，便于比较（如 `VERSION_INFO >= (6, 1, 0)`）
+VERSION_INFO: Tuple[int, int, int] = (6, 1, 0)
 
 #: 下一个大版本的目标版本号（供 v6 端口预留引用）
-NEXT_MAJOR_TARGET: str = "6.0.0"
+NEXT_MAJOR_TARGET: str = "7.0.0"
 
 
 def get_version() -> str:
     """返回当前版本号字符串（等价于 `__version__`）。
 
     Returns:
-        形如 "5.6.1" 的 semver 字符串。
+        形如 "6.1.0" 的 semver 字符串。
     """
     return __version__
 
@@ -42,7 +42,7 @@ def get_version_info() -> Tuple[int, int, int]:
     """返回结构化版本元组。
 
     Returns:
-        形如 (5, 6, 1) 的三元整数元组。
+        形如 (6, 1, 0) 的三元整数元组。
     """
     return VERSION_INFO
 

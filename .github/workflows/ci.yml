@@ -16,7 +16,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        # Python 3.9 已于 2025-10 EOL，GitHub 托管 runner 镜像（ubuntu-latest
+        # 自 2026-10-19 起为 Ubuntu 26.04）不再提供 3.9，setup-python 必然失败。
+        # 故自 v6.1.0 起最低支持 3.10，与 pyproject 的 requires-python 保持一致。
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
 
     steps:
       - name: Checkout
@@ -57,7 +60,7 @@ jobs:
           sys.path.insert(0, '.')
           from mindforge.mcp.server import _handle_tools_list
           tools = _handle_tools_list({})['tools']
-          assert len(tools) == 56, f'Expected exactly 56 tools, got {len(tools)}'
+          assert len(tools) == 86, f'Expected exactly 86 tools, got {len(tools)}'
           print(f'MCP tools: {len(tools)} OK')
           "
 

@@ -47,5 +47,10 @@ benchmarks/results/preview/
 # Source maps — 生产包/仓库禁止携带源码映射（防源码逆向还原）
 *.map
 
-mf_v579_*/
-mf_v580_*/
+# 测试与一次性脚本产物（自 v6.1.0 起统一忽略）
+# 测试运行在仓库根目录创建的临时数据库目录（旧规则只覆盖 579/580 两版）
+mf_v*/
+# 6G 预览通道库目录（内含 .db，显式忽略避免残留）
+preview_channels/
+# 发版辅助一次性脚本与其日志（曾误覆盖 CHANGELOG 头部）
+scripts/_*

@@ -2869,10 +2869,10 @@ def cmd_diff(args):
     return 0
 
 
-# ===== 多 Agent 记忆空间命令（v5.2.8 实验性 — v6.0.0 全量推送预览）=====
+# ===== 多 Agent 记忆空间命令（v6.0.0 起为正式能力）=====
 
 
-def _print_experimental_banner():
+def _print_multi_agent_banner():
     if _json_mode:
         return
     print(
@@ -2884,8 +2884,8 @@ def _print_experimental_banner():
 
 
 def cmd_space_create(args):
-    """创建记忆空间（实验性）"""
-    _print_experimental_banner()
+    """创建记忆空间"""
+    _print_multi_agent_banner()
     cm = _get_memory(args)
     result = cm.multi_agent.create_space(
         name=args.name,
@@ -2906,8 +2906,8 @@ def cmd_space_create(args):
 
 
 def cmd_space_list(args):
-    """列出记忆空间（实验性）"""
-    _print_experimental_banner()
+    """列出记忆空间"""
+    _print_multi_agent_banner()
     cm = _get_memory(args)
     spaces = cm.multi_agent.list_spaces(agent_id=args.agent if args.mine else "")
 
@@ -2934,8 +2934,8 @@ def cmd_space_list(args):
 
 
 def cmd_space_join(args):
-    """加入记忆空间（实验性）"""
-    _print_experimental_banner()
+    """加入记忆空间"""
+    _print_multi_agent_banner()
     cm = _get_memory(args)
     result = cm.multi_agent.add_member(
         space_ref=args.space,
@@ -2954,8 +2954,8 @@ def cmd_space_join(args):
 
 
 def cmd_space_add_member(args):
-    """添加空间成员（实验性，仅 owner）"""
-    _print_experimental_banner()
+    """添加空间成员（仅 owner）"""
+    _print_multi_agent_banner()
     cm = _get_memory(args)
     result = cm.multi_agent.add_member(
         space_ref=args.space,
@@ -2974,8 +2974,8 @@ def cmd_space_add_member(args):
 
 
 def cmd_space_share(args):
-    """共享记忆到空间（实验性）"""
-    _print_experimental_banner()
+    """共享记忆到空间"""
+    _print_multi_agent_banner()
     cm = _get_memory(args)
     result = cm.multi_agent.share_memory(
         space_ref=args.space,
@@ -3000,8 +3000,8 @@ def cmd_space_share(args):
 
 
 def cmd_space_memories(args):
-    """列出空间中的记忆（实验性）"""
-    _print_experimental_banner()
+    """列出空间中的记忆"""
+    _print_multi_agent_banner()
     cm = _get_memory(args)
     result = cm.multi_agent.list_space_memories(
         space_ref=args.space,
@@ -3042,8 +3042,8 @@ def cmd_space_memories(args):
 
 
 def cmd_space_stats(args):
-    """记忆空间统计（实验性）"""
-    _print_experimental_banner()
+    """记忆空间统计"""
+    _print_multi_agent_banner()
     cm = _get_memory(args)
     result = cm.multi_agent.space_stats(space_ref=args.space or "")
     if not result.get("success"):
@@ -5307,9 +5307,9 @@ def main(argv=None):
         "--against", default="", help="第二个版本 ID（两个历史版本互相比较）"
     )
 
-    # ===== 多 Agent 记忆空间命令（v5.2.8 实验性 — v6.0.0 全量推送预览）=====
+    # ===== 多 Agent 记忆空间命令（v6.0.0 起为正式能力）=====
     p_space_create = sub.add_parser(
-        "space-create", help="创建多 Agent 记忆空间（实验性 v6.0.0 预览）"
+        "space-create", help="创建多 Agent 记忆空间"
     )
     p_space_create.add_argument("name", help="空间名称（唯一）")
     p_space_create.add_argument("--desc", default="", help="空间描述")
@@ -5322,7 +5322,7 @@ def main(argv=None):
     p_space_create.add_argument("--agent", default="cli", help="Owner Agent ID")
 
     p_space_list = sub.add_parser(
-        "space-list", help="列出记忆空间（实验性 v6.0.0 预览）"
+        "space-list", help="列出记忆空间"
     )
     p_space_list.add_argument(
         "--mine", action="store_true", help="仅列出我（--agent）加入的空间"
@@ -5330,13 +5330,13 @@ def main(argv=None):
     p_space_list.add_argument("--agent", default="cli", help="Agent ID")
 
     p_space_join = sub.add_parser(
-        "space-join", help="以 reader 身份加入记忆空间（实验性 v6.0.0 预览）"
+        "space-join", help="以 reader 身份加入记忆空间"
     )
     p_space_join.add_argument("space", help="空间 ID 或名称")
     p_space_join.add_argument("--agent", default="cli", help="Agent ID")
 
     p_space_add_member = sub.add_parser(
-        "space-add-member", help="添加空间成员（实验性 v6.0.0 预览，仅 owner）"
+        "space-add-member", help="添加空间成员（仅 owner）"
     )
     p_space_add_member.add_argument("space", help="空间 ID 或名称")
     p_space_add_member.add_argument("member_agent", help="要添加的 Agent ID")
@@ -5351,14 +5351,14 @@ def main(argv=None):
     )
 
     p_space_share = sub.add_parser(
-        "space-share", help="共享记忆到空间（实验性 v6.0.0 预览）"
+        "space-share", help="共享记忆到空间"
     )
     p_space_share.add_argument("space", help="空间 ID 或名称")
     p_space_share.add_argument("memory_id", help="要共享的记忆 ID")
     p_space_share.add_argument("--agent", default="cli", help="操作者 Agent ID")
 
     p_space_memories = sub.add_parser(
-        "space-memories", help="列出空间中的共享记忆（实验性 v6.0.0 预览）"
+        "space-memories", help="列出空间中的共享记忆"
     )
     p_space_memories.add_argument("space", help="空间 ID 或名称")
     p_space_memories.add_argument("--agent", default="cli", help="Agent ID")
@@ -5367,7 +5367,7 @@ def main(argv=None):
     )
 
     p_space_stats = sub.add_parser(
-        "space-stats", help="记忆空间统计（实验性 v6.0.0 预览）"
+        "space-stats", help="记忆空间统计"
     )
     p_space_stats.add_argument(
         "space", nargs="?", default="", help="空间 ID 或名称（省略则全局统计）"
@@ -7227,7 +7227,7 @@ def _main_dispatch(args, parser=None):
         # v5.2.8 新增
         "export-csv": cmd_export_csv,
         "diff": cmd_diff,
-        # v5.2.8 实验性：多 Agent 记忆空间（v6.0.0 全量推送预览）
+        # 多 Agent 记忆空间（v6.0.0 起为正式能力）
         "space-create": cmd_space_create,
         "space-list": cmd_space_list,
         "space-join": cmd_space_join,

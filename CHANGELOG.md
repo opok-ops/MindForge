@@ -3,6 +3,109 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.1.0] - 2026-11-01
+
+质量修复版，不新增功能。本版全部改动集中在 **CI 配置、对外数字一致性、
+联系方式正确性与命名残留**：产品代码在 v6.0.0 即已通过全量测试，本版未修改
+任何运行时行为、数据库 schema 或接口签名。
+
+### 修复：CI（test 作业自 v6.0.0 起持续判红）
+
+- **MCP 冒烟断言过期（P0）**：`.github/workflows/ci.yml` 的 `tools/list`
+  冒烟步骤仍断言 `len(tools) == 56`，而工具数自 v6.0.0 起为 86。该断言与
+  1032 项测试是否通过无关，却使 test 作业在全部 Python 版本上判红。
+  已更正为 `== 86`，与 `TOOL_SCHEMAS` 实际长度一致。
+- **矩阵包含已 EOL 的 Python 3.9（P0）**：`ubuntu-latest` 自 2026-10-19 起
+  指向 Ubuntu 26.04，该镜像已移除 Python 3.9（3.9 于 2025-10 结束官方支持），
+  `setup-python` 报 `The version '3.9' ... was not found for Ubuntu 26.04`，
+  `test (3.9)` 必然失败且与代码无关。矩阵移除 `"3.9"`，保留 3.10–3.13。
+
+### 变更：放弃 Python 3.9 支持
+
+与上述 CI 决定保持一致，避免「声明支持却从不验证」：
+
+- `pyproject.toml`：`requires-python` 由 `>=3.9` 提升至 `>=3.10`，
+  并移除 `Programming Language :: Python :: 3.9` 分类标签。
+- README / README.zh-CN：Python 徽章由 `3.9+` 改为 `3.10+`。
+- `requirements-dev.txt`：`bandit==1.8.6` 的固定理由原为「3.9 上需装本文件」，
+  现已失效；本版保持版本不动（升级 1.9.x 会引入新扫描规则、可能使 security
+  作业出现新告警），仅订正注释说明。`matplotlib` 的
+  `python_version >= "3.11"` 标记**保留**——矩阵仍含 3.10，
+  而 matplotlib 3.11 要求 3.11+。
+
+### 修复：对外内容错误
+
+- **官网反馈邮箱数字错位（P0）**：`website/index.html` 页脚两处
+  （链接列表与版权行）写作 `2638898280@qq.com`，正确地址为
+  `2638895480@qq.com`。该错误地址已随 GitHub Pages 部署，此前访客点击反馈
+  会发往错误邮箱；README 与 SECURITY.md 中的地址一直正确，仅官网错。
+- **JSON-LD 工具数过期**：结构化数据 `"toolCount": 56` → `86`，与页面正文
+  及 README 对齐（该字段不被守卫覆盖，故此前未被发现）。
+- **hero 徽标状态过期**：第二个徽标仍标「多 Agent 协作 · 下一代记忆引擎 ——
+  开发中」，而该能力已随 v6.0.0 发布，改为「已发布」。
+- **v6.0.0 条目端点数错误**：官网更新日志称 v6.0.0「REST 23 端点」，实测为
+  28 个处理条目（八项功能那批 20 + 预览那批 8），已更正。同行 CLI 22 命令
+  与 MCP 30 工具经核对无误，保持不变。
+
+### 修复：命名与文案残留
+
+- `cli/main.py` 辅助函数 `_print_experimental_banner` 更名为
+  `_print_multi_agent_banner`：函数名声称「实验性」，但其打印的横幅文案实为
+  「多 Agent 记忆空间（v6.0.0 正式版）」，且底层 `EXPERIMENTAL` 已为 `False`。
+  同步更新 7 处调用点。
+- 移除 7 条 `space-*` 命令 docstring 与 `--help` 文本中的「实验性」
+  「v6.0.0 预览」措辞，以及 3 处区块注释中的同类表述，使 CLI 对外描述
+  与能力定级一致。
+- `tests/test_v557_banner_insight_wal.py`：同步被改名的测试方法与导入，
+  校验意图（横幅函数检查 `_json_mode`）不变。
+- `core/version.py`：`NEXT_MAJOR_TARGET` 由 `6.0.0` 改为 `7.0.0`
+  （6.0.0 已发布，作为「下一个大版本」目标已过期）；两处函数 docstring
+  示例版本由 `5.6.1` 更新为当前版本。
+  注意 `V6_TARGET_VERSION` **保持 `6.0.0`**——它是 v6 能力线的目标版本，
+  6.1.0 仍属该线，不应随之变动。
+
+### 修复：更新日志结构
+
+- 移除文件中部（v5.8.2 条目之前）误留的第二个 `# Changelog` 标题。该重复
+  标题由历史一次性脚本写入，会使更新日志结构在中段断裂。
+- 订正 v6.0.0 条目中「CLI 的 `space-*` 命令仍会打印实验性横幅」的表述：
+  横幅文案实际已是正式版，遗留的是函数名与 docstring / `--help` 措辞；
+  该残留在本版已清理。
+
+### 仓库整洁
+
+- `.gitignore` 补充三条规则：`mf_v*/`（旧规则只覆盖 579/580 两版，后续版本
+  的测试临时目录未被忽略）、`preview_channels/`（6G 预览库目录，内含 `.db`）、
+  `scripts/_*`（发版辅助一次性脚本与日志）。
+- 清理 `scripts/` 下 15 个未跟踪的一次性脚本与日志（含曾误覆盖
+  CHANGELOG 头部的 `_sync_version.py`）。它们此前未入库，不影响 GitHub
+  主页显示，但会持续堆积并可能被误提交。
+
+### 版本与文档同步
+
+- 版本唯一真值升至 6.1.0；`tests/test_v568_fixes.py` 的 `_EXPECTED_VERSION`
+  与 `tests/test_v575_release_consistency.py` 的版本断言同步。
+- README / README.zh-CN 版本徽章、英文 README 架构图标题行同步至 v6.1.0。
+- 官网 6 处受守卫校验的版本串（JSON-LD、顶栏 brand-ver、hero 当前徽标、
+  安装示例输出、开发者板块标题、更新日志导语）全部同步；更新日志新增
+  v6.1.0 条目并迁移「最新」标记。
+- `plugins/dsh/README.md` 主版本徽章同步。
+- `RELEASE.md`：标题升至 v6.1.0，并移除两处不实陈述——原文称「`master` 与
+  标签 `v5.8.15` 指向同一发布提交」，实测仓库最新标签为 `v5.9.5`，
+  **v6.0.0 与 v6.1.0 均未打标签**；原文称「本地全量测试 938 通过」与
+  「METADATA `Version: 5.8.15`」也与实际版本矛盾，已按实测值改写并注明
+  发版前需补打标签。
+
+### 测试
+
+- 全量 1032 项通过（在与 CI 等价的依赖环境下实测：Python 3.13 +
+  cryptography 50.0.1 + pytest 8.4.2 + pytest-cov 6.3.0，
+  `pytest tests/` 收集数与通过数一致）。本版未新增用例，数量与 v6.0.0 持平。
+- 文档一致性守卫 `scripts/check_docs_consistency.py` 51 项断言全部通过，
+  含官网四处测试数、各处版本号与 CHANGELOG 声明值的交叉校验。
+- CI 的 `security` / `docs` / `typecheck` / `deploy` 四个作业在 v6.0.0
+  即为绿色，本版改动不影响其判定。
+
 ## [6.0.0] - 2026-10-31
 
 v6.0.0 是本项目的第一个大版本：路线图规划的八项 Agent 工作流能力全部落地；
@@ -79,10 +182,11 @@ MCP 工具数由 56 增至 86，CLI 子命令增至 241 条。
 - **接口补齐**：MCP 新增 7 个工具（`space_create` / `space_list` / `space_join` /
   `space_add_member` / `space_share` / `space_memories` / `space_stats`）；
   CLI 新增 `v6-status` 命令，展示双端口的就绪状态。
-- **已知遗留**：CLI 的 7 条 `space-*` 命令仍会打印实验性横幅
-  （`_print_experimental_banner`），其 docstring 与 `--help` 文本也仍标注
-  「实验性 v6.0.0 预览」。底层能力已正式化（`EXPERIMENTAL=False`），
-  但 CLI 层提示文案尚未同步移除，将在后续维护版本中清理。
+- **已知遗留**：CLI 的 7 条 `space-*` 命令所用辅助函数名为
+  `_print_experimental_banner`，其 docstring 与 `--help` 文本也仍标注
+  「实验性 v6.0.0 预览」；而实际打印的横幅文案已是「多 Agent 记忆空间（v6.0.0 正式版）」。
+  底层能力已正式化（`EXPERIMENTAL=False`），但 CLI 层的命名与文案尚未同步，
+  已在 v6.1.0 清理（函数改名 `_print_multi_agent_banner`，并移除「实验性」措辞）。
 
 ### 兼容性说明
 
@@ -387,11 +491,6 @@ MCP 新增 8 个工具（`v6_status`、`preview_open`、`preview_close`、`previ
 - 测试：新增 tests/test_v583_security.py 18 项回归（P1-1/P1-2/P2-1/P2-2/P3-1/P3-2），
   全量 903 项通过（902 passed + 1 skipped）。
 - 已知限制：P3-3（超限 body 的 413 Broken pipe 客户端体验）审计方确认安全无害，保持现状。
-
-# Changelog
-
-All notable changes to MindForge will be documented in this file.
-
 
 ## [5.8.2] - 2026-09-25
 

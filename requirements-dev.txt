@@ -6,15 +6,17 @@
 # 说明：固定测试与安全扫描工具的版本，避免数月后 CI 因工具链漂移而意外失败。
 pytest==8.4.2
 pytest-cov==6.3.0
-# bandit 1.9.x 起要求 Python>=3.10；test job 在 3.9 上安装本文件，故固定在 1.8.6
-# （最后一个支持 3.9 的版本）。security job 使用未固定安装的 bandit，不受此 pin 影响。
+# bandit 固定在 1.8.6：矩阵最低版本已升至 3.10，1.9.x 在技术上已可用，
+# 但升级会引入新的扫描规则、可能使 security 作业出现新告警，故本轮保持锁定；
+# 如需升级应单独提交并复核 bandit -lll 输出。
+# security job 使用未固定安装的 bandit，不受此 pin 影响。
 bandit==1.8.6
 pip-audit==2.7.3
 
 # 性能基准与 PDF 报告（benchmarks/）
 psutil==7.2.2
 # matplotlib 3.11 要求 Python>=3.11；仅用于生成 PDF 性能报告（benchmarks/），
-# 运行时代码与 tests/ 均不导入。加环境标记后 3.9/3.10 CI 可正常安装并运行测试，
-# 需生成报告时在 Python 3.11+ 环境执行（仍使用此锁定版本）。
+# 运行时代码与 tests/ 均不导入。矩阵仍包含 3.10，故保留环境标记，
+# 使 3.10 CI 可正常安装并运行测试；需生成报告时在 Python 3.11+ 环境执行。
 matplotlib==3.11.2; python_version >= "3.11"
 reportlab==5.0.1

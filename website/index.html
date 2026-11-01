@@ -36,8 +36,8 @@
   "applicationSubCategory": "AI Agent Memory System",
   "operatingSystem": "Windows, macOS, Linux",
   "programmingLanguage": "Python",
-  "softwareVersion": "6.0.0",
-  "toolCount": 56,
+  "softwareVersion": "6.1.0",
+  "toolCount": 86,
   "moduleCount": 15,
   "testCount": 1032,
   "url": "https://opok-ops.github.io/MindForge/",
@@ -144,7 +144,7 @@
         </svg>
       </span>
       <span class="brand-name">MindForge</span>
-      <span class="brand-ver">v6.0.0</span>
+      <span class="brand-ver">v6.1.0</span>
     </a>
 
     <div class="search" id="site-search" role="search">
@@ -213,7 +213,7 @@
         <div class="hero-liquid" aria-hidden="true"><i></i><i></i><i></i></div>
       <div class="hero-badges reveal">
         <span class="hero-badge">
-          <b>v6.0.0</b>
+          <b>v6.1.0</b>
           <span class="sep" aria-hidden="true"></span>
           <span>四层记忆架构 · 六路混合检索 · 端侧加密 · 安全加固</span>
         </span>
@@ -221,7 +221,7 @@
           <b>v6.0.0</b>
           <span class="sep" aria-hidden="true"></span>
           <span>多 Agent 协作 · 下一代记忆引擎</span>
-          <span class="chip-badge"><i class="badge-dot" aria-hidden="true"></i>开发中</span>
+          <span class="chip-badge"><i class="badge-dot" aria-hidden="true"></i>已发布</span>
         </span>
       </div>
 
@@ -336,7 +336,7 @@
           </div>
           <pre class="term-body"><code><span class="l"><span class="tk-prompt">$</span> git clone https://github.com/opok-ops/MindForge.git</span>
 <span class="l"><span class="tk-prompt">$</span> cd MindForge && pip install -e .</span>
-<span class="l dim">Successfully installed mindforge-memory-6.0.0</span>
+<span class="l dim">Successfully installed mindforge-memory-6.1.0</span>
 <span class="l"><span class="tk-prompt">$</span> python</span>
 <span class="l dim">&gt;&gt;&gt; from MindForge import MindForge</span>
 <span class="l dim">&gt;&gt;&gt; m = MindForge(db_path="./data/memory.db")</span>
@@ -454,8 +454,8 @@
   <div class="container">
     <div class="section-head reveal">
       <span class="tag"><span class="tag-dot" aria-hidden="true"></span>关于开发者</span>
-      <h2 id="dev-title">一个人，从第一行代码敲到 v6.0.0</h2>
-      <p>写这套系统的只有一个人。没有团队，没有融资——小顾一个人从第一行代码敲到 v6.0.0，每一行都是自己写的。</p>
+      <h2 id="dev-title">一个人，从第一行代码敲到 v6.1.0</h2>
+      <p>写这套系统的只有一个人。没有团队，没有融资——小顾一个人从第一行代码敲到 v6.1.0，每一行都是自己写的。</p>
     </div>
 
     <div class="web-card glass reveal" style="text-align:left;max-width:880px">
@@ -913,12 +913,28 @@
     <div class="section-head reveal">
       <span class="tag"><span class="tag-dot" aria-hidden="true"></span>更新日志</span>
       <h2 id="cl-title">每次迭代，都在进化</h2>
-      <p>从 v5.3.3 到 v6.0.0，功能扩展、安全加固与 Bug 修复的完整轨迹（近期重点版本）。</p>
+      <p>从 v5.3.3 到 v6.1.0，功能扩展、安全加固与 Bug 修复的完整轨迹（近期重点版本）。</p>
     </div>
 
     <div class="cl-list">
       <article class="cl-item is-latest glass reveal">
-        <div class="cl-meta"><span class="cl-ver">v6.0.0</span><span class="cl-date">2026-10-31</span><span class="cl-kind cl-kind-latest">最新</span></div>
+        <div class="cl-meta"><span class="cl-ver">v6.1.0</span><span class="cl-date">2026-11-01</span><span class="cl-kind cl-kind-latest">最新</span></div>
+        <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
+        <div class="cl-body">
+          <h4>质量修复版：CI 转绿 + 对外数字与联系方式校正</h4>
+          <ul>
+            <li><b>CI 修复</b>：MCP 冒烟断言由 56 更正为 86，test 作业不再误报；矩阵移除已 EOL 的 Python 3.9（Ubuntu 26.04 runner 不再提供）。</li>
+            <li><b>放弃 Python 3.9</b>：<code>requires-python</code> 提升至 <code>&gt;=3.10</code>，README 徽章同步。</li>
+            <li><b>反馈邮箱更正</b>：官网页脚邮箱数字错位（2638898280 → 2638895480），此前访客反馈会发往错误地址。</li>
+            <li><b>对外数字校正</b>：JSON-LD <code>toolCount</code> 56 → 86；hero 徽标「开发中」改为「已发布」；v6.0.0 条目 REST 端点数 23 → 28。</li>
+            <li><b>CLI 文案一致性</b>：7 条 <code>space-*</code> 命令移除「实验性」措辞与遗留函数名，与已正式化的能力定级对齐。</li>
+            <li><b>仓库整洁</b>：<code>.gitignore</code> 补 <code>preview_channels/</code>、<code>scripts/_*</code>、<code>mf_v*/</code>，清理 15 个一次性脚本与日志。</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="cl-item glass reveal">
+        <div class="cl-meta"><span class="cl-ver">v6.0.0</span><span class="cl-date">2026-10-31</span><span class="cl-kind">发布</span></div>
         <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
         <div class="cl-body">
           <h4>记忆路线图 8 大功能全部落地 + 多 Agent 正式化 + 6G 预览发布</h4>
@@ -933,7 +949,7 @@
             <li><b>主动收尾</b>：跟进事项登记、到期提醒、办结闭环。</li>
             <li><b>多 Agent 记忆空间正式化</b>：三级角色 + last-write-wins + 隐私护栏，v6 端口 AVAILABLE。</li>
             <li><b>6G AI 记忆预览</b>：Preview Channel / 上下文蒸馏 / 增量索引 / 记忆时间线完整实现。</li>
-            <li><b>接口</b>：CLI 22 命令 / REST 23 端点 / MCP 30 工具全量接入（含 v6-status 与 space-* / preview-*）。</li>
+            <li><b>接口</b>：CLI 22 命令 / REST 28 端点 / MCP 30 工具全量接入（含 v6-status 与 space-* / preview-*）。</li>
           </ul>
         </div>
       </article>
@@ -1351,12 +1367,12 @@
           <li><a href="demo.html">动画演示</a></li>
           <li><a href="https://github.com/opok-ops/MindForge/milestones" target="_blank" rel="noopener noreferrer">Milestones</a></li>
           <li><a href="https://github.com/opok-ops/MindForge/blob/master/LICENSE" target="_blank" rel="noopener noreferrer">许可证</a></li>
-          <li><a href="mailto:2638898280@qq.com">反馈邮箱</a></li>
+          <li><a href="mailto:2638895480@qq.com">反馈邮箱</a></li>
         </ul>
       </div>
     </div>
     <div class="footer-bottom">
-      <span>© 2026 MindForge · 本地运行 · 数据不上云 · 反馈 <a href="mailto:2638898280@qq.com" style="color:inherit">2638898280@qq.com</a></span>
+      <span>© 2026 MindForge · 本地运行 · 数据不上云 · 反馈 <a href="mailto:2638895480@qq.com" style="color:inherit">2638895480@qq.com</a></span>
       <div class="footer-social">
         <a href="https://github.com/opok-ops/MindForge" target="_blank" rel="noopener noreferrer" aria-label="GitHub"><svg class="icon icon-sm icon-fill" aria-hidden="true"><use href="#i-github"/></svg></a>
       </div>

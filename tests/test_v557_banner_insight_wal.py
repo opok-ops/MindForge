@@ -63,11 +63,11 @@ class TestP3BannerSuppression(unittest.TestCase):
         source = inspect.getsource(print_banner)
         self.assertIn('_json_mode', source)
 
-    def test_experimental_banner_checks_json_mode(self):
-        """验证 _print_experimental_banner 检查 _json_mode"""
+    def test_multi_agent_banner_checks_json_mode(self):
+        """验证 _print_multi_agent_banner 检查 _json_mode"""
         import inspect
-        from mindforge.cli.main import _print_experimental_banner
-        source = inspect.getsource(_print_experimental_banner)
+        from mindforge.cli.main import _print_multi_agent_banner
+        source = inspect.getsource(_print_multi_agent_banner)
         self.assertIn('_json_mode', source)
 
     def test_json_mode_flag_exists(self):

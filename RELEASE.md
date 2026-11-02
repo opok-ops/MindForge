@@ -47,7 +47,7 @@ Latest 仍停在 v5.8.13」的漂移。v6.1.2 用 `release.yml` 把这一环自�
   `Release → Run workflow` 填对应 tag 各跑一次；补发走 master 的最新
   workflow 文件（checkout 到该 tag、不带 `--latest`，不会把 Latest 从
   v6.1.2 抢走，正文取自该 tag 自己的 CHANGELOG）。
-- 测试状态：本地在与 CI 等价的依赖环境下全量 1119 项通过
+- 测试状态：本地在与 CI 等价的依赖环境下全量 1120 项通过
   （`pytest tests/`，Python 3.12.15 + cryptography 50.0.1 + pytest 8.4.2
   + pytest-cov 6.3.0；覆盖率沿用 v6.1.1 的 71%，本版未调整门槛）。
 - **尚未发布**：PyPI 项目未注册（`mindforge-memory` 在 pypi.org 为 404），

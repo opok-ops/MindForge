@@ -128,6 +128,15 @@ class TestMemoryIdCoercion(_MfCase):
         self.assertIsNone(coerce_memory_id(object()))
         self.assertIsNone(coerce_memory_id("x" * 129))        # 超长视为非法
 
+    def test_helper_tolerates_raising_id_property(self):
+        """「.id 属性访问抛异常」的病态对象必须与非法类型同等对待，不得漏出。"""
+        class _Boom:
+            @property
+            def id(self):
+                raise RuntimeError("boom")
+
+        self.assertIsNone(coerce_memory_id(_Boom()))
+
     def test_list_evolutions_and_versions_accept_entry_object(self):
         e = self.mf.add("演变入参归一", importance="MEDIUM")
         r = self.mf.evolve_memory(e, content="演变后的内容", reason="测试归一")

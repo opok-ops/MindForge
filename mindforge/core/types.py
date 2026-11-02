@@ -302,7 +302,10 @@ def coerce_memory_id(value: Any) -> Optional[str]:
     if isinstance(value, str):
         candidate = value
     else:
-        inner = getattr(value, "id", None)
+        try:
+            inner = getattr(value, "id", None)
+        except Exception:  # noqa: BLE001 病态对象（属性访问抛异常）与非法类型同等对待
+            return None
         if not isinstance(inner, str):
             return None
         candidate = inner

@@ -12611,7 +12611,8 @@ class StorageEngine:
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (evo_id, memory_id, int(from_version or 0), int(to_version or 0),
                  _preview(from_preview), _preview(to_preview),
-                 _preview(reason), _preview(category), _preview(actor), now))
+                 _preview(reason, 500), _preview(category, 100),
+                 _preview(actor, 100), now))
             conn.commit()
             return {"success": True, "evolution_id": evo_id, "memory_id": memory_id,
                     "from_version": int(from_version or 0), "to_version": int(to_version or 0)}

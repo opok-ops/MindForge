@@ -14,7 +14,9 @@ release.yml      ：校验 tag ↔ version.py ↔ CHANGELOG 一致，
                   补发历史版本：workflow_dispatch 填 tag →
                   checkout 到该 tag、不带 --latest（不抢走 Latest）
         ↓
-publish-pypi.yml ：on release.published → build → twine check → PyPI（OIDC）
+publish-pypi.yml ：Release 工作流成功（workflow_run，仅 v* 标签触发的 run）
+                  或手动 release.published → build → twine check →
+                  PyPI（OIDC；已在 PyPI 的版本幂等跳过，重跑不 409）
 ```
 
 在此之前 Release 全靠手动创建，而 `publish-pypi.yml` 又**依赖** Release 存在，

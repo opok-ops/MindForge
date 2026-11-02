@@ -28,8 +28,14 @@ All notable changes to MindForge will be documented in this file.
   3) 运行 `scripts/check_docs_consistency.py` 文档守卫；
   4) 从 CHANGELOG 抽取该版本小节作为正文，`gh release create --latest`
      创建（已存在则 `release edit` 更新，重跑幂等）。
-- Release 创建后，`publish-pypi.yml` 的 `on: release: published` 才真正接力，
-  形成 tag → Release → PyPI 的单链路。
+- Release 创建后，`publish-pypi.yml` 才真正接力，形成
+  tag → Release → PyPI 的单链路。实际首跑发现一个平台限制：
+  `release.yml` 用 `GITHUB_TOKEN` 创建的 Release，其 `release` 事件会被
+  GitHub 抑制（防递归设计），不会触发其他 workflow；因此 `publish-pypi.yml`
+  改挂 `workflow_run`（Release 工作流成功完成、且该 run 由 `v*` 标签触发时
+  才发布；补发历史版本的 dispatch run 以 master 为 head_branch，不会误发），
+  并内置「PyPI 已有同版本则跳过」的幂等守卫（重打标签重跑也不会 409）。
+  手动在网页上发布 Release 时仍由 `release: published` 触发。
 - `release.yml` 同时支持 `workflow_dispatch` 手动填 tag，用于补发历史版本
   （补齐 v6.0.0 / v6.1.0 / v6.1.1 即走这条路；v6.1.2 由标签推送自动创建）。
   补发时会 checkout 到该 tag 本身（版本/CHANGELOG 校验与 Release 正文都取自

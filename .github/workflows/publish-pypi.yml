@@ -1,7 +1,13 @@
 name: Publish to PyPI
 
-# 触发条件：
-#   在 GitHub 上创建并发布 Release（v6.1.2 起由 release.yml 在推 tag 时自动创建）。
+# 触发条件（三种，互为补充）：
+#   1) release: published —— 有人在网页上手动创建/发布 Release 时触发；
+#   2) workflow_run（Release 成功完成）—— release.yml 用 GITHUB_TOKEN 创建
+#      Release 时，GitHub 会抑制该 token 产生的 release 事件（防递归设计），
+#      所以自动链路改挂在 Release 工作流的完成事件上；仅当该 run 由 v* 标签
+#      触发（head_branch 是标签名）且结论为 success 时才真正发布，
+#      补发历史版本的 dispatch run（head_branch = master）不会误发；
+#   3) workflow_dispatch —— 需要绕过 Release 直接补发时手动运行（填 ref）。
 #
 # v6.1.2 变更：移除 `on: push: tags` 触发。
 #   此前保留 tag 触发是因为「打了 tag 却没人创建 Release」——Release 全靠手动，
@@ -10,7 +16,6 @@ name: Publish to PyPI
 #   现在 tag → Release 已由 release.yml 自动衔接，若仍保留 tag 触发，
 #   每次发版会有两条流水线同时上传同一版本，第二条必然被 PyPI 拒绝
 #   （409 file already exists），留下红色记录与重复构建。
-#   需要绕过 Release 直接补发时，在 Actions 页面手动 run 本 workflow 即可。
 # 发布方式：PyPI Trusted Publisher（OIDC），无需在仓库中存放 API token。
 # 首次使用前，请先在 PyPI 项目设置里配置 trusted publisher：
 #   Owner: opok-ops
@@ -21,6 +26,9 @@ name: Publish to PyPI
 on:
   release:
     types: [published]
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       ref:
@@ -35,6 +43,12 @@ permissions:
 jobs:
   pypi-publish:
     name: Build and publish to PyPI
+    # workflow_run 路径只在「Release run 成功且由标签触发」时发布；
+    # 其余两种触发方式照常执行。
+    if: >
+      github.event_name != 'workflow_run'
+      || (github.event.workflow_run.conclusion == 'success'
+          && startsWith(github.event.workflow_run.head_branch, 'v'))
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -42,8 +56,24 @@ jobs:
     permissions:
       id-token: write # 必需：向 PyPI/OIDC 提供短期身份令牌
     steps:
+      - name: Resolve ref to publish
+        id: ref
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            # 标签触发的 Release run：head_branch 即标签名（如 v6.1.2）
+            echo "ref=${{ github.event.workflow_run.head_branch }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "ref=${{ github.event.inputs.ref }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.ref.outputs.ref }}
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -59,7 +89,32 @@ jobs:
       - name: Check distribution metadata
         run: python -m twine check dist/*
 
+      - name: Skip if this version is already on PyPI
+        id: already
+        run: |
+          VERSION=$(python - <<'PY'
+          import re
+          src = open("mindforge/core/version.py", encoding="utf-8").read()
+          print(re.search(
+              r'__version__\s*(?::\s*\w+\s*)?=\s*["\']([\d.]+)["\']', src).group(1))
+          PY
+          )
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            https://pypi.org/pypi/mindforge-memory/json)
+          PUBLISHED=""
+          if [ "$STATUS" = "200" ]; then
+            PUBLISHED=$(curl -s https://pypi.org/pypi/mindforge-memory/json \
+              | python -c "import json,sys;print(json.load(sys.stdin)['info']['version'])")
+          fi
+          if [ -n "$PUBLISHED" ] && [ "$PUBLISHED" = "$VERSION" ]; then
+            echo "PyPI 已有 $VERSION，跳过上传（幂等：重打标签/重跑不会 409）"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publish package to PyPI
+        if: steps.already.outputs.skip != 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           # 不设置 password：完全依靠 OIDC trusted publisher。

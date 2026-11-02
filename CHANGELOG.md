@@ -36,6 +36,11 @@ All notable changes to MindForge will be documented in this file.
   「Release 没人创建」时的兜底，现在 tag 已能自动生成 Release，两者并存会让
   同一版本被两条流水线重复上传，第二条必然被 PyPI 以 409 拒绝，留下红色记录。
   需要绕过 Release 直接补发时，改用该 workflow 新增的手动 `workflow_dispatch`。
+- 首次真实触发暴露一处 CI 配置缺陷：校验 job 只安装 `requirements.txt`
+  （仅 cryptography），而文档守卫第 [4] 组需要 `pytest --collect-only`
+  核对测试数，导致校验失败、Release 未创建。已改为同时安装
+  `requirements-dev.txt`（与 `ci.yml` 的 docs job 同口径），
+  v6.1.2 标签指向修复后的提交。
 
 ### 修复：不崩溃、但答案错误的一批（静默失效）
 

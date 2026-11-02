@@ -205,6 +205,81 @@ if expected:
 else:
     print("  SKIP  版本号 vs git tag 比对（仅 tag/显式期望版本时执行）")
 
+# ---------- 7. MCP 工具数（v6.1.2 新增守卫） ----------
+# 背景：v6.1.1 把工具数从 86 加到 87 时，官网架构图与生态卡仍写着 86，
+# 靠人工发现漏改了两处；ci.yml 虽断言 `len(tools) == 87`，但那是**手写常量**，
+# 加一个工具就要改一次断言，文档侧完全没有联动。这里改成「从代码取真值，
+# 再比对所有对外宣称位置」，加/减工具时文档漏改会直接 FAIL。
+print("[7] MCP 工具数")
+try:
+    sys.path.insert(0, ROOT)
+    from mindforge.mcp.server import HANDLERS as _MCP_HANDLERS
+    from mindforge.mcp.server import TOOL_SCHEMAS as _MCP_SCHEMAS
+    tool_count = len(_MCP_SCHEMAS)
+    ok("mindforge/mcp/server.py TOOL_SCHEMAS = %d" % tool_count)
+    if set(s["name"] for s in _MCP_SCHEMAS) != set(_MCP_HANDLERS):
+        fail("MCP schema 与 handler 集合不一致（工具数 %d）" % tool_count)
+    else:
+        ok("MCP schema / handler 集合自洽")
+except Exception as e:                                  # noqa: BLE001
+    tool_count = None
+    print("  SKIP  导入 mindforge.mcp.server 失败（%s: %s）"
+          % (type(e).__name__, e))
+
+if tool_count is not None:
+    zh_readme = read("README.zh-CN.md")
+    spots7 = {
+        "README 概述": re.findall(r"MCP server \((\d+) tools\)", readme),
+        "README 能力清单": re.findall(r"\*\*MCP server\*\* — (\d+) tools", readme),
+        "中文 README 概述": re.findall(r"MCP Server（(\d+) 个工具）", zh_readme),
+        "中文 README 能力清单": re.findall(r"\*\*MCP Server\*\* — (\d+) 个工具",
+                                          zh_readme),
+        "官网 JSON-LD": re.findall(r'"toolCount"\s*:\s*(\d+)', index),
+        "官网架构图": re.findall(r"MCP Server \((\d+) tools\)", index),
+        "官网生态卡描述": re.findall(r"暴露 (\d+) 个工具", index),
+        "官网生态卡徽标": re.findall(r'class="eco-badge">(\d+) TOOLS', index),
+    }
+    for k, v in spots7.items():
+        if len(v) == 0:
+            fail("官网/README 的「%s」位置找不到工具数" % k)
+        elif len(set(v)) > 1:
+            fail("「%s」出现多个工具数：%s" % (k, sorted(set(v))))
+        else:
+            check("「%s」工具数" % k, int(v[0]), tool_count)
+
+# ---------- 8. REST 路由数 vs server 文档字符串（v6.1.2 新增守卫） ----------
+# 背景：api/server.py 顶部「路由表」只列了 24 条，实际分发点 60 个，
+# 读代码的人据此估算接口规模会低估一半以上。此处按固定口径从 do_* 方法体
+# 解析分发点数量，并要求文档字符串写明同一口径的数字。
+print("[8] REST 路由数")
+try:
+    server_src = read("mindforge/api/server.py")
+    handlers = re.findall(r"    def (do_(?:GET|POST|PUT|DELETE))\(self\)"
+                          r"(.*?)(?=\n    def )", server_src, re.S)
+    per_method = {}
+    for name, body in handlers:
+        per_method[name] = len(set(re.findall(r'["\'](/api/[^"\'{}]*)', body)))
+    route_total = sum(per_method.values())
+    ok("api/server.py 分发点解析：%s（合计 %d）"
+       % (per_method, route_total))
+    declared = re.search(r"分发点共 \*\*(\d+)\*\* 个", server_src)
+    if not declared:
+        fail("api/server.py 文档字符串未声明路由总数（应为 %d）" % route_total)
+    else:
+        check("文档字符串声明的路由总数", int(declared.group(1)), route_total)
+        breakdown = re.search(
+            r"按方法：GET (\d+) / POST (\d+) / PUT (\d+) / DELETE (\d+)",
+            server_src)
+        if not breakdown:
+            fail("api/server.py 文档字符串未按方法声明路由分布")
+        else:
+            got = [int(x) for x in breakdown.groups()]
+            want = [per_method.get("do_GET", 0), per_method.get("do_POST", 0),
+                    per_method.get("do_PUT", 0), per_method.get("do_DELETE", 0)]
+            check("文档字符串声明的分方法路由分布", got, want)
+except Exception as e:                                  # noqa: BLE001
+    print("  SKIP  解析 api/server.py 失败（%s: %s）" % (type(e).__name__, e))
+
 # ---------- 汇总 ----------
 print()
 if FAILS:

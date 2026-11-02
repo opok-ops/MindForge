@@ -8,7 +8,9 @@ MindForge 矛盾检测 + 自动衰减引擎
 
 自动衰减策略：
   - 同主体冲突 → 老记忆重要性衰减、tag 标记 conflict
-  - 显式 resolve 后，胜出记忆 +0.1 重要性，失败 -0.2
+  - 显式 resolve 后，胜出记忆 +0.08 重要性（构造参数
+    `auto_boost_resolve_winner`，v6.1.2 校正：文档原写 +0.1，与代码默认值不符），
+    失败方 -0.20（`auto_decay_resolve_loser`）
 """
 from __future__ import annotations
 

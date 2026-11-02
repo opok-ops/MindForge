@@ -34,7 +34,7 @@ _vector_dim_mismatch_warned = False
 from .types import (
     PrivacyLevel, Importance, MemoryType, MemoryLayer,
     DramaGenre, DramaStatus, DramaSeries, DramaScene,
-    DramaCharacter, DramaLine,
+    DramaCharacter, DramaLine, coerce_memory_id,
 )
 from .encryption import EncryptionEngine, EncryptedBlob, SecurityError
 
@@ -12529,7 +12529,10 @@ class StorageEngine:
                      tags, importance, actor: str = "") -> Dict[str, Any]:
         """保存记忆的历史版本（v5.2.7 新增）"""
         # 输入校验
-        if not memory_id or len(memory_id) > 128:
+        # v6.1.2：先归一再校验——直接 len() 会让「把 mf.add() 返回值原样传回」
+        # 的调用抛 TypeError（MemoryEntry 没有 __len__）。
+        memory_id = coerce_memory_id(memory_id)
+        if not memory_id:
             return {"success": False, "error": "记忆 ID 无效"}
         if not content or len(content) > 100000:
             return {"success": False, "error": "内容无效或过长"}
@@ -12579,10 +12582,27 @@ class StorageEngine:
                        to_preview: str = "", reason: str = "",
                        category: str = "", actor: str = "") -> Dict[str, Any]:
         """记录一次记忆演变（v6.0.0）"""
-        if not memory_id or len(memory_id) > 128:
+        # v6.1.2：先归一再校验——直接 len() 会让「把 mf.add() 返回值原样传回」
+        # 的调用抛 TypeError（MemoryEntry 没有 __len__）。
+        memory_id = coerce_memory_id(memory_id)
+        if not memory_id:
             return {"success": False, "error": "记忆 ID 无效"}
         evo_id = f"evo_{uuid.uuid4().hex[:12]}"
         now = time.time()
+
+        # v6.1.2：预览列（from_preview/to_preview）只是展示用的摘要，不是权威内容。
+        # 原来直接 `(to_preview or "")[:200]`，一旦调用方把 dict/list 当摘要传进来
+        # 就抛 TypeError（不可下标切片），并以内部异常字符串作为对外 error。
+        def _preview(value: Any, max_len: int = 200) -> str:
+            if value is None:
+                return ""
+            if not isinstance(value, str):
+                try:
+                    value = json.dumps(value, ensure_ascii=False)
+                except (TypeError, ValueError):
+                    value = str(value)
+            return value[:max_len]
+
         conn = self._get_conn()
         try:
             conn.execute(
@@ -12590,8 +12610,8 @@ class StorageEngine:
                 " from_preview, to_preview, reason, category, actor, created_at) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (evo_id, memory_id, int(from_version or 0), int(to_version or 0),
-                 (from_preview or "")[:200], (to_preview or "")[:200],
-                 (reason or "")[:500], (category or "")[:100], (actor or "")[:100], now))
+                 _preview(from_preview), _preview(to_preview),
+                 _preview(reason), _preview(category), _preview(actor), now))
             conn.commit()
             return {"success": True, "evolution_id": evo_id, "memory_id": memory_id,
                     "from_version": int(from_version or 0), "to_version": int(to_version or 0)}
@@ -12608,8 +12628,22 @@ class StorageEngine:
         复用 v5.2.7 update_memory 的自动版本存档（内容变更时自动 save_version），
         避免重复保存旧版本；仅记录一次 evolution 条目。
         """
-        if not memory_id or len(memory_id) > 128:
+        # v6.1.2：先归一再校验——直接 len() 会让「把 mf.add() 返回值原样传回」
+        # 的调用抛 TypeError（MemoryEntry 没有 __len__）。
+        memory_id = coerce_memory_id(memory_id)
+        if not memory_id:
             return {"success": False, "error": "记忆 ID 无效"}
+        # v6.1.2 修复：非字符串 content 会被下游 `_strip_control()` 静默 `str()`
+        # 强转，于是 Python repr（形如 "{'a': 1}"）被当作记忆正文**写进库**；接着
+        # save_evolution 里 `to_preview[:200]` 对原始 dict 求切片抛 TypeError，
+        # 该异常又被当成 error 文案返回。结果是一条内容已被改写、却又报失败的
+        # 「半途失败」，且错误文案是不可读的内部异常串。改为在校验阶段直接拒绝。
+        for field, value in (("content", content), ("reason", reason),
+                             ("category", category)):
+            if value is not None and not isinstance(value, str):
+                return {"success": False,
+                        "error": "%s 必须是字符串，收到 %s"
+                                 % (field, type(value).__name__)}
         conn = self._get_conn()
         try:
             row = conn.execute(
@@ -12673,7 +12707,10 @@ class StorageEngine:
 
     def list_evolutions(self, memory_id: str, limit: int = 50) -> List[Dict[str, Any]]:
         """列出记忆的演变历史（v6.0.0）"""
-        if not memory_id or len(memory_id) > 128:
+        # v6.1.2：先归一再校验——直接 len() 会让「把 mf.add() 返回值原样传回」
+        # 的调用抛 TypeError（MemoryEntry 没有 __len__）。
+        memory_id = coerce_memory_id(memory_id)
+        if not memory_id:
             return []
         limit = max(1, min(limit, 500))
         conn = self._get_conn()
@@ -12723,7 +12760,10 @@ class StorageEngine:
 
     def list_versions(self, memory_id: str, limit: int = 50) -> List[Dict[str, Any]]:
         """列出记忆的所有历史版本（v5.2.7 新增）"""
-        if not memory_id or len(memory_id) > 128:
+        # v6.1.2：先归一再校验——直接 len() 会让「把 mf.add() 返回值原样传回」
+        # 的调用抛 TypeError（MemoryEntry 没有 __len__）。
+        memory_id = coerce_memory_id(memory_id)
+        if not memory_id:
             return []
         # 限制 limit 范围
         limit = max(1, min(limit, 500))

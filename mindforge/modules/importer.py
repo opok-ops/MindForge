@@ -9,7 +9,8 @@ MindForge v6.0.0 功能 1：一键导入记忆（ChatGPT / Claude 对话记录�
 - 噪音过滤：is_user_signal / is_noise，导入阶段过滤系统噪音与重复问候
 
 安全约束：
-- MAX_EXPORT_SIZE = 200MB，超大导出直接拒绝
+- MAX_EXPORT_SIZE = 200MB，超大导出直接拒绝（v6.1.2 起真正生效：CLI 在读取文件前
+  用 export_size_error() 拦截，facade 对未解析的原始文本/字节同样拦截）
 - 每轮消息最大 32KB，超出截断
 - 导入量上限 MAX_IMPORT_MESSAGES = 20000 条，防止内存爆炸
 - 审计动作 import_chat 全量记录
@@ -297,6 +298,23 @@ def _build_memory_payload(messages: List[Dict[str, Any]],
     return payloads
 
 
+def export_size_error(size_bytes: int) -> Optional[str]:
+    """按 MAX_EXPORT_SIZE 校验导出体积，超限返回中文错误文案，否则 None。
+
+    v6.1.2 修复：模块文档自 v6.0.0 起就写着「MAX_EXPORT_SIZE = 200MB，超大导出
+    直接拒绝」，常量也定义了，但全项目从未引用它——超大文件照样被 `json.load`
+    整份读进内存。这里把承诺变成真正的护栏，由调用方在**读取文件之前**用
+    `os.path.getsize()` 传入字节数（此时还没解析，拦截才有意义）。
+    """
+    if size_bytes and size_bytes > MAX_EXPORT_SIZE:
+        return (
+            "导出文件 %s MB 超过上限 %s MB（MAX_EXPORT_SIZE），已拒绝解析；"
+            "请先拆分导出文件或只导入近期片段"
+            % (size_bytes // (1024 * 1024), MAX_EXPORT_SIZE // (1024 * 1024))
+        )
+    return None
+
+
 def import_chat_history(mf, data: Any, dry_run: bool = False,
                         actor: str = "", session_id: str = "") -> Dict[str, Any]:
     """将导出数据导入记忆库（facade 层调用）。
@@ -309,6 +327,10 @@ def import_chat_history(mf, data: Any, dry_run: bool = False,
 
     返回统计 dict。
     """
+    # 尚未解析的原始文本/字节：体积护栏在这里仍然有意义（v6.1.2）
+    if isinstance(data, (str, bytes)) and len(data) > MAX_EXPORT_SIZE:
+        return {"success": False, "error": export_size_error(len(data))}
+
     platform = detect_platform(data)
     messages = parse_export(data)
     if not messages:
@@ -321,6 +343,10 @@ def import_chat_history(mf, data: Any, dry_run: bool = False,
         "messages_parsed": len(messages),
         "memories_candidate": len(payloads),
         "imported": 0,
+        # 命名说明（v6.1.2 校正）：本字段是「解析出的消息数 − 实际生成的候选记忆数」，
+        # 除系统噪音与重复问候外，也包含按策略不单独成条的助手消息与超长截断；
+        # 它是「未成为记忆的消息数」，不是严格的「噪音数」。保留键名以兼容既有
+        # CLI/REST 输出与回归测试。
         "skipped_noise": max(0, len(messages) - len(payloads)),
         "dry_run": bool(dry_run),
     }

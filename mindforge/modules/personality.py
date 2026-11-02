@@ -4,6 +4,7 @@ MindForge v5.0 人格化引擎
 """
 
 import json
+import logging
 import time
 import re
 import sqlite3  # v5.4.7 修复 C-4：异常处理中引用 sqlite3.OperationalError 需要此导入
@@ -11,6 +12,10 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any, Tuple
 
 from mindforge.core.storage import StorageEngine
+
+# v6.1.2 修复：与上面 C-4 同源——第 81 / 270 行的画像加载与持久化降级分支引用
+# `logger.warning`，但模块从未定义 logger，降级路径本身抛 NameError。
+logger = logging.getLogger(__name__)
 
 
 @dataclass

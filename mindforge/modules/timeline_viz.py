@@ -112,7 +112,13 @@ def build_timeline_visual(storage, category: Optional[str] = None,
         category=category, layer=layer_enum, limit=limit)
     for m in mems or []:
         total += 1
-        if not getattr(m, "is_archived", False):
+        # v6.1.2 修复：原来读的是 `getattr(m, "is_archived", False)`，但
+        # MemoryEntry（core/storage.py）没有 is_archived 字段——本项目的「归档」
+        # 实为 category == 'trash'，而 `list_memories` 早已把它排除。于是这里
+        # 恒不成立，`active_memories` 永远等于 `total_memories`，字段失去意义。
+        # 改用真实信号：过了 valid_to 的时刻不再计入活跃（valid_to == 0 表示无边界）。
+        valid_to = getattr(m, "valid_to", 0) or 0
+        if not valid_to or valid_to > now:
             active += 1
         ts = getattr(m, "created_at", 0) or 0
         key = _day_key(ts)

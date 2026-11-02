@@ -235,22 +235,42 @@ class MultimodalMemory:
                            query: str,
                            content_types: Optional[List[MultimodalType]] = None,
                            limit: int = 10) -> List[Tuple[MultimodalContent, float]]:
-        """跨模态搜索"""
+        """跨模态搜索
+
+        v6.1.2 修复（两个方向都会出错）：`entry.memory_type` 是 MemoryType **枚举**，
+        原代码却拿它和 `[t.value for t in content_types]` 这个**字符串列表**比对——
+        枚举永远不等于字符串，所以只要传了 content_types，命中就全被丢弃、返回空；
+        而不传 content_types 时又走到 `MultimodalType(mtype)`，用枚举对象构造（应为
+        str），抛 ValueError。即「带过滤 = 静默漏检，不带过滤 = 直接崩溃」。
+        现在两侧统一归一到 .value 再比较，类型名无法识别时按 TEXT 暴露而非丢结果。
+        """
         if not self.index:
             return []
 
         results = self.index.search(query, top_k=limit * 2)
+
+        # 归一过滤集合：既接受 MultimodalType 枚举，也接受裸字符串值
+        allowed = None
+        if content_types:
+            allowed = {getattr(t, "value", t) for t in content_types}
 
         filtered = []
         for doc_id, score in results:
             if self.storage:
                 entry = self.storage.get_memory(doc_id)
                 if entry:
-                    mtype = entry.memory_type
-                    if content_types and mtype not in [t.value for t in content_types]:
+                    mtype = getattr(entry, "memory_type", None)
+                    # 兼容 MemoryType 枚举与裸字符串两种落库形态
+                    type_value = getattr(mtype, "value", mtype)
+                    if allowed is not None and type_value not in allowed:
                         continue
+                    try:
+                        ctype = MultimodalType(type_value)
+                    except ValueError:
+                        # 未知/缺失类型：按文本暴露，不让整条结果消失
+                        ctype = MultimodalType.TEXT
                     content = MultimodalContent(
-                        content_type=MultimodalType(mtype),
+                        content_type=ctype,
                         data=entry.content,
                         text_representation=entry.content,
                     )

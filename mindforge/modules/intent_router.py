@@ -6,11 +6,19 @@ MindForge 意图分类路由引擎
 """
 from __future__ import annotations
 
+import hashlib
+import logging
 import re
 import time
-import hashlib
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
+
+# v6.1.2 修复：本模块第 286 行的降级分支（LLM 意图识别失败 → 回退启发式路由）
+# 一直在调用 `logger.warning(...)`，但模块从未导入 logging、也未定义 logger。
+# 于是「优雅降级」路径本身抛 NameError: name 'logger' is not defined，把可恢复
+# 的失败变成硬崩溃。同项目的 importer.py 用的是正确写法（`logging.getLogger`），
+# 证明这里只是遗漏。
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # 内置意图定义

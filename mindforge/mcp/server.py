@@ -901,11 +901,17 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
     },
     {
         "name": "forget_run",
-        "description": "功能 7：执行有原则遗忘 GC（v6.0.0）。",
+        "description": ("功能 7：执行有原则遗忘 GC（v6.0.0）。"
+                        "v6.1.2：days 为冷却窗口，创建不足 days 天的记忆不归档，"
+                        "0 表示关闭冷却。"),
         "inputSchema": {
             "type": "object",
             "required": [],
-            "properties": {"dry_run": {"type": "boolean"}}
+            "properties": {
+                "dry_run": {"type": "boolean"},
+                "days": {"type": "integer",
+                         "description": "冷却天数（默认 30，0 = 不过滤新记忆）"}
+            }
         },
     },
     {
@@ -1061,11 +1067,16 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
     },
     {
         "name": "preview_close",
-        "description": "6G：关闭并清理预览通道。",
+        "description": ("6G：关闭并清理预览通道。"
+                        "v6.1.2：purge=false 时只标记关闭、保留独立预览库文件。"),
         "inputSchema": {
             "type": "object",
             "required": ["channel_id"],
-            "properties": {"channel_id": {"type": "string"}}
+            "properties": {
+                "channel_id": {"type": "string"},
+                "purge": {"type": "boolean",
+                          "description": "是否删除独立库文件（默认 true）"}
+            }
         },
     },
     {
@@ -1832,8 +1843,10 @@ def h_forget_explain(mf, args):
 
 def h_forget_run(mf, args):
     try:
+        # v6.1.2：接通 days 冷却窗口（此前 core 有参数但三层都传不进去）
         return {"ok": True, **mf.forget_run(
-            dry_run=bool(args.get("dry_run", False)))}
+            dry_run=bool(args.get("dry_run", False)),
+            days=_safe_int(args.get("days", 30), default=30, lo=0, hi=3650))}
     except Exception as e:
         return {"ok": False, "error": _safe_error_msg(e)}
 
@@ -1984,7 +1997,7 @@ def h_preview_close(mf, args):
         return err
     try:
         return {"ok": True, **mf.memory_preview.close_preview_channel(
-            args["channel_id"])}
+            args["channel_id"], purge=bool(args.get("purge", True)))}
     except (ValueError, TypeError) as e:
         return {"ok": False, "error": _safe_error_msg(e)}
 
@@ -2300,6 +2313,22 @@ def _handle_tools_list(_request: Dict[str, Any]) -> Dict[str, Any]:
     return {"tools": list(TOOL_SCHEMAS)}
 
 
+def _is_tool_error(result: Any) -> bool:
+    """判断 handler 返回值是否表示「工具执行失败」。
+
+    v6.1.2 修复：本项目的 handler 有两种失败写法——`{"ok": False, "error": ...}`
+    （参数校验、_require_args）与 `{"success": False, "error": ...}`（core 门面
+    直接透传）。此前 `_handle_tools_call` 无论成败都返回同一个成功信封，MCP 客户端
+    只能解析文本才知道失败，把报错当结果用（例如自动化流程会以为写入成功）。
+
+    只认显式的 False：`ok`/`success` 缺失或为真值都按成功处理，避免把
+    「返回体恰好带 success 字段」的正常结果误判为失败。
+    """
+    if not isinstance(result, dict):
+        return False
+    return result.get("ok") is False or result.get("success") is False
+
+
 def _handle_tools_call(mf, request: Dict[str, Any]) -> Dict[str, Any]:
     params = request.get("params") or {}
     if not isinstance(params, dict):
@@ -2312,7 +2341,12 @@ def _handle_tools_call(mf, request: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError(f"Unknown tool: {name}")
     result = HANDLERS[name](mf, arguments)
     text = json.dumps(result, ensure_ascii=False, indent=2, default=str)
-    return {"content": [{"type": "text", "text": text}]}
+    envelope: Dict[str, Any] = {"content": [{"type": "text", "text": text}]}
+    # MCP spec：工具层失败用 isError 标记（JSON-RPC 本身仍是成功响应，
+    # 失败信息随 content 返回，客户端据此区分「查询无结果」与「调用出错」）。
+    if _is_tool_error(result):
+        envelope["isError"] = True
+    return envelope
 
 
 def _parse_args(argv: List[str]) -> Dict[str, Any]:

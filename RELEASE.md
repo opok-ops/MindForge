@@ -2,12 +2,29 @@
 
 本文件记录 MindForge 的 PyPI 发布启用步骤与当前状态，供后续任何版本发布复用。
 
-## 当前状态（v6.1.1）
+## 发布链路（v6.1.2 起）
+
+```
+改 core/version.py → CHANGELOG 补小节 → 文档守卫绿
+        ↓
+git tag vX.Y.Z && git push --tags
+        ↓
+release.yml      ：校验 tag ↔ version.py ↔ CHANGELOG 一致，
+                  从 CHANGELOG 抽取正文创建 GitHub Release（--latest）
+        ↓
+publish-pypi.yml ：on release.published → build → twine check → PyPI（OIDC）
+```
+
+在此之前 Release 全靠手动创建，而 `publish-pypi.yml` 又**依赖** Release 存在，
+于是出现「代码与 README 已到 v6.1.1、git tag 也已推送，但 Releases 页面的
+Latest 仍停在 v5.8.13」的漂移。v6.1.2 用 `release.yml` 把这一环自动化了。
+
+## 当前状态（v6.1.2）
 
 - 发行名：**`mindforge-memory`**（PyPI 项目名大小写不敏感，规范名 `mindforge`
   已被 mindforge.ai 的第三方客户端占用，故改名发布；Python 模块名
   `mindforge.*`、CLI 入口、`MindForge.py` 兼容层均不受影响）。
-- 版本真值：`mindforge/core/version.py` 的 `__version__` = `6.1.1`；
+- 版本真值：`mindforge/core/version.py` 的 `__version__` = `6.1.2`；
   `pyproject.toml` 经 dynamic version 读取同一处，打包元数据与运行时一致。
 - **标签已全部补齐**（2026-11-01）：CHANGELOG 声明的 50 个发布版本现在均有
   对应标签，最新为 `v6.1.1`（`d60f5b4`）。此前缺失的 13 个历史标签
@@ -19,9 +36,13 @@
   注意：推送旧标签会按各提交当时的 `ci.yml` 触发历史配置的运行
   （含已 EOL 的 3.9 与当时的工具数断言），出现红色记录属预期，
   不代表当前 master 回归。
-- 测试状态：本地在与 CI 等价的依赖环境下全量 1063 项通过
+- **Release 待补齐**：git tag 虽全，GitHub Releases 页面此前只有 4 个正式
+  Release（Latest = v5.8.13，2026-10-03）。v6.0.0 / v6.1.0 / v6.1.1 / v6.1.2
+  需要创建 Release；`v6.1.2` 及其后的版本由 `release.yml` 自动创建，
+  更早的三个走 `release.yml` 的 `workflow_dispatch`（填对应 tag）补发。
+- 测试状态：本地在与 CI 等价的依赖环境下全量 1119 项通过
   （`pytest tests/`，Python 3.12.15 + cryptography 50.0.1 + pytest 8.4.2
-  + pytest-cov 6.3.0；v6.1.1 起覆盖率 71%）。
+  + pytest-cov 6.3.0；覆盖率沿用 v6.1.1 的 71%，本版未调整门槛）。
 - **尚未发布**：PyPI 项目未注册（`mindforge-memory` 在 pypi.org 为 404），
   发布工作流失败属预期（`invalid-publisher`）。
 
@@ -34,12 +55,14 @@
    - Repository：`MindForge`
    - Workflow name：`publish-pypi.yml`
    - Environment：`pypi`
-2. 重跑最新发布 run，或推送任意 tag 触发发布工作流。
+2. 重跑最新发布 run，或在 Actions 页面手动 run `publish-pypi.yml`
+   （v6.1.2 起该 workflow 不再监听 tag push，见上文「发布链路」）。
    - 最新被拒 run：`41278717905`（v6.1.1 标签触发，失败点为
      `Publish package to PyPI` 一步；build 与 twine check 均通过，
      确认是 Trusted Publisher 未配置，非打包问题）
-   - 之后的新版本：更新 `mindforge/core/version.py`（版本唯一真值）→
-     `git tag vX.Y.Z` 推送 → 发布工作流自动上传。
+   - 之后的新版本：更新 `mindforge/core/version.py`（版本唯一真值）与
+     CHANGELOG → `git tag vX.Y.Z` 推送 → `release.yml` 自动发 Release →
+     `publish-pypi.yml` 自动上传 PyPI。
 
 ## 验证发布成功
 

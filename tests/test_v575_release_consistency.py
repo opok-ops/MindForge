@@ -38,8 +38,10 @@ class TestVersionTruth(unittest.TestCase):
     """版本号真值必须收敛在 core/version.py，且各处投影一致。"""
 
     def test_core_version_matches_release(self):
-        self.assertEqual(core_version.__version__, "6.1.1")
-        self.assertEqual(core_version.VERSION_INFO, (6, 1, 1))
+        # 版本推进时必须一并更新此处的钉值（与 test_v568_fixes 的
+        # _EXPECTED_VERSION 同一约定：让「忘记 bump 版本」在测试里显形）。
+        self.assertEqual(core_version.__version__, "6.1.2")
+        self.assertEqual(core_version.VERSION_INFO, (6, 1, 2))
 
     def test_pyproject_matches_core_version(self):
         # v5.8.13 起 pyproject 不再写死静态版本：

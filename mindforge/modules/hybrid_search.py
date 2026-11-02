@@ -523,7 +523,13 @@ class CrossEncoderReranker:
             ) * length_penalty
 
             scored.append(RerankResult(
-                memory_id=str(c.get("memory_id", c.get("id", ""))),
+                # v6.1.2 修复：本函数其余字段一律经 `_get_field` 读取（v5.4.7 H-5
+                # 声明「支持 dict 和 dataclass」），只有这一行直接 `c.get(...)`。
+                # 传 MemoryChunk（query.py 的 dataclass，没有 .get）即在首个候选上
+                # 抛 AttributeError——对外承诺的 dataclass 支持一直是失效的，内部
+                # 调用方 core/mindforge.py 早先把 chunks 转成 dict 才绕开。
+                memory_id=str(_get_field(c, "memory_id", "")
+                              or _get_field(c, "id", "")),
                 original_score=original_score,
                 rerank_score=rerank_score,
                 fused_score=fused_score,

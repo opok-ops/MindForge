@@ -82,8 +82,9 @@ def _decay_score(storage, entry, now: float) -> Dict[str, Any]:
 
     # 5. 噪声判定（短且无实义）
     content = (getattr(entry, "content", "") or "").strip()
+    # v6.1.2：原元组里 "住在" 写了两次（笔误，去重后判定结果不变）
     is_noisy = len(content) < 12 and not any(
-        k in content for k in ("工作", "喜欢", "住在", "住在", "是", "目标"))
+        k in content for k in ("工作", "喜欢", "住在", "是", "目标"))
     factors["noise"] = 1.0 if is_noisy else 0.0
     if is_noisy:
         reasons.append("内容过短且无明确信息量（噪声型记忆）")
@@ -151,6 +152,12 @@ def run_principled_gc(mf, dry_run: bool = False, days: int = 30) -> Dict[str, An
 
     - 遍历未归档记忆，计算 forget_tendency
     - 阈值以上且非保护记忆 → 归档（archive），并记录原因
+
+    v6.1.2 修复：`days` 参数自 v6.0.0 起就在签名与门面里一路传进来，函数体却
+    从未引用它（阈值 0.72 硬编码，年龄窗口全靠 forget_tendency 隐式体现），
+    调用者以为在调「GC 年龄窗口」，实际改了个寂寞。现在 `days` 是真正的**冷却
+    窗口**：创建不足 `days` 天的记忆不参与归档，并单独计入 `skipped_too_fresh`；
+    `days <= 0` 表示关闭冷却（用于清理刚写入的成批噪音）。
     """
     try:
         from mindforge.modules.memory_decay import MemoryDecayEngine
@@ -158,12 +165,19 @@ def run_principled_gc(mf, dry_run: bool = False, days: int = 30) -> Dict[str, An
     except Exception:
         engine = None
 
+    try:
+        min_age_days = int(days)
+    except (TypeError, ValueError):
+        min_age_days = 30
+    min_age_seconds = max(0, min_age_days) * 86400.0
+
     now = time.time()
     entries = mf._storage.list_memories(limit=10000) or []
     threshold = 0.72
     archived = []
     protected = 0
     scanned = 0
+    too_fresh = 0
 
     for entry in entries:
         imp_val = getattr(entry, "importance", "") or "MEDIUM"
@@ -171,6 +185,11 @@ def run_principled_gc(mf, dry_run: bool = False, days: int = 30) -> Dict[str, An
         if importance == "HIGH":
             protected += 1
             continue
+        if min_age_seconds > 0:
+            created_at = getattr(entry, "created_at", 0) or 0
+            if now - float(created_at) < min_age_seconds:
+                too_fresh += 1
+                continue
         scanned += 1
         d = _decay_score(mf._storage, entry, now)
         if d["forget_tendency"] < threshold:
@@ -207,7 +226,9 @@ def run_principled_gc(mf, dry_run: bool = False, days: int = 30) -> Dict[str, An
     return {
         "success": True,
         "dry_run": bool(dry_run),
+        "days": min_age_days,
         "scanned": scanned,
+        "skipped_too_fresh": too_fresh,
         "protected_high_importance": protected,
         "candidates": len(archived),
         "archived": sum(1 for a in archived if a["archived"]),

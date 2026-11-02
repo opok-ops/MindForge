@@ -16,9 +16,15 @@ MindForge 共享记忆冲突解决
 """
 
 import json
+import logging
 import time
 import uuid
 from typing import Any, Dict, List, Optional
+
+# v6.1.2 修复：本模块 4 处降级分支（265 / 314 / 492 / 502 行）引用 `logger.warning`
+# 却从未定义 logger，导致「保存旧版本失败 / 关联失败 / 删除分支失败」这些本应继续
+# 走完解决流程的可恢复错误，反而以 NameError 中断——冲突已改库但后续步骤没执行。
+logger = logging.getLogger(__name__)
 
 
 # 冲突类型

@@ -6,12 +6,18 @@ MindForge REST API Server
 
 基于 Python 内置 http.server，无需额外依赖（FastAPI/Flask 可选）。
 
-路由表（v5.7.0 P2 补充，便于调试）
-----------------------------------
+路由表（v5.7.0 P2 补充，便于调试；v6.1.2 校正口径）
+----------------------------------------------------
 手动分发：BaseHTTPRequestHandler.do_GET / do_POST / do_PUT / do_DELETE
 中以 if/elif 按 path 匹配（无装饰器路由）。限流（v5.7.0 P2 分级）：
 读 100 req/60s/IP、写 30、批量导入 10（_check_rate_limit(write/heavy)）；
 认证：除 /api/health 与 / 外均需 _check_auth。
+
+**本表是摘选，不是权威清单。** 当前实现的分发点共 **60** 个
+（按方法：GET 37 / POST 21 / PUT 1 / DELETE 1，口径见
+`scripts/check_docs_consistency.py` 第 [8] 组——它直接解析 `do_*` 方法体，
+数字漂移会被 CI 拦下）。此前这里写着「路由表」却只列了 24 条，
+读代码的人据此估算接口规模，会低估一半以上。
 
   Method  Path                   说明                      分发位置
   ------  ----------------------  ------------------------  --------------
@@ -37,10 +43,14 @@ MindForge REST API Server
   GET     /api/preview/channels    6G 预览通道列表              do_GET
   GET     /api/preview/index       6G 增量索引统计              do_GET
   GET     /api/preview/timeline    6G 单记忆时间线（?memory_id=） do_GET
+  GET     /api/forget/stats        遗忘引擎统计                 do_GET
   POST    /api/preview/open        开启 6G 预览通道             do_POST
   POST    /api/preview/close       关闭并清理 6G 预览通道        do_POST
   POST    /api/preview/snapshot    快照记忆进预览通道            do_POST
   POST    /api/preview/distill     6G 上下文蒸馏                do_POST
+  POST    /api/forget/run          有原则遗忘 GC（v6.1.2 起支持
+                                   body.days 冷却窗口）         do_POST
+  # 其余（时间线、技能包、护照、跟进、画像、联邦、审计等）见 do_* 分发。
 
 启动方式：
   MindForge serve --api
@@ -1257,8 +1267,11 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                     mid, outcome=outcome, note=body.get("note", "")))
             elif path == "/api/forget/run":
                 # v6.0.0 功能 7：有原则遗忘 GC
+                # v6.1.2：days（冷却窗口）终于被实现真正使用，这里一并接通
                 self._send_json(self.mindforge.forget_run(
-                    dry_run=bool(body.get("dry_run", False))))
+                    dry_run=bool(body.get("dry_run", False)),
+                    days=_safe_int(body.get("days", 30), default=30,
+                                   min_val=0, max_val=3650)))
             elif path == "/api/follow-ups":
                 # v6.0.0 功能 8：登记跟进
                 mid = body.get("memory_id", "")
@@ -1300,7 +1313,11 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                 if not isinstance(cid, str) or not cid:
                     self._send_json({"error": "Missing 'channel_id' field"}, 400)
                     return
-                self._send_json(self.mindforge.memory_preview.close_preview_channel(cid))
+                # v6.1.2：purge 参数接通（默认 true = 删除独立库文件；
+                # false 只标记关闭、保留文件供查看）
+                self._send_json(
+                    self.mindforge.memory_preview.close_preview_channel(
+                        cid, purge=bool(body.get("purge", True))))
             elif path == "/api/preview/snapshot":
                 # v6.0.0 正式版：把主库记忆快照进预览通道（不修改主库）
                 cid = body.get("channel_id", "")

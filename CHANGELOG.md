@@ -3,6 +3,146 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.1.2] - 2026-11-02
+
+发布链路补全 + 静默错误集中修复。本版做三件事：把 tag → GitHub Release 变成
+自动的（修掉「代码到 v6.x、Releases 页 Latest 还停在 v5.8.13」的漂移根因）、
+清掉一批**不崩溃但给出错误答案**的缺陷、并把三个「写在文档里却从未被实现」的
+参数真正接通。工具数不变（87），测试规模 1063 → 1119（新增 56 项回归）。
+
+### 新增：tag → GitHub Release 自动化（`.github/workflows/release.yml`）
+
+问题现场：README 与架构图已写到 v6.1.1，git tag `v6.0.0` / `v6.1.0` / `v6.1.1`
+也都在远端，但 GitHub Releases 页面上标注 Latest 的正式版本仍是 v5.8.13
+（10 月 3 日），全部只有 4 个 Release。外部读者从 Releases 页判断，会认为
+最新版是 v5.8.13。
+
+根因不是忘了点按钮，而是**仓库里没有任何创建 Release 的 workflow**：
+唯一的发布类文件 `publish-pypi.yml` 触发条件是 `on: release: published`，
+即它**依赖 Release 已经存在**，而不是创建 Release；Release 全靠人工在网页上
+手建，于是打 tag 与发 Release 这两步之间的漂移反复发生。
+
+- 新增 `release.yml`：推 `v*` 标签即执行
+  1) 校验 tag 与 `core/version.py` 的 `__version__` / `VERSION_INFO` 一致；
+  2) 校验 `CHANGELOG.md` 中存在对应版本小节（否则 Release Notes 会是空的）；
+  3) 运行 `scripts/check_docs_consistency.py` 文档守卫；
+  4) 从 CHANGELOG 抽取该版本小节作为正文，`gh release create --latest`
+     创建（已存在则 `release edit` 更新，重跑幂等）。
+- Release 创建后，`publish-pypi.yml` 的 `on: release: published` 才真正接力，
+  形成 tag → Release → PyPI 的单链路。
+- `release.yml` 同时支持 `workflow_dispatch` 手动填 tag，用于补发历史版本
+  （本次补齐 v6.0.0 / v6.1.0 / v6.1.1 / v6.1.2 即走这条路）。
+- 相应地，`publish-pypi.yml` 移除 `on: push: tags` 触发：那条触发本是
+  「Release 没人创建」时的兜底，现在 tag 已能自动生成 Release，两者并存会让
+  同一版本被两条流水线重复上传，第二条必然被 PyPI 以 409 拒绝，留下红色记录。
+  需要绕过 Release 直接补发时，改用该 workflow 新增的手动 `workflow_dispatch`。
+
+### 修复：不崩溃、但答案错误的一批（静默失效）
+
+这类缺陷比崩溃更难发现——接口正常返回，返回值却是错的。
+
+- **多模态过滤恒空 / 不过滤即崩**（`modules/multimodal.py`）：
+  `entry.memory_type` 是 `MemoryType` 枚举，代码却拿它和 `[t.value for t in
+  content_types]` 这个字符串列表比对，枚举永远不等于字符串，传了 `content_types`
+  就全部丢弃；不传时又走到 `MultimodalType(枚举对象)` 抛 ValueError。
+  现在两侧统一归一到 `.value`，无法识别的类型按 TEXT 暴露而不是丢结果。
+- **重排不支持 dataclass**（`modules/hybrid_search.py`）：`rerank()` 其余字段
+  一律经 `_get_field()` 读取（v5.4.7 H-5 明确承诺「支持 dict 和 dataclass」），
+  唯独 `memory_id` 直接 `c.get(...)`，传 `MemoryChunk` 在首个候选即
+  AttributeError——对外承诺的 dataclass 支持此前一直是失效的。
+- **嵌入可用性恒为 False**（`modules/v6.py`）：`incremental_index_stats()`
+  调的是 `storage.get_embedding_status()`，而那是**门面**上的方法，
+  `StorageEngine` 并没有；AttributeError 被宽 except 吞掉，于是健康报告里
+  「嵌入后端就绪」这一项永远显示不可用。改读 `storage.embedding_engine.is_available`。
+- **技能列表不是全局 top-N**（`modules/experience.py`）：`list_skills()` 先按
+  插入顺序截前 `limit` 条、再排序，返回的是「插入序前 N 名内部有序」；
+  置信度更高但入库较晚的技能会被整批漏掉。改为先排序后截断。
+- **时间线活跃数失去意义**（`modules/timeline_viz.py`）：读
+  `getattr(m, "is_archived", False)`，但 `MemoryEntry` 没有该字段（本项目的
+  「归档」实为 `category == 'trash'`，`list_memories` 早已排除），
+  于是 `active_memories` 恒等于 `total_memories`。改用真实信号：过 `valid_to`
+  边界的不再计入活跃。
+- **遗忘 GC 的噪音关键词元组重复**（`modules/principled_forgetting.py`）：
+  `("工作","喜欢","住在","住在","是","目标")` 里 "住在" 写了两遍（笔误），已去重。
+- **文档口径与实现不符**（`modules/conflict_detector.py`）：docstring 写的
+  加减分与常量不一致，改为 `+0.08 (auto_boost_resolve_winner)` /
+  `-0.20 (auto_decay_resolve_loser)`。
+
+### 修复：崩溃与数据损坏
+
+- **MCP 把失败当成功返回**（`mcp/server.py`）：`tools/call` 无论工具成败都返回
+  同一个成功信封，客户端只能解析文本才知道失败，自动化流程会以为写入成功。
+  新增 `_is_tool_error()`（只认显式 `ok`/`success is False`，避免误判正常结果），
+  失败时在信封上置 `isError: true`（JSON-RPC 层仍为成功，符合 MCP 规范）。
+- **传 `add()` 返回值即崩**（v6.1.1 同类缺陷收口）：`save_version` /
+  `save_evolution` / `evolve_memory` / `list_evolutions` / `list_versions` 五处
+  都写着 `if not memory_id or len(memory_id) > 128`，把 `MemoryEntry` 传回即
+  `TypeError: object of type 'MemoryEntry' has no len()`。v6.1.1 为三个入口
+  各写了一份私有归一函数，本版收口为 `core/types.coerce_memory_id()` 单一实现，
+  门面 `evolve_memory` 也一并归一（此前它在 `get_memory` 处就抛 ValueError）。
+- **非字符串 content 写坏数据后才崩**（`core/storage.py`）：`evolve_memory`
+  把 dict 交给 `_strip_control()`，被静默 `str()` 成 Python repr 写进库；
+  随后 `save_evolution` 里 `to_preview[:200]` 对原始 dict 切片抛 TypeError，
+  该内部异常串又被当作对外 error 返回——形成「内容已被改写、却又报失败」的
+  半途失败。现在校验阶段直接拒绝（`content 必须是字符串，收到 dict`），
+  并保证原内容不变、不留 evolution 记录。
+- **经验链路对外 500**（`modules/experience.py`）：`record_case` 的
+  `task/content/result/agent_id` 直传 SQLite 绑定，非字符串抛
+  `sqlite3.ProgrammingError`——它既不是 ValueError 也不是 TypeError，
+  REST/MCP 的 400/友好错误分支都接不住。现统一 ValueError；None 按空串处理，
+  非字符串一律拒绝而非 `str()` 强转。
+- **降级分支自身 NameError**（`intent_router.py` / `personality.py` /
+  `share_conflict.py`）：三模块共 7 处 except 分支调用 `logger.warning(...)`，
+  但模块从未 `import logging`、也未定义 `logger`——「LLM 失败回退启发式」
+  「画像加载失败降级」「冲突解决前备份失败」这些兜底路径本身会崩。已补
+  模块级 logger。
+- **蒸馏列表混入对象即整次失败**（`modules/v6.py`）：`distill_context` 逐个
+  `get_memory(mid)`，混入 `MemoryEntry` 会抛 ValueError 使整次蒸馏失败；
+  现按 `coerce_memory_id` 归一，识别不了的跳过。
+
+### 新增：三个「文档承诺但从未实现」的参数落地（三层一致）
+
+- **`forget_run(days=30)` 冷却窗口**（`modules/principled_forgetting.py`）：
+  `days` 自 v6.0.0 起就在签名与门面里一路传进来，函数体却从未引用它——调用者
+  以为在调「GC 年龄窗口」，实际改了个寂寞。现在是真正的冷却窗口：创建不足
+  `days` 天的记忆不归档，单独计入 `skipped_too_fresh`；`days=0` 关闭冷却。
+  三层接入：CLI `forget-run --days`、REST `POST /api/forget/run`（body.days）、
+  MCP `forget_run`（schema 补 days 及说明）。
+- **`close_preview_channel(purge=True)`**（`modules/v6.py`）：文档自 v6.0.0 起
+  就写着「可逆：仅标记时用 purge=False 保留文件」，但签名里没有这个参数，
+  函数体无条件删库文件。现在参数真实存在并生效，返回值补 `purged` 与
+  `db_path_kept`。三层接入：CLI `preview-close --keep-files`、
+  REST `POST /api/preview/close`（body.purge）、MCP `preview_close`（schema 补 purge）。
+- **`MAX_EXPORT_SIZE` 护栏**（`modules/importer.py`）：常量 200MB 自 v6.0.0 就
+  定义并写在模块文档里（「超大导出直接拒绝」），但全项目零引用，几百 MB 的
+  导出文件照样被 `json.load` 整份读进内存。新增 `export_size_error()`，
+  CLI 在 `os.path.getsize()` 之后、打开文件之前拦截；facade 对未解析的原始
+  str/bytes 同样拦截。另修正 `skipped_noise` 的语义说明（它统计的是被过滤掉的
+  非用户消息数，不是「错误数」）。
+
+### 测试
+
+- 新增 `tests/test_v612_fixes.py` 56 项，按「崩溃 / 静默错误 / 文档承诺落地 /
+  三层接线」四组覆盖上述每一条缺陷；其中降级分支用 `assertLogs` 验证
+  「日志确实发出且不再 NameError」，参数落地用真实 CLI argparse `--help`
+  与 MCP `_handle_tools_call` 走通，而非只看源码文本。
+- 全量 **1119** 项通过（`pytest tests/` 收集数与通过数一致）。
+- 新增两组文档守卫（`scripts/check_docs_consistency.py`）：
+  [7] MCP 工具数——真值取自 `TOOL_SCHEMAS` 并校验 schema/handler 自洽，
+  再比对 README 中英文 4 处 + 官网 4 处（本版即抓到官网架构图与生态卡
+  仍写 86 的两处漏改）；[8] REST 路由数——从 `do_*` 方法体解析分发点数
+  （60：GET 37 / POST 21 / PUT 1 / DELETE 1），要求 `api/server.py` 文档
+  字符串声明同一口径。此前该表只列 24 条，读代码的人会低估接口规模一半以上。
+- `ci.yml` 的 MCP 冒烟断言仍为 87（本版未增删工具）。
+
+### 其他
+
+- 版本号推进 6.1.1 → 6.1.2：`core/version.py` 真值、`test_v568_fixes.py` 的
+  `_EXPECTED_VERSION`、两份 README 徽章、英文 README 架构图标题行、
+  官网 6 处受守卫位置 + 测试数 5 处 + 更新日志新条目。
+- 官网 `website/index.html` 新增 v6.1.2 更新日志条目，v6.1.1 的「最新」标记
+  相应下移为「发布」（守卫要求全页仅一条 latest，且日期与 CHANGELOG 一致）。
+
 ## [6.1.1] - 2026-11-01
 
 演示链路修复 + 功能补全。本版修复两个 v6.0.0 引入、且被 1032 项测试漏过的

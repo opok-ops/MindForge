@@ -42,6 +42,8 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Type
 
 from mindforge.core.version import __version__
+# v6.1.2：memory_id 入参归一（接受 str 或 add() 返回的 MemoryEntry 对象）
+from mindforge.core.types import coerce_memory_id
 
 # ---------------------------------------------------------------------------
 # v6 常量
@@ -405,17 +407,23 @@ class MemoryPreviewPort(V6Port):
             "created_at": now,
         }
 
-    def close_preview_channel(self, channel_id: str) -> Dict[str, Any]:
+    def close_preview_channel(self, channel_id: str,
+                              purge: bool = True) -> Dict[str, Any]:
         """关闭并清理预览通道。
 
-        将通道状态置为 closed 并删除独立库文件（可逆：仅标记时用
-        purge=False 保留文件）。
+        将通道状态置为 closed；`purge=True`（默认）同时删除独立库文件，
+        `purge=False` 只标记关闭、保留文件供事后查看或重开。
+
+        v6.1.2 修复：`purge` 参数自 v6.0.0 起就写在本文档里（「可逆：仅标记时用
+        purge=False 保留文件」），但签名根本没有这个参数，函数体无条件删文件——
+        文档承诺的「保留文件」这一用法一直无法使用。现在参数真实存在并生效。
 
         Args:
             channel_id: 预览通道 ID
+            purge: 是否删除独立库文件（默认删除，与修复前行为一致）
 
         Returns:
-            关闭结果字典
+            关闭结果字典（新增 `purged` 字段标明文件是否已清理）
         """
         reg = self._registry_conn()
         row = reg.execute(
@@ -432,15 +440,18 @@ class MemoryPreviewPort(V6Port):
         reg.commit()
         reg.close()
         # 删除独立库文件（仅当存在且处于本通道目录内，防止路径穿越）
-        if db_path and os.path.abspath(db_path).startswith(
+        purged = False
+        if purge and db_path and os.path.abspath(db_path).startswith(
                 os.path.abspath(self._channels_dir)):
             try:
                 if os.path.exists(db_path):
                     os.remove(db_path)
+                    purged = True
             except OSError:
                 pass
         return {"success": True, "channel_id": channel_id,
-                "status": "closed", "closed_at": now}
+                "status": "closed", "closed_at": now,
+                "purged": purged, "db_path_kept": ("" if purged else db_path)}
 
     def list_preview_channels(self, include_closed: bool = False) -> List[Dict[str, Any]]:
         """列出预览通道。"""
@@ -564,6 +575,12 @@ class MemoryPreviewPort(V6Port):
         total_original = 0
         fetched = []
         for mid in memory_ids:
+            # v6.1.2：列表里混进非字符串元素（例如直接把 add() 返回的 MemoryEntry
+            # 对象整批传进来）时，原来会让 get_memory 抛 ValueError 而整次蒸馏失败。
+            # 现按 core/types.coerce_memory_id 归一：对象取 .id，识别不了的跳过。
+            mid = coerce_memory_id(mid)
+            if mid is None:
+                continue
             entry = self.storage.get_memory(mid)
             if entry is None:
                 continue
@@ -592,9 +609,18 @@ class MemoryPreviewPort(V6Port):
             if key == "HIGH":
                 text = content  # 高价值记忆保留全文
             elif key == "MEDIUM":
-                # 摘要：前 60% + 末尾 20%（保头尾信息）
-                cap = max(20, int(_estimate_tokens(content) * 0.8))
-                text = content[:cap * 2]
+                # v6.1.2 修复：本行注释自 v6.0.0 起就承诺「前 60% + 末尾 20%（保头尾
+                # 信息）」，代码却只写了 `content[:cap * 2]`——只有头部，结尾全丢，
+                # 而 `cap * 2`（token 估算值 ×2 当字符数用）也让实际保留比例漂移。
+                # 现在按字符占比真正保头保尾，中段用省略号标明被压缩。
+                length = len(content)
+                head = int(length * 0.6)
+                tail = int(length * 0.2)
+                if length <= 40 or head + tail >= length:
+                    text = content  # 本就不长，无需压缩
+                else:
+                    text = (content[:head] + " …[中段已压缩]… "
+                            + content[length - tail:])
             else:  # LOW：仅标签 + 首句
                 text = content.split("\n")[0][:120] if content else ""
             tok = _estimate_tokens(text)
@@ -674,8 +700,14 @@ class MemoryPreviewPort(V6Port):
             fts_available = False
         embedding_available = False
         try:
-            emb = self.storage.get_embedding_status()
-            embedding_available = bool(emb and emb.get("available"))
+            # v6.1.2 修复：原来调 `self.storage.get_embedding_status()`，但那是
+            # **门面**（core/mindforge.py:759）上的方法，StorageEngine 并没有它；
+            # AttributeError 又被宽 except 吞掉，于是 `embedding_available` 恒为
+            # False——「嵌入后端就绪」这一项在健康报告里永远显示不可用，装好了
+            # 后端也一样。改读存储上的 embedding_engine 属性（门面内部也是读它）。
+            engine = getattr(self.storage, "embedding_engine", None)
+            embedding_available = bool(engine is not None
+                                       and getattr(engine, "is_available", False))
         except Exception:
             embedding_available = False
         return {

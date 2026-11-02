@@ -1,8 +1,16 @@
 name: Publish to PyPI
 
 # 触发条件：
-#   1) 在 GitHub 上创建并发布 Release（推荐方式，会自动打 tag）
-#   2) 或手动推送形如 v* 的标签（如 v5.7.2）
+#   在 GitHub 上创建并发布 Release（v6.1.2 起由 release.yml 在推 tag 时自动创建）。
+#
+# v6.1.2 变更：移除 `on: push: tags` 触发。
+#   此前保留 tag 触发是因为「打了 tag 却没人创建 Release」——Release 全靠手动，
+#   而本 workflow 依赖 Release 存在，于是 PyPI 发布只能靠 tag 兜底，
+#   这正是 Releases 页 Latest 长期停在 v5.8.13 的同一根因。
+#   现在 tag → Release 已由 release.yml 自动衔接，若仍保留 tag 触发，
+#   每次发版会有两条流水线同时上传同一版本，第二条必然被 PyPI 拒绝
+#   （409 file already exists），留下红色记录与重复构建。
+#   需要绕过 Release 直接补发时，在 Actions 页面手动 run 本 workflow 即可。
 # 发布方式：PyPI Trusted Publisher（OIDC），无需在仓库中存放 API token。
 # 首次使用前，请先在 PyPI 项目设置里配置 trusted publisher：
 #   Owner: opok-ops
@@ -13,9 +21,12 @@ name: Publish to PyPI
 on:
   release:
     types: [published]
-  push:
-    tags:
-      - "v*"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "要发布的分支/标签（默认 master）"
+        required: false
+        default: "master"
 
 # 默认只读；仅在发布 job 内申请 id-token 写权限用于 OIDC 签发。
 permissions:

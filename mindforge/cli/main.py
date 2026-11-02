@@ -3120,12 +3120,18 @@ def cmd_preview_open(args):
 def cmd_preview_close(args):
     """关闭并清理 6G 预览通道"""
     cm = _get_memory(args)
+    keep = bool(getattr(args, "keep_files", False))
     try:
-        result = cm.memory_preview.close_preview_channel(args.channel)
+        # v6.1.2：--keep-files 对应文档里一直存在却从未实现的 purge=False
+        result = cm.memory_preview.close_preview_channel(args.channel,
+                                                        purge=not keep)
     finally:
         cm.close()
     if result.get("success"):
-        print(c(f"\n🗑️ 预览通道 {args.channel} 已关闭并清理", "green"))
+        if keep:
+            print(c(f"\n📁 预览通道 {args.channel} 已关闭（保留独立库文件）", "green"))
+        else:
+            print(c(f"\n🗑️ 预览通道 {args.channel} 已关闭并清理", "green"))
     else:
         print(c(f"\n❌ 关闭失败: {result.get('error')}", "red"))
         return 1
@@ -5128,6 +5134,10 @@ def main(argv=None):
 
     p_forget_run = sub.add_parser("forget-run", help="执行有原则遗忘 GC（v6.0.0）")
     p_forget_run.add_argument("--dry-run", action="store_true", help="试运行不归档")
+    # v6.1.2：核心一直有 days 参数，但 CLI/MCP 都没暴露，且实现里根本没用它；
+    # 本版把 days 做成真正的冷却窗口并接通三层接口。
+    p_forget_run.add_argument("--days", type=int, default=30,
+                              help="冷却窗口：创建不足 N 天的记忆不归档，0 = 关闭冷却（默认 30）")
 
     p_follow_up_create = sub.add_parser("follow-up-create", help="登记跟进（v6.0.0）")
     p_follow_up_create.add_argument("memory_id", help="记忆 ID")
@@ -5396,6 +5406,8 @@ def main(argv=None):
         "preview-close", help="关闭并清理 6G 预览通道"
     )
     p_preview_close.add_argument("channel", help="预览通道 ID")
+    p_preview_close.add_argument("--keep-files", action="store_true",
+                                 help="只标记关闭，保留独立预览库文件（purge=False）")
 
     p_preview_list = sub.add_parser(
         "preview-list", help="列出 6G 预览通道"
@@ -7328,6 +7340,18 @@ def cmd_import_chat(args):
     """功能 1：一键导入记忆（ChatGPT/Claude 导出，v6.0.0）"""
     cm = _get_memory(args)
     path = args.input
+    # v6.1.2：导入前先按体积护栏拦截。importer 的模块文档自 v6.0.0 起就承诺
+    # 「MAX_EXPORT_SIZE = 200MB 超大导出直接拒绝」，但该常量从未被引用，
+    # 几百 MB 的导出文件会直接被 json.load 整份读进内存。
+    try:
+        from mindforge.modules.importer import export_size_error
+        size_err = export_size_error(os.path.getsize(path))
+        if size_err:
+            print(c(f"❌ {size_err}", "red"))
+            cm.close()
+            return 1
+    except OSError:
+        pass  # 取不到文件大小（如特殊路径）时交由下面的 open 报错
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -7517,13 +7541,18 @@ def cmd_forget_explain(args):
 def cmd_forget_run(args):
     """功能 7：执行有原则遗忘 GC（v6.0.0）"""
     cm = _get_memory(args)
-    r = cm.forget_run(dry_run=args.dry_run)
+    r = cm.forget_run(dry_run=args.dry_run, days=getattr(args, "days", 30))
     if not r.get("success"):
         print(c(f"❌ 执行失败: {r.get('error', '未知错误')}", "red"))
         cm.close()
         return 1
     mode = "dry-run" if r["dry_run"] else "执行"
     print(c(f"✅ 遗忘 GC（{mode}）：扫描 {r['scanned']}，候选 {r['candidates']}，实际归档 {r['archived']}", "green"))
+    # v6.1.2：days 现在是真实冷却窗口，被窗口挡下的条数要让用户看得见，
+    # 否则「扫了但一条没归档」会被误读成 GC 失灵。
+    print(f"   冷却窗口: {r.get('days', 0)} 天，"
+          f"因太新而跳过 {r.get('skipped_too_fresh', 0)} 条，"
+          f"HIGH 重要度受保护 {r.get('protected_high_importance', 0)} 条")
     for d in r["decisions"][:10]:
         print(f"   • {d['memory_id'][:12]}… tendency={d['tendency']}: {'; '.join(d['reasons'][:2])}")
     cm.close()

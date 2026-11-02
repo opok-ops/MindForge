@@ -276,3 +276,36 @@ class DramaLine:
             "metadata": self.metadata,
             "created_at": self.created_at,
         }
+
+
+# ---------------------------------------------------------------------------
+# 入参归一助手（v6.1.2）
+# ---------------------------------------------------------------------------
+
+def coerce_memory_id(value: Any) -> Optional[str]:
+    """把 memory_id 入参归一为字符串，识别失败返回 None。
+
+    为什么需要它：`mf.add()` 返回的是 `MemoryEntry` 对象，用户很自然地把它原样
+    传回其它接口（如 `list_evolutions(m.add(...))`）。历史上各处写的是
+    `if not memory_id or len(memory_id) > 128`，对对象求 `len()` 直接抛
+    `TypeError: object of type 'MemoryEntry' has no len()`——对外表现为崩溃。
+    v6.1.1 已在三个入口（learn_from_outcome / follow_up_create / forget_explain）
+    修过这类问题，但每个模块各留了一份私有副本；v6.1.2 把规则收敛到此处的唯一
+    实现，供 storage 的演变/版本接口共用。
+
+    接受：
+      - `str`：原样返回；
+      - 带 `id` 字符串属性的对象（`MemoryEntry`、`ExperienceCase` 等）：返回其 `id`。
+    其余（int / list / dict / None / 空串 / 超长）一律返回 None，由调用方按各自的
+    错误约定处理（返回 error dict 或空列表），不再抛 TypeError。
+    """
+    if isinstance(value, str):
+        candidate = value
+    else:
+        inner = getattr(value, "id", None)
+        if not isinstance(inner, str):
+            return None
+        candidate = inner
+    if not candidate or len(candidate) > 128:
+        return None
+    return candidate

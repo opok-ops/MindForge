@@ -156,7 +156,32 @@ class SkillStore:
                     tags: Optional[List[str]] = None,
                     source_memory_ids: Optional[List[str]] = None,
                     agent_id: str = "") -> ExperienceCase:
-        """记录一次任务经验（成功案例）"""
+        """记录一次任务经验（成功案例）
+
+        v6.1.2：文本入参在落库前做类型校验。此前 `content` / `result` / `task` /
+        `agent_id` 直传 SQLite 绑定，非字符串（如 REST 传进来一个 dict）会抛
+        `sqlite3.ProgrammingError: Error binding parameter ...`——该异常既不是
+        ValueError 也不是 TypeError，REST 与 MCP 的 400/友好错误分支都接不住，
+        对外表现为 500 崩溃（v5.9.0 给 `get()` 修过同类的「入参类型」问题，
+        经验链路一直漏着）。现在统一抛 ValueError，三层接口都能给出可读报错。
+
+        None 按空串处理（与修复前的 SQLite NULL 相比，读回时形态更一致）；
+        非字符串一律拒绝，不做 `str()` 静默强转——那会把 Python repr 写进库。
+        """
+        if task is None or not isinstance(task, str):
+            if task is None:
+                raise ValueError("task 不能为空")
+            raise ValueError(
+                f"task 必须是字符串，收到 {type(task).__name__}")
+        for field, value in (("content", content), ("result", result),
+                             ("agent_id", agent_id)):
+            if value is not None and not isinstance(value, str):
+                raise ValueError(
+                    f"{field} 必须是字符串，收到 {type(value).__name__}"
+                    "（如需存结构化数据，请先序列化为文本）")
+        content = content or ""
+        result = result or ""
+        agent_id = agent_id or ""
         outcome = str(outcome or "success").lower()
         if outcome not in ("success", "partial", "failure"):
             raise ValueError(f"无效 outcome: {outcome}（可选 success/partial/failure）")
@@ -298,11 +323,13 @@ class SkillStore:
         }
 
     def list_skills(self, limit: int = 50) -> List[Dict[str, Any]]:
-        out = []
-        for t in list(self._skills.values())[:max(1, min(1000, int(limit)))]:
-            out.append(t.to_dict())
+        # v6.1.2 修复：原来是「先按插入序截前 limit，再排序」，于是返回的是
+        # 「插入顺序前 N 名内部有序」，而不是「全局 top-N」——limit 小于技能总数
+        # 时，置信度更高但入库更晚的技能会被整批漏掉。改为先排序后截断。
+        limit = max(1, min(1000, int(limit)))
+        out = [t.to_dict() for t in self._skills.values()]
         out.sort(key=lambda s: (-s["confidence"], -s["cluster_size"]))
-        return out
+        return out[:limit]
 
     def get_skill(self, name: str) -> Optional[SkillTemplate]:
         for key, t in self._skills.items():

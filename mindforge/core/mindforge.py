@@ -21,6 +21,8 @@ from .types import (
     MemoryConfig,
     DramaGenre,
     DramaStatus,
+    # v6.1.2：memory_id 入参归一（三层接口的「传对象即崩溃」类缺陷统一修法）
+    coerce_memory_id,
 )
 from .storage import StorageEngine, MemoryEntry
 from .encryption import (
@@ -5496,8 +5498,12 @@ class MindForge:
                       layer=None, reason: str = "", actor: str = "",
                       session_id: str = "") -> Dict[str, Any]:
         """功能 4：记忆演变（保留旧版本 + 记录原因，v6.0.0）"""
+        # v6.1.2：门面也要接受 add() 返回的 MemoryEntry 对象。此前只有存储层
+        # 做了归一，但 get_memory 更早一步、对非 str 直接抛 ValueError，所以
+        # `mf.evolve_memory(entry, ...)` 依然是错误路径（v6.1.1 修过同类三处）。
         # v5.7.3 隐私规则：本机调用不传 actor；传入 actor 则须通过访问检查
-        entry = self._storage.get_memory(memory_id, actor, session_id)
+        entry = self._storage.get_memory(
+            coerce_memory_id(memory_id) or "", actor, session_id)
         if entry is None:
             return {"success": False, "error": "记忆不存在"}
         ok, _reason = self.privacy_engine.check_access(entry, actor, session_id)

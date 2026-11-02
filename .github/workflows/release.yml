@@ -1,0 +1,196 @@
+name: Release
+
+# 为什么需要这个 workflow（v6.1.2 新增）
+#
+# v6.0.0 / v6.1.0 / v6.1.1 都推了 git tag，代码与 README 也已推进到 v6.x，
+# 但 GitHub Releases 页面上的 Latest 仍停在 v5.8.13——因为此前仓库里只有
+# publish-pypi.yml（它 `on: release: published`，也就是说**它依赖 Release 存在**，
+# 而不是创建 Release），Release 的创建完全靠人工点击，于是「打了 tag 却没发
+# Release」的漂移反复发生，外部读者看到的最新版落后了整整三个版本。
+#
+# 本 workflow 把 tag → Release 变成自动的、且带一致性校验：
+#   1) 校验 tag 与 core/version.py 的 `__version__` 一致（防止发错版本）；
+#   2) 校验 CHANGELOG.md 里有对应版本的条目（保证 Release Notes 有内容）；
+#   3) 从 CHANGELOG.md 抽取该版本小节作为 Release 正文，创建/更新 Release。
+# Release 创建后，publish-pypi.yml 的 `on: release: published` 才会接力发布 PyPI。
+#
+# 触发：推送形如 vX.Y.Z 的标签（自动）；也可在 Actions 页面手动触发补发。
+
+on:
+  push:
+    tags:
+      # 用 "v*"（GitHub Actions 的 tag 过滤是 gitignore 风格通配，不是完整正则；
+      # 形如 v6 / v6.1.2-rc1 的标签也会触发，但下面的 version.py / CHANGELOG
+      # 一致性校验会明确拒绝，不会发出错版本的 Release）。
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "要补发 Release 的标签（例如 v6.1.2）"
+        required: true
+        default: ""
+
+# 默认只读；仅 release job 申请 contents: write（创建 Release 需要）。
+permissions:
+  contents: read
+
+jobs:
+  consistency:
+    name: 版本一致性校验
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # workflow_dispatch 需要能取到任意历史 tag
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          if [ -z "$TAG" ]; then
+            echo "::error::未提供标签（workflow_dispatch 需填写 tag 输入）"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Check version.py matches tag
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          python - <<'PY'
+          import os, re, sys
+
+          version = os.environ["VERSION"]
+          src = open("mindforge/core/version.py", encoding="utf-8").read()
+          # 容忍带类型注解的写法（`__version__: str = "6.1.2"`），
+          # 口径与 scripts/check_docs_consistency.py 第 [1] 组保持一致。
+          m = re.search(r'__version__\s*(?::\s*\w+\s*)?=\s*["\']([\d.]+)["\']', src)
+          if not m:
+              print("::error::core/version.py 中找不到 __version__。")
+              sys.exit(1)
+          current = m.group(1)
+          if current != version:
+              print(f"::error::core/version.py 是 {current}，但标签要求 {version}。"
+                    "请先推进版本号再打标签。")
+              sys.exit(1)
+          tuple_match = re.search(r'VERSION_INFO\s*(?::[^=]+)?=\s*\(([^)]+)\)', src)
+          if tuple_match:
+              info = tuple(int(x.strip()) for x in tuple_match.group(1).split(","))
+              want = tuple(int(x) for x in version.split("."))
+              if info != want:
+                  print(f"::error::VERSION_INFO={info} 与标签版本 {want} 不一致。")
+                  sys.exit(1)
+          print(f"OK  version.py == v{version}")
+          PY
+
+      - name: Check CHANGELOG has this version
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          python - <<'PY'
+          import os, sys
+
+          version = os.environ["VERSION"]
+          text = open("CHANGELOG.md", encoding="utf-8").read()
+          if f"[{version}]" not in text:
+              print(f"::error::CHANGELOG.md 缺少 [{version}] 小节，"
+                    "Release Notes 会没有内容。请先补 CHANGELOG。")
+              sys.exit(1)
+          print(f"OK  CHANGELOG.md 含 [{version}]")
+          PY
+
+      - name: Run docs consistency guard
+        run: |
+          python -m pip install -r requirements.txt
+          python scripts/check_docs_consistency.py
+
+  github-release:
+    name: 创建 GitHub Release
+    needs: consistency
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Extract release notes from CHANGELOG
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          python - <<'PY'
+          import os
+          import re
+
+          version = os.environ["VERSION"]
+          text = open("CHANGELOG.md", encoding="utf-8").read()
+          # 取 `## [X.Y.Z] ... ` 到下一个 `## [` 之前的整段（Keep a Changelog 格式）
+          pattern = re.compile(
+              r"^## \[" + re.escape(version) + r"\].*?\n(.*?)(?=^## \[|\Z)",
+              re.MULTILINE | re.DOTALL)
+          m = pattern.search(text)
+          body = m.group(1).strip() if m else ""
+          if not body:
+              body = f"MindForge v{version}"
+          # Release 正文不再重复一遍标题（GitHub 自己会显示 tag 名）
+          body = re.sub(r"^#+\s*\[[\d.]+\][^\n]*\n", "", body).strip() or body
+          header = (f"MindForge v{version} — 本地优先的 AI Agent 记忆系统\n\n"
+                    f"安装：`pip install mindforge-memory` · "
+                    f"详细变更见 [CHANGELOG.md](/opok-ops/MindForge/blob/master/"
+                    f"CHANGELOG.md)。\n\n---\n\n")
+          with open("release-notes.md", "w", encoding="utf-8") as f:
+              f.write(header + body + "\n")
+          print(f"release-notes.md 写入 {len(body)} 字符")
+          PY
+
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          # 已存在则更新（幂等：重跑 workflow 不会失败），不存在则创建。
+          # make_latest 用 true：修掉本次「Latest 停在旧版本」的直接症状。
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" \
+              --title "MindForge v$VERSION" \
+              --notes-file release-notes.md \
+              --latest
+            echo "已更新 Release $TAG"
+          else
+            gh release create "$TAG" \
+              --title "MindForge v$VERSION" \
+              --notes-file release-notes.md \
+              --latest
+            echo "已创建 Release $TAG"
+          fi

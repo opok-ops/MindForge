@@ -11,6 +11,8 @@ git tag vX.Y.Z && git push --tags
         ↓
 release.yml      ：校验 tag ↔ version.py ↔ CHANGELOG 一致，
                   从 CHANGELOG 抽取正文创建 GitHub Release（--latest）
+                  补发历史版本：workflow_dispatch 填 tag →
+                  checkout 到该 tag、不带 --latest（不抢走 Latest）
         ↓
 publish-pypi.yml ：on release.published → build → twine check → PyPI（OIDC）
 ```
@@ -36,10 +38,13 @@ Latest 仍停在 v5.8.13」的漂移。v6.1.2 用 `release.yml` 把这一环自�
   注意：推送旧标签会按各提交当时的 `ci.yml` 触发历史配置的运行
   （含已 EOL 的 3.9 与当时的工具数断言），出现红色记录属预期，
   不代表当前 master 回归。
-- **Release 待补齐**：git tag 虽全，GitHub Releases 页面此前只有 4 个正式
-  Release（Latest = v5.8.13，2026-10-03）。v6.0.0 / v6.1.0 / v6.1.1 / v6.1.2
-  需要创建 Release；`v6.1.2` 及其后的版本由 `release.yml` 自动创建，
-  更早的三个走 `release.yml` 的 `workflow_dispatch`（填对应 tag）补发。
+- **Release 补齐进度**：`v6.1.2` 的 Release 已由 `release.yml` 在标签推送时
+  自动创建并置为 Latest（2026-11-02）。首次 tag 触发的 run 曾因校验 job 只装
+  `requirements.txt`（缺 pytest）而失败，已修复并重打标签（`v6.1.2` →
+  `829b778`）。v6.0.0 / v6.1.0 / v6.1.1 仍待补发：Actions 页面
+  `Release → Run workflow` 填对应 tag 各跑一次；补发走 master 的最新
+  workflow 文件（checkout 到该 tag、不带 `--latest`，不会把 Latest 从
+  v6.1.2 抢走，正文取自该 tag 自己的 CHANGELOG）。
 - 测试状态：本地在与 CI 等价的依赖环境下全量 1119 项通过
   （`pytest tests/`，Python 3.12.15 + cryptography 50.0.1 + pytest 8.4.2
   + pytest-cov 6.3.0；覆盖率沿用 v6.1.1 的 71%，本版未调整门槛）。

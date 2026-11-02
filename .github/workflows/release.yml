@@ -65,6 +65,13 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
+      - name: Checkout tag（补发历史版本时）
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          # 补发时 checkout 到该 tag 本身：版本校验与 CHANGELOG 校验
+          # 都必须针对那个版本自己的代码/文档，而不是当前 master。
+          git checkout "${{ steps.tag.outputs.tag }}"
+
       - name: Check version.py matches tag
         env:
           VERSION: ${{ steps.tag.outputs.version }}
@@ -111,7 +118,10 @@ jobs:
           print(f"OK  CHANGELOG.md 含 [{version}]")
           PY
 
+      # 仅 tag 推送时跑文档守卫；补发历史版本时跳过——那个 tag 当年发布时
+      # 其时代的 CI 已跑过同一守卫，重放旧 commit 只会引入工具链漂移的失败面。
       - name: Run docs consistency guard
+        if: github.event_name == 'push'
         run: |
           python -m pip install -r requirements.txt
           # 守卫脚本第 [4] 组要用 pytest --collect-only 核对测试用例数；
@@ -147,6 +157,12 @@ jobs:
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout tag（补发历史版本时）
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          # Release 正文必须取自那个版本自己的 CHANGELOG，而不是当前 master。
+          git checkout "${{ steps.tag.outputs.tag }}"
 
       - name: Extract release notes from CHANGELOG
         env:
@@ -184,17 +200,27 @@ jobs:
           VERSION: ${{ steps.tag.outputs.version }}
         run: |
           # 已存在则更新（幂等：重跑 workflow 不会失败），不存在则创建。
-          # make_latest 用 true：修掉本次「Latest 停在旧版本」的直接症状。
+          # 补发历史版本时：不设 --latest（否则会把 Latest 从当前版本抢走），
+          # 且已存在则直接跳过（连 edit 都不做，避免降级已有 Release）。
           if gh release view "$TAG" >/dev/null 2>&1; then
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              echo "Release $TAG 已存在，补发跳过（不改动既有 Release）"
+              exit 0
+            fi
             gh release edit "$TAG" \
               --title "MindForge v$VERSION" \
               --notes-file release-notes.md \
               --latest
             echo "已更新 Release $TAG"
           else
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              LATEST=false
+            else
+              LATEST=true
+            fi
             gh release create "$TAG" \
               --title "MindForge v$VERSION" \
               --notes-file release-notes.md \
-              --latest
+              --latest=$LATEST
             echo "已创建 Release $TAG"
           fi

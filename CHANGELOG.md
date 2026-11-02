@@ -31,7 +31,12 @@ All notable changes to MindForge will be documented in this file.
 - Release 创建后，`publish-pypi.yml` 的 `on: release: published` 才真正接力，
   形成 tag → Release → PyPI 的单链路。
 - `release.yml` 同时支持 `workflow_dispatch` 手动填 tag，用于补发历史版本
-  （本次补齐 v6.0.0 / v6.1.0 / v6.1.1 / v6.1.2 即走这条路）。
+  （补齐 v6.0.0 / v6.1.0 / v6.1.1 即走这条路；v6.1.2 由标签推送自动创建）。
+  补发时会 checkout 到该 tag 本身（版本/CHANGELOG 校验与 Release 正文都取自
+  那个版本自己的代码与文档），跳过文档守卫重放（当年发布时其时代的 CI 已
+  验证过，重放旧 commit 只会引入工具链漂移的失败面），且不带 `--latest`——
+  补发历史版本不会把 Latest 从当前版本抢走；Release 已存在时直接跳过，
+  连 edit 都不做，避免降级既有 Release。
 - 相应地，`publish-pypi.yml` 移除 `on: push: tags` 触发：那条触发本是
   「Release 没人创建」时的兜底，现在 tag 已能自动生成 Release，两者并存会让
   同一版本被两条流水线重复上传，第二条必然被 PyPI 以 409 拒绝，留下红色记录。

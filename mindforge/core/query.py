@@ -24,6 +24,9 @@ VECTOR_MIN_SCORE_THRESHOLD = 0.40
 TEXT_WEIGHT = 0.6
 VECTOR_WEIGHT = 0.4
 
+# v6.3.0 explain：explain=False 时的占位 breakdown（写入被丢弃，零逻辑分叉）
+_NO_BREAKDOWN: Dict[str, Any] = {}
+
 
 @dataclass
 class MemoryChunk:
@@ -35,6 +38,12 @@ class MemoryChunk:
     layer: MemoryLayer = MemoryLayer.SHORT_TERM
     tags: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
+    # v6.3.0 新增：检索可解释性——各召回路的原始分数与最终胜出路径。
+    # 仅在 search(explain=True) 时填充，其余路径恒为 None（序列化兼容）。
+    # 结构: {"tfidf": 0.42, "fts5": 0.31, "fuzzy": 0.0, "vector": 0.0,
+    #        "final": 0.42, "winner": "tfidf",
+    #        "fusion": {"text":…, "vector":…, "fused":…}（仅融合时存在）}
+    score_breakdown: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -181,6 +190,7 @@ class QueryEngine:
                agent_id: str = "",
                session_id: str = "",
                use_embedding: bool = True,
+               explain: bool = False,
                *, _update_access: bool = True,
                _record_search: bool = True) -> RecallResult:
         """搜索记忆
@@ -192,6 +202,11 @@ class QueryEngine:
 
         当 use_embedding=False 或 EmbeddingEngine 不可用时，
         自动降级为 TF-IDF + Fuzzy 两路搜索（v5.4.5 之前的行为）。
+
+        v6.3.0 新增 explain 参数（检索可解释性）：True 时每个
+        MemoryChunk.score_breakdown 携带各召回路原始分数、融合
+        明细与最终胜出路径，用于 CLI `search --explain` 与检索
+        质量调试。默认 False，热路径零额外开销。
         """
         import time
         start = time.time()
@@ -218,12 +233,29 @@ class QueryEngine:
         # ===== 第一阶段：多路召回 =====
         # score_map: {memory_id: score}，多路结果按 id 合并取最高分
         score_map = {}
+        # v6.3.0 explain：各路原始分数与胜出路径（仅 explain=True 时填充）
+        breakdown_map: Dict[str, Dict[str, Any]] = {}
+
+        def _bd(mid: str) -> Dict[str, Any]:
+            if not explain:
+                return _NO_BREAKDOWN
+            bd = breakdown_map.setdefault(mid, {})
+            bd.setdefault("tfidf", 0.0)
+            bd.setdefault("fts5", 0.0)
+            bd.setdefault("fuzzy", 0.0)
+            bd.setdefault("vector", 0.0)
+            return bd
 
         # 路 1：TF-IDF
         tfidf_results = self.index.search(query, top_k=max_results * 3)
         for doc_id, s in tfidf_results:
+            if explain:
+                _bd(doc_id)["tfidf"] = max(s, _bd(doc_id)["tfidf"])
             if s >= score_map.get(doc_id, 0.0):
                 score_map[doc_id] = s
+                if explain:
+                    _bd(doc_id)["winner"] = "tfidf"
+                    _bd(doc_id)["final"] = s
 
         # 路 2：Fuzzy（TF-IDF 召回不足时补充；v5.7.1：加密模式下总是跑，
         # 供加密兜底复用结果，避免二次全表扫描）
@@ -235,8 +267,13 @@ class QueryEngine:
             for item in fuzzy_hits:
                 entry = item["entry"]
                 s = min(0.95, float(item["score"]))
+                if explain:
+                    _bd(entry.id)["fuzzy"] = max(s, _bd(entry.id)["fuzzy"])
                 if s >= score_map.get(entry.id, 0.0):
                     score_map[entry.id] = s
+                    if explain:
+                        _bd(entry.id)["winner"] = "fuzzy"
+                        _bd(entry.id)["final"] = s
 
         # 路 3：FTS5 全文检索
         fts5_used = False
@@ -246,8 +283,13 @@ class QueryEngine:
             conn = self.storage._get_conn()
             fts_results = self.index.fts_search(conn, query, top_k=max_results * 3)
             for doc_id, s in fts_results:
+                if explain:
+                    _bd(doc_id)["fts5"] = max(s, _bd(doc_id)["fts5"])
                 if s >= score_map.get(doc_id, 0.0):
                     score_map[doc_id] = s
+                    if explain:
+                        _bd(doc_id)["winner"] = "fts5"
+                        _bd(doc_id)["final"] = s
             if fts_results:
                 fts5_used = True
                 strategy_used = "tfidf+fuzzy+fts5"
@@ -280,11 +322,29 @@ class QueryEngine:
                             if existing > 0:
                                 # 文本 + 向量均命中 → 加权融合
                                 fused = existing * TEXT_WEIGHT + s * VECTOR_WEIGHT
+                                if explain:
+                                    bd = _bd(entry.id)
+                                    bd["vector"] = max(s, bd["vector"])
+                                    bd["fusion"] = {
+                                        "text": round(existing, 4),
+                                        "vector": round(s, 4),
+                                        "text_weight": TEXT_WEIGHT,
+                                        "vector_weight": VECTOR_WEIGHT,
+                                        "fused": round(fused, 4),
+                                    }
                                 # 融合后分数应高于文本单独分数（体现向量补充价值）
                                 score_map[entry.id] = max(fused, existing)
+                                if explain:
+                                    _bd(entry.id)["winner"] = "text+vector"
+                                    _bd(entry.id)["final"] = score_map[entry.id]
                             else:
                                 # 只有向量命中 → 直接使用向量分数
+                                if explain:
+                                    _bd(entry.id)["vector"] = s
                                 score_map[entry.id] = s
+                                if explain:
+                                    _bd(entry.id)["winner"] = "vector"
+                                    _bd(entry.id)["final"] = s
                 except Exception as e:
                     # 向量搜索异常（非 engine 不可用情况）
                     if not _vector_degradation_warned:
@@ -383,6 +443,8 @@ class QueryEngine:
                 layer=entry.layer,
                 tags=entry.tags,
                 metadata=entry.metadata,
+                # v6.3.0 explain：仅 explain=True 时携带得分分解
+                score_breakdown=breakdown_map.get(entry.id) if explain else None,
             )
             chunks.append(chunk)
             # v5.5.2 fix: update access stats for returned results.

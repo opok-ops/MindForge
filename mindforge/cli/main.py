@@ -568,6 +568,7 @@ def cmd_search(args):
     cm = _get_memory(args)
 
     use_embedding = not getattr(args, "no_embedding", False)
+    explain = getattr(args, "explain", False)
     result = cm.search(
         query=args.query,
         max_results=args.limit,
@@ -576,6 +577,7 @@ def cmd_search(args):
         agent_id=args.agent,
         session_id=args.session,
         use_embedding=use_embedding,
+        explain=explain,
     )
 
     if getattr(args, "json_output", False):
@@ -589,6 +591,8 @@ def cmd_search(args):
                         "layer": c.layer.value,
                         "relevance_score": c.relevance_score,
                         "tags": c.tags,
+                        # v6.3.0：explain 时携带得分分解，否则为 null
+                        "score_breakdown": c.score_breakdown,
                     }
                     for c in result.chunks
                 ],
@@ -620,6 +624,23 @@ def cmd_search(args):
         print(content)
         if len(chunk.content) > 300:
             print("...")
+        # v6.3.0 explain：各路分数与胜出路径
+        bd = chunk.score_breakdown
+        if explain and bd:
+            winner = bd.get("winner", "-")
+            parts = []
+            for road in ("tfidf", "fts5", "fuzzy", "vector"):
+                if road in bd:
+                    parts.append(f"{road} {bd[road]:.3f}")
+            fusion = bd.get("fusion")
+            fusion_s = ""
+            if fusion:
+                fusion_s = (f" | 融合: text {fusion['text']:.3f}×"
+                            f"{fusion['text_weight']} + vector "
+                            f"{fusion['vector']:.3f}×{fusion['vector_weight']}"
+                            f" → {fusion['fused']:.3f}")
+            print(c(f"   ↳ 路径: {winner} | {' | '.join(parts)}"
+                   f" | final {bd.get('final', 0.0):.3f}{fusion_s}", "dim"))
 
     cm.close()
     return 0
@@ -3564,6 +3585,11 @@ def main(argv=None):
         "--no-embedding",
         action="store_true",
         help="禁用向量检索，降级为 TF-IDF + Fuzzy 搜索（v5.4.5）",
+    )
+    p_search.add_argument(
+        "--explain",
+        action="store_true",
+        help="显示每条结果的得分分解（v6.3.0：各召回路分数与胜出路径）",
     )
 
     p_list = sub.add_parser("list", help="列出记忆")

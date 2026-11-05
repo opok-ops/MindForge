@@ -676,12 +676,18 @@ class MindForge:
                layers: Optional[List[MemoryLayer]] = None,
                agent_id: str = "",
                session_id: str = "",
-               use_embedding: bool = True):
+               use_embedding: bool = True,
+               explain: bool = False):
         """搜索记忆
 
         v5.4.5 新增 use_embedding 参数：
         - True（默认）：启用向量召回 + TF-IDF + Fuzzy 多路融合搜索
         - False：降级为 TF-IDF + Fuzzy 两路搜索（资源受限时使用）
+
+        v6.3.0 新增 explain 参数（检索可解释性）：
+        - True：每个返回的 MemoryChunk.score_breakdown 携带各召回路
+          （tfidf/fts5/fuzzy/vector）原始分数、融合明细与最终胜出
+          路径，用于检索质量调试与 CLI `search --explain`
         """
         # v5.4.8 P1 修复：query 类型检查，防止非字符串输入崩溃
         if query is None:
@@ -707,6 +713,7 @@ class MindForge:
                 agent_id=agent_id,
                 session_id=session_id,
                 use_embedding=use_embedding,
+                explain=explain,
                 _update_access=False,
                 _record_search=False,
             )

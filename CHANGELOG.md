@@ -3,6 +3,36 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.3.0] - 2026-11-05
+
+检索可解释性（search --explain）。六路混合检索一直是黑盒：用户只看到
+最终排名，看不到「为什么这条排第一」。本版把融合过程拆开给你看。
+工具数不变（87），测试规模 1143 → 1149（新增 6 项 explain 回归）。
+
+### 新增：检索得分分解（`search --explain`）
+
+- **库层**：`QueryEngine.search(..., explain=False)` 新增 explain 参数；
+  `MemoryChunk.score_breakdown`（默认 `None`，序列化兼容）携带：
+  四条召回路（tfidf / fts5 / fuzzy / vector）各自的原始分数、
+  最终胜出路径 `winner`、最终分 `final`；文本+向量双命中时附带
+  加权融合明细（`fusion: {text, vector, text_weight, vector_weight,
+  fused}`）。explain=False 时热路径零额外开销。
+- **Facade**：`MindForge.search(..., explain=False)` 透传。
+- **CLI**：`mindforge search "查询词" --explain` 每条结果追加
+  「路径: winner | tfidf 0.35 | fts5 0.50 | fuzzy 0.80 | vector 0.00
+  | final 0.80」；JSON 模式（`--json --explain`）输出含
+  `score_breakdown` 字段。
+- **适用场景**：检索质量调试（某条记忆为什么排第一/为什么没召回）、
+  权重调优验证、检索教学的直观教具。
+
+### 测试
+
+- 新增 `tests/test_v630_search_explain.py` 6 项：默认 None 兼容、
+  四路字段与 winner/final 齐全、final 与胜出分一致、tfidf 分与
+  单路召回一致、facade 透传、CLI 文本/JSON 双模式输出。
+- 全量 **1149** 项通过（`pytest tests/` 收集数与通过数一致）。
+
+
 ## [6.2.0] - 2026-11-05
 
 可复现基准 + 审计增长治理。本版聚焦「让性能结论可信、让长期运行不腐化」：

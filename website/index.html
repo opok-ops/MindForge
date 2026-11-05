@@ -930,7 +930,7 @@
             <li><b>静默漏检修复</b>：多模态带类型过滤时结果恒为空、不带过滤直接抛错；重排对 <code>MemoryChunk</code> 抛 <code>AttributeError</code>；嵌入后端就绪时健康报告仍恒显不可用；技能列表返回「插入序前 N」而非全局 top-N；时间线活跃数恒等于总数。</li>
             <li><b>三个「写在文档里却从未实现」的参数落地</b>：<code>forget_run(days)</code> 成为真正的冷却窗口、<code>close_preview_channel(purge)</code> 可保留预览库文件、<code>MAX_EXPORT_SIZE</code> 在读取文件前拦截超大导出——CLI / REST / MCP 三层一致。</li>
             <li><b>降级分支不再互相补刀</b>：三个模块的 except 里引用未定义的 <code>logger</code>，兜底路径本身 <code>NameError</code>。</li>
-            <li><b>测试</b>：新增 57 项回归，全量 1120 项通过；文档守卫新增 MCP 工具数与 REST 路由数两组比对。</li>
+            <li><b>测试</b>：新增 57 项回归，另有发布后审计补充 10 项级联删除回归（修复 kg_edges 表名错误、FTS 空值删除串台、passport 裸删无级联），全量 1130 项通过；文档守卫新增 MCP 工具数与 REST 路由数两组比对。</li>
           </ul>
         </div>
       </article>

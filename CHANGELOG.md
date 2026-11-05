@@ -8,7 +8,8 @@ All notable changes to MindForge will be documented in this file.
 发布链路补全 + 静默错误集中修复。本版做三件事：把 tag → GitHub Release 变成
 自动的（修掉「代码到 v6.x、Releases 页 Latest 还停在 v5.8.13」的漂移根因）、
 清掉一批**不崩溃但给出错误答案**的缺陷、并把三个「写在文档里却从未被实现」的
-参数真正接通。工具数不变（87），测试规模 1063 → 1120（新增 57 项回归）。
+参数真正接通。工具数不变（87），测试规模 1063 → 1130（新增 57 项回归，
+另有发布后审计补充的 10 项级联删除回归）。
 
 ### 新增：tag → GitHub Release 自动化（`.github/workflows/release.yml`）
 
@@ -142,7 +143,13 @@ All notable changes to MindForge will be documented in this file.
   三层接线」四组覆盖上述每一条缺陷；其中降级分支用 `assertLogs` 验证
   「日志确实发出且不再 NameError」，参数落地用真实 CLI argparse `--help`
   与 MCP `_handle_tools_call` 走通，而非只看源码文本。
-- 全量 **1120** 项通过（`pytest tests/` 收集数与通过数一致）。
+- 全量 **1130** 项通过（`pytest tests/` 收集数与通过数一致）。
+- 发布后审计（2026-11-05）：修复级联删除 4 处 bug——`kg_edges` 表名
+  错误（实为 `graph_relations`，报错被 except 吞掉导致硬删除后图谱
+  关系从未清理）、`agent_purge` FTS 空值删除（rowid 复用后搜索串台）、
+  `memory_templates` 引用不存在的 `memory_id` 列（死代码）、passport
+  replace/revoke 裸删无级联。新增 `tests/test_v612_cascade_fixes.py`
+  10 项回归，全量 1130 项通过。
 - 新增两组文档守卫（`scripts/check_docs_consistency.py`）：
   [7] MCP 工具数——真值取自 `TOOL_SCHEMAS` 并校验 schema/handler 自洽，
   再比对 README 中英文 4 处 + 官网 4 处（本版即抓到官网架构图与生态卡

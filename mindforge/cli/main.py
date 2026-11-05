@@ -9111,7 +9111,7 @@ def cmd_doctor(args):
     fixes_applied = 0
 
     # 1. 完整性检查
-    print(c("\n[1/5] 数据库完整性...", "cyan"))
+    print(c("\n[1/6] 数据库完整性...", "cyan"))
     health = cm.health_check()
     if health["integrity_check"] == "ok":
         print("  ✅ 完整性校验通过")
@@ -9120,7 +9120,7 @@ def cmd_doctor(args):
         issues.append("数据库完整性校验失败，可能存在损坏")
 
     # 2. FTS 孤立记录
-    print(c("\n[2/5] FTS 索引一致性...", "cyan"))
+    print(c("\n[2/6] FTS 索引一致性...", "cyan"))
     if health["fts_orphans"] == 0:
         print("  ✅ FTS 索引无孤立记录")
     else:
@@ -9130,10 +9130,12 @@ def cmd_doctor(args):
             print("  ✅ 已重建 FTS 索引")
             fixes_applied += 1
         else:
-            issues.append("存在孤立 FTS 记录，建议运行 vacuum 命令")
+            # v6.1.3 文案修复：此前建议「运行 vacuum 命令」是错误指引，
+            # --fix 的实际修复动作是 rebuild_fts()
+            issues.append("存在孤立 FTS 记录，加 --fix 可重建 FTS 索引")
 
     # 3. 索引检查
-    print(c("\n[3/5] 数据库索引...", "cyan"))
+    print(c("\n[3/6] 数据库索引...", "cyan"))
     idx = health["indexes"]
     if idx["found"] == idx["expected"]:
         print(f"  ✅ 索引完整 ({idx['found']}/{idx['expected']})")
@@ -9144,7 +9146,7 @@ def cmd_doctor(args):
         issues.append("存在缺失索引，可能影响查询性能")
 
     # 4. 加密一致性
-    print(c("\n[4/5] 加密一致性...", "cyan"))
+    print(c("\n[4/6] 加密一致性...", "cyan"))
     if health["encrypted_inconsistent"] == 0:
         print("  ✅ 加密状态一致")
     else:
@@ -9152,7 +9154,7 @@ def cmd_doctor(args):
         issues.append("存在加密不一致的记忆")
 
     # 5. 数据库版本
-    print(c("\n[5/5] 数据库版本...", "cyan"))
+    print(c("\n[5/6] 数据库版本...", "cyan"))
     try:
         current_ver = cm.storage.get_db_version()
         latest_ver = cm.storage.get_latest_db_version()
@@ -9168,6 +9170,35 @@ def cmd_doctor(args):
                 issues.append("数据库版本落后，建议运行 migrate --force")
     except (sqlite3.OperationalError, ValueError) as e:
         print(f"  ⚠️  无法获取版本: {e}")
+
+    # 6. 孤儿数据（v6.1.3 新增：图谱失效引用 + 子表孤儿行）
+    # 背景：v6.1.2 之前级联删除存在 4 处 bug（kg_edges 表名错误等），
+    # 历史硬删除留下的脏数据不会自愈，此项检查并可选修复。
+    print(c("\n[6/6] 孤儿数据一致性...", "cyan"))
+    try:
+        rep = cm._storage.repair_orphaned_data(dry_run=not args.fix)
+        g = rep["graph"]
+        orphan_total = sum(rep["orphans"].values())
+        stale = g["stale_refs_removed"]
+        deleted_rels = g["relations_deleted"]
+        if stale == 0 and orphan_total == 0:
+            print("  ✅ 图谱引用与子表记录无孤儿数据")
+        else:
+            print(f"  ⚠️  发现孤儿数据：图谱失效引用 {stale} 处"
+                  f"（涉及关系 {deleted_rels} 条已无支撑记忆），"
+                  f"子表孤儿行 {orphan_total} 行")
+            for table, cnt in rep["orphans"].items():
+                print(f"     - {table}: {cnt} 行引用不存在的记忆")
+            if args.fix:
+                print("  ✅ 已修复：失效引用已移除，空关系与孤儿行已删除"
+                      "（孤儿嵌入一并清理，不留派生数据）")
+                fixes_applied += 1
+            else:
+                issues.append(
+                    f"孤儿数据：图谱失效引用 {stale} 处 / 子表孤儿 "
+                    f"{orphan_total} 行，加 --fix 可修复")
+    except Exception as e:
+        print(f"  ⚠️  孤儿数据检查失败: {e}")
 
     # 汇总
     print(c("\n" + "=" * 50, "reset"))

@@ -524,12 +524,16 @@ class MemoryPreviewPort(V6Port):
         if not os.path.exists(row["db_path"]):
             return {"success": False, "error": "预览库文件不存在（可能已关闭清理）"}
         conn = sqlite3.connect(row["db_path"])
+        # v6.1.3 修复：tags 需按 JSON 序列化。此前用 str(list) 存的是
+        # Python repr（"['a', 'b']"），下游 json.loads 解析必然失败，
+        # 与主库 tags TEXT DEFAULT '[]' 的 JSON 约定不一致。
         conn.execute(
             "INSERT OR REPLACE INTO channel_memories (id, content, category,"
             " tags, importance, source_memory_id, created_at)"
             " VALUES (?, ?, ?, ?, ?, ?, ?)",
             (memory_id, entry.content or "", entry.category,
-             str(entry.tags), entry.importance.value, memory_id, time.time()),
+             json.dumps(entry.tags or [], ensure_ascii=False),
+             entry.importance.value, memory_id, time.time()),
         )
         conn.commit()
         conn.close()

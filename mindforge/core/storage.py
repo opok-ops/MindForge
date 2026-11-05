@@ -2401,8 +2401,16 @@ class StorageEngine:
         conn = self._get_conn()
         deleted: Dict[str, int] = {}
         # 先删子表（外键引用），再删主表
-        for table in ("memory_links", "memory_versions", "audit_log",
-                      "archived_memories", "memories"):
+        # v6.1.3 修复：被遗忘权清理存在隐私残留——此前漏删
+        # memory_embeddings（嵌入是从内容派生的个人数据，GDPR 视角必须
+        # 一并删除）、review_schedules、memory_notes、memory_evolutions、
+        # graph_relations（含 memory_ids 指向被删记忆的引用）。
+        # 这些表留下孤儿行不仅占空间，更构成「名义上已行使删除权、
+        # 实际数据仍残留」的合规缺口。
+        for table in ("memory_links", "memory_versions", "memory_notes",
+                      "review_schedules", "memory_evolutions",
+                      "memory_embeddings", "graph_relations",
+                      "audit_log", "archived_memories", "memories"):
             try:
                 deleted[table] = int(conn.execute(f"DELETE FROM {table}").rowcount)
             except sqlite3.OperationalError as e:
@@ -10779,6 +10787,130 @@ class StorageEngine:
             "total_fts": len(fts_ids),
             "issues_found": total_issues,
             "issues": issues,
+        }
+
+    def repair_orphaned_data(self, dry_run: bool = True) -> Dict[str, Any]:
+        """检测并修复孤儿数据（v6.1.3 新增，doctor --fix 数据修复核心）
+
+        背景：v6.1.2 修复了 4 处级联删除 bug（kg_edges 表名错误、
+        passport 裸删、agent_purge FTS 空值删除等），但历史版本累积的
+        脏数据不会自愈——本方法提供一次性修复：
+
+        1. graph_relations.memory_ids 中指向已删除记忆的失效引用被移除；
+           支撑记忆全部失效的关系被整体删除（原本就为空数组的关系
+           不受影响——只修复「可证明发生过引用失效」的行）。
+        2. 子表孤儿行清理：memory_versions / memory_notes /
+           memory_embeddings / review_schedules / memory_evolutions /
+           memory_links 中引用不存在记忆的行。
+
+        修复嵌入孤儿行同时回收磁盘空间与隐私面：孤儿嵌入仍是
+        从已删除内容派生的向量数据。
+
+        Args:
+            dry_run: True 仅统计不动数据；False 实际修复。
+
+        Returns:
+            {
+              "dry_run": bool,
+              "graph": {
+                "relations_total": int,        # 修复前关系总数
+                "stale_refs_removed": int,     # 移除的失效记忆引用数
+                "relations_updated": int,      # 数组被更新（仍存活）的关系数
+                "relations_deleted": int,      # 支撑全失效被删除的关系数
+              },
+              "orphans": {table: int},          # 各子表孤儿行数
+              "memory_ids_in_graph": int,       # 图谱引用的记忆 ID 总数（去重）
+            }
+        """
+        conn = self._get_conn()
+        valid_ids: set = {r[0] for r in conn.execute("SELECT id FROM memories")}
+
+        # ---- 1. graph_relations 修复 ----
+        relations_total = 0
+        stale_refs_removed = 0
+        relations_updated = 0
+        relations_deleted = 0
+        graph_rows = conn.execute(
+            "SELECT id, memory_ids FROM graph_relations"
+        ).fetchall()
+        relations_total = len(graph_rows)
+        to_update: List[tuple] = []   # (new_json, id)
+        to_delete: List[str] = []     # id
+        all_graph_refs: set = set()
+        for rel_id, raw in graph_rows:
+            try:
+                refs = json.loads(raw) if raw else []
+            except (ValueError, TypeError):
+                continue  # 脏数据行不在本方法修复范围（避免误删）
+            if not isinstance(refs, list):
+                continue
+            all_graph_refs.update(str(r) for r in refs if r)
+            kept = [r for r in refs if str(r) in valid_ids]
+            stale = len(refs) - len(kept)
+            if stale == 0:
+                continue
+            stale_refs_removed += stale
+            if kept:
+                to_update.append(
+                    (json.dumps(kept, ensure_ascii=False), rel_id))
+                relations_updated += 1
+            else:
+                to_delete.append(rel_id)
+                relations_deleted += 1
+
+        if not dry_run:
+            for new_json, rel_id in to_update:
+                conn.execute(
+                    "UPDATE graph_relations SET memory_ids = ? WHERE id = ?",
+                    (new_json, rel_id))
+            if to_delete:
+                ph = ",".join(["?"] * len(to_delete))
+                conn.execute(
+                    f"DELETE FROM graph_relations WHERE id IN ({ph})",
+                    to_delete)
+            # 孤儿实体不删：实体可能被独立创建（add_entity 无记忆关联），
+            # 保守起见仅清理关系层。
+            conn.commit()
+
+        # ---- 2. 子表孤儿行 ----
+        child_specs = [
+            ("memory_versions", "memory_id"),
+            ("memory_notes", "memory_id"),
+            ("memory_embeddings", "memory_id"),
+            ("review_schedules", "memory_id"),
+            ("memory_evolutions", "memory_id"),
+            ("memory_links", "source_id"),
+            ("memory_links", "target_id"),
+        ]
+        orphans: Dict[str, int] = {}
+        for table, col in child_specs:
+            try:
+                cnt = conn.execute(
+                    f"SELECT COUNT(*) FROM {table} "
+                    f"WHERE {col} NOT IN (SELECT id FROM memories)"
+                ).fetchone()[0]
+            except sqlite3.OperationalError:
+                continue  # 表不存在（旧库升级中）则跳过
+            if cnt:
+                key = table if col == "memory_id" else f"{table}.{col}"
+                orphans[key] = cnt
+                if not dry_run:
+                    conn.execute(
+                        f"DELETE FROM {table} "
+                        f"WHERE {col} NOT IN (SELECT id FROM memories)")
+        if not dry_run and orphans:
+            conn.commit()
+
+        return {
+            "dry_run": dry_run,
+            "graph": {
+                "relations_total": relations_total,
+                "stale_refs_removed": stale_refs_removed,
+                "relations_updated": relations_updated,
+                "relations_deleted": relations_deleted,
+            },
+            "orphans": orphans,
+            "memory_ids_in_graph": len(all_graph_refs),
         }
 
     def _purge_graph_relations(self, conn: sqlite3.Connection,

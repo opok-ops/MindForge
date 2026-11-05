@@ -3,6 +3,60 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.1.3] - 2026-11-05
+
+数据完整性收口 + 被遗忘权补全。本版做三件事：给 v6.1.2 级联删除修复
+补上「历史脏数据」的修复工具（代码修了，存量数据也得能修）、堵上
+GDPR 删除权的数据残留缺口、修掉预览通道的序列化缺陷。工具数不变
+（87），测试规模 1130 → 1136（新增 6 项完整性回归）。
+
+### 修复：gdpr_erase_all 被遗忘权数据残留（隐私缺陷）
+
+问题现场：`gdpr_erase_all`（被遗忘权）只清理 memory_links /
+memory_versions / audit_log / archived_memories / memories 五张表，
+**memory_embeddings / memory_notes / review_schedules /
+memory_evolutions / graph_relations 全部残留**。嵌入是从记忆内容
+派生的向量数据——GDPR 视角下同样属于个人数据，「名义上已行使删除权、
+实际派生数据仍残留」构成合规缺口；孤儿图谱关系与复习计划则持续污染
+图查询与调度。修复：清理列表补齐上述五表。
+
+### 修复：预览通道 tags 以 Python repr 落库
+
+`MemoryPreviewPort.snapshot_memory` 用 `str(entry.tags)` 存标签，
+产出 `"['a', 'b']"` 这类 Python repr——下游 `json.loads` 必然失败，
+与主库 tags 列的 JSON 约定不一致。修复：改用 `json.dumps`。
+
+### 修复：doctor 文案错误指引
+
+FTS 孤立记录的建议写的是「运行 vacuum 命令」，但 `--fix` 的实际
+修复动作是 `rebuild_fts()`。文案已更正。
+
+### 新增：doctor 孤儿数据检测与修复（`repair_orphaned_data`）
+
+背景：v6.1.2 之前级联删除存在 4 处 bug（kg_edges 表名错误、
+passport 裸删、agent_purge FTS 空值删除、模板死代码），历史硬删除
+留下的脏数据不会自愈。本版在存储层新增
+`repair_orphaned_data(dry_run)`，并在 `doctor` 中作为第 6 项检查
+集成（`--fix` 即修复）：
+
+- **图谱修复**：`graph_relations.memory_ids` 中指向已删除记忆的
+  失效引用被移除；支撑记忆全部失效的关系整体删除；原本就为空数组
+  的关系不受牵连（只修复「可证明发生过引用失效」的行）；孤儿实体
+  保守不删（实体可被独立创建）。
+- **子表孤儿行清理**：memory_versions / memory_notes /
+  memory_embeddings / review_schedules / memory_evolutions /
+  memory_links 中引用不存在记忆的行——孤儿嵌入一并清理，不留
+  派生数据残留。
+- **dry_run 模式**：默认只统计不动数据，便于评估影响面。
+
+### 测试
+
+- 新增 `tests/test_v613_integrity.py` 6 项：gdpr 全表清理、tags
+  JSON 序列化、repair 的 dry_run 不动数据 / 移除失效引用并保留
+  部分有效关系 / 空关系删除而原生空数组保留 / 干净库零报告。
+- 全量 **1136** 项通过（`pytest tests/` 收集数与通过数一致）。
+
+
 ## [6.1.2] - 2026-11-02
 
 发布链路补全 + 静默错误集中修复。本版做三件事：把 tag → GitHub Release 变成

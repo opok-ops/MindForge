@@ -73,6 +73,12 @@ jobs:
         with:
           path: ./website
 
+      # 2026-11-05: deploy-pages 在 artifact 上传后 ~0.6s 即查询元数据，
+      # 偶发命中 Actions artifact API 的最终一致性窗口（Found 0 artifacts），
+      # 官方建议为重跑。此处加 15s 缓冲从根上消除竞态。
+      - name: Wait for artifact metadata propagation
+        run: sleep 15
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

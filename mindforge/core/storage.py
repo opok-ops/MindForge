@@ -2886,16 +2886,9 @@ class StorageEngine:
         except sqlite3.OperationalError as _child_op_err:
             logger.warning("级联删除子表记录失败（OperationalError）: %s",
                            _child_op_err)
-        try:
-            conn.execute(f"DELETE FROM memory_templates WHERE memory_id IN ({placeholders})", ids)
-        except sqlite3.OperationalError as _child_op_err:
-            logger.warning("级联删除子表记录失败（OperationalError）: %s",
-                           _child_op_err)
-        try:
-            conn.execute(f"DELETE FROM kg_edges WHERE source IN ({placeholders}) OR target IN ({placeholders})", ids + ids)
-        except sqlite3.OperationalError as _child_op_err:
-            logger.warning("级联删除子表记录失败（OperationalError）: %s",
-                           _child_op_err)
+        # v6.1.2 修复：kg_edges 表名错误改为 graph_relations 正确清理；
+        # 移除 memory_templates 死代码（无 memory_id 列）
+        self._purge_graph_relations(conn, ids)
 
         conn.execute(f"DELETE FROM memories WHERE id IN ({placeholders})", ids)
 
@@ -2963,16 +2956,10 @@ class StorageEngine:
             conn.execute("DELETE FROM memory_links WHERE source_id = ? OR target_id = ?", (entry_id, entry_id))
             conn.execute("DELETE FROM memory_notes WHERE memory_id = ?", (entry_id,))
             conn.execute("DELETE FROM memory_embeddings WHERE memory_id = ?", (entry_id,))
-            try:
-                conn.execute("DELETE FROM memory_templates WHERE memory_id = ?", (entry_id,))
-            except sqlite3.OperationalError as _child_op_err:
-                logger.warning("级联删除子表记录失败（OperationalError）: %s",
-                               _child_op_err)
-            try:
-                conn.execute("DELETE FROM kg_edges WHERE source = ? OR target = ?", (entry_id, entry_id))
-            except sqlite3.OperationalError as _child_op_err:
-                logger.warning("级联删除子表记录失败（OperationalError）: %s",
-                               _child_op_err)
+            # v6.1.2 修复：kg_edges 表名错误（表实为 graph_relations，且需按
+            # memory_ids 数组清理，见 _purge_graph_relations）；同时移除
+            # memory_templates 死代码（无 memory_id 列，模板与记忆无外键关联）
+            self._purge_graph_relations(conn, [entry_id])
             conn.execute("DELETE FROM memories WHERE id = ?", (entry_id,))
             if row:
                 try:
@@ -3085,19 +3072,9 @@ class StorageEngine:
             conn.execute(f"DELETE FROM memory_links WHERE source_id IN ({placeholders}) OR target_id IN ({placeholders})", ids + ids)
             conn.execute(f"DELETE FROM memory_notes WHERE memory_id IN ({placeholders})", ids)
             conn.execute(f"DELETE FROM memory_embeddings WHERE memory_id IN ({placeholders})", ids)
-            try:
-                conn.execute(f"DELETE FROM memory_templates WHERE memory_id IN ({placeholders})", ids)
-            except sqlite3.OperationalError as _child_op_err:
-                logger.warning("级联删除子表记录失败（OperationalError）: %s",
-                               _child_op_err)
-            try:
-                conn.execute(
-                    f"DELETE FROM kg_edges WHERE source IN ({placeholders}) OR target IN ({placeholders})",
-                    ids + ids
-                )
-            except sqlite3.OperationalError as _child_op_err:
-                logger.warning("级联删除子表记录失败（OperationalError）: %s",
-                               _child_op_err)
+            # v6.1.2 修复：kg_edges 表名错误改为 graph_relations 正确清理；
+            # 移除 memory_templates 死代码（无 memory_id 列）
+            self._purge_graph_relations(conn, ids)
             conn.execute(f"DELETE FROM memories WHERE id IN ({placeholders})", ids)
             # 同步清理 FTS（contentless FTS5 用 'delete' 命令）
             for row in rows:
@@ -5332,8 +5309,11 @@ class StorageEngine:
                 return {"error": "操作过于频繁，请 60 秒后重试（频率限制）"}
 
         # 找出所有目标记忆（含软删除也一并清，因为是 purge）
+        # v6.1.2 修复：补充 content/category/tags，FTS contentless 删除
+        # 必须提供与原索引一致的值——空值会留下孤儿词条，rowid 被新记忆
+        # 复用后搜索旧词会错误命中新记忆（搜索串台）
         rows = conn.execute(
-            "SELECT id, rowid FROM memories WHERE source_agent = ?",
+            "SELECT id, rowid, content, category, tags FROM memories WHERE source_agent = ?",
             (aid,)
         ).fetchall()
 
@@ -5360,14 +5340,16 @@ class StorageEngine:
 
         # 实际删除（v5.3.2 安全：批量 id 列表参数化）
         ids = [r[0] for r in rows]
-        rowids = [r[1] for r in rows]
         placeholders = ",".join(["?"] * len(ids))
 
         # 清理关联表：memory_versions、memory_links、memory_notes（以记忆 id 为外键）
+        # v6.1.2 修复：补充 review_schedules、memory_embeddings 级联清理
         for table, col in [("memory_versions", "memory_id"),
+                           ("review_schedules", "memory_id"),
                            ("memory_links", "source_id"),
                            ("memory_links", "target_id"),
-                           ("memory_notes", "memory_id")]:
+                           ("memory_notes", "memory_id"),
+                           ("memory_embeddings", "memory_id")]:
             try:
                 conn.execute(
                     f"DELETE FROM {table} WHERE {col} IN ({placeholders})", ids
@@ -5375,14 +5357,17 @@ class StorageEngine:
             except Exception as _child_err:
                 logger.warning("清理 Agent 记忆关联表 %s 失败: %s",
                                table, _child_err)
+        # v6.1.2 修复：补充图谱关系清理
+        self._purge_graph_relations(conn, ids)
 
         # 清理 FTS（contentless FTS5 特殊语法）
-        for rid in rowids:
+        # v6.1.2 修复：必须用与原索引一致的真实值，不能用空值
+        for row in rows:
             try:
                 conn.execute(
                     "INSERT INTO memory_fts(memory_fts, rowid, content, category, tags) "
                     "VALUES('delete', ?, ?, ?, ?)",
-                    (rid, "", "", "[]")
+                    (row[1], row[2] or "", row[3] or "", row[4] or "[]")
                 )
             except Exception:
                 logger.warning("FTS operation failed", exc_info=True)
@@ -10796,11 +10781,54 @@ class StorageEngine:
             "issues": issues,
         }
 
+    def _purge_graph_relations(self, conn: sqlite3.Connection,
+                               memory_ids: List[str]) -> int:
+        """硬删除记忆后清理 graph_relations 中的引用（v6.1.2 修复）
+
+        历史遗留：此前 4 处级联删除引用了不存在的 kg_edges 表（且 source/target
+        列语义为实体 ID 而非记忆 ID），OperationalError 被 except 吞掉，导致
+        硬删除后图谱关系从未被清理，孤儿 relation 持续累积并污染图查询。
+
+        正确语义：graph_relations.memory_ids 是 JSON 数组，存放支撑该关系的
+        记忆 ID。删除记忆时应从数组中移除该 ID；数组被清空的关系（不再有
+        任何记忆支撑）才整体删除，避免误删仍被其他记忆支撑的关系。
+        json_valid 守卫跳过空串/NULL 等脏数据行。
+        """
+        removed = 0
+        for mid in memory_ids:
+            try:
+                # v6.1.2: RETURNING 需 SQLite >= 3.35；旧版本走 except 记警告，不影响删除主流程
+                emptied = [
+                    r[0] for r in conn.execute(
+                        "UPDATE graph_relations "
+                        "SET memory_ids = (SELECT json_group_array(value) "
+                        "                  FROM json_each(graph_relations.memory_ids) "
+                        "                  WHERE value != ?) "
+                        "WHERE json_valid(graph_relations.memory_ids) "
+                        "  AND EXISTS (SELECT 1 FROM json_each(graph_relations.memory_ids) "
+                        "              WHERE value = ?) "
+                        "RETURNING id, memory_ids",
+                        (mid, mid),
+                    ) if r[1] == "[]"
+                ]
+                if emptied:
+                    ph = ",".join(["?"] * len(emptied))
+                    cur = conn.execute(
+                        f"DELETE FROM graph_relations WHERE id IN ({ph})", emptied
+                    )
+                    removed += cur.rowcount
+            except sqlite3.OperationalError as _graph_err:
+                logger.warning("清理图谱关系失败（OperationalError）: %s", _graph_err)
+        return removed
+
     def _delete_memory_cascade(self, conn: sqlite3.Connection, memory_id: str):
         """级联删除记忆及其关联数据（v5.5.2 新增内部辅助方法）
 
-        v5.5.2 修复：补充 review_schedules、kg_edges 清理，并修正 FTS5 删除方式
+        v5.5.2 修复：补充 review_schedules 清理，并修正 FTS5 删除方式
         （contentless FTS5 表必须用 'delete' 特殊命令，不能用普通 DELETE）。
+        v6.1.2 修复：kg_edges 表名错误改为正确的 graph_relations 清理
+        （见 _purge_graph_relations）；移除对 memory_templates 不存在的
+        memory_id 列的删除（模板表与记忆无外键关联，属死代码）。
         """
         # 先取 rowid 和 FTS 字段用于清理 FTS 索引
         row = conn.execute(
@@ -10816,17 +10844,8 @@ class StorageEngine:
         except sqlite3.OperationalError as _child_op_err:
             logger.warning("级联删除子表记录失败（OperationalError）: %s",
                            _child_op_err)
-        try:
-            conn.execute("DELETE FROM kg_edges WHERE source = ? OR target = ?", (memory_id, memory_id))
-        except sqlite3.OperationalError as _child_op_err:
-            logger.warning("级联删除子表记录失败（OperationalError）: %s",
-                           _child_op_err)
+        self._purge_graph_relations(conn, [memory_id])
         conn.execute("DELETE FROM memory_embeddings WHERE memory_id = ?", (memory_id,))
-        try:
-            conn.execute("DELETE FROM memory_templates WHERE memory_id = ?", (memory_id,))
-        except sqlite3.OperationalError as _child_op_err:
-            logger.warning("级联删除子表记录失败（OperationalError）: %s",
-                           _child_op_err)
         if row:
             try:
                 # contentless FTS5 必须用 'delete' 特殊命令

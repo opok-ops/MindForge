@@ -139,8 +139,14 @@ def import_passport(mf, passport: Any, mode: str = "merge",
     _ensure_columns(conn)
 
     if mode == "replace":
-        # 先删除此前从该护照导入的记忆
-        conn.execute("DELETE FROM memories WHERE passport_id = ?", (passport_id,))
+        # v6.1.2 修复：此前裸 DELETE 不做级联清理，会在 memory_versions/
+        # links/notes/embeddings/review_schedules/graph_relations 及 FTS 索引
+        # 留下孤儿数据（FTS 孤儿词条在 rowid 复用后会导致搜索串台）。
+        # 改走存储层 _delete_memory_cascade，保证子表与 FTS 同步清理。
+        for (old_id,) in conn.execute(
+            "SELECT id FROM memories WHERE passport_id = ?", (passport_id,)
+        ).fetchall():
+            mf._storage._delete_memory_cascade(conn, old_id)
         conn.commit()
 
     imported = 0
@@ -215,9 +221,14 @@ def revoke_passport(mf, passport_id: str, actor: str = "",
         return {"success": False, "error": "passport_id 无效"}
     conn = mf._storage._get_conn()
     _ensure_columns(conn)
-    cur = conn.execute("DELETE FROM memories WHERE passport_id = ?", (passport_id,))
+    # v6.1.2 修复：裸 DELETE 无级联无 FTS 清理，改走存储层级联删除
+    old_ids = [r[0] for r in conn.execute(
+        "SELECT id FROM memories WHERE passport_id = ?", (passport_id,)
+    ).fetchall()]
+    for old_id in old_ids:
+        mf._storage._delete_memory_cascade(conn, old_id)
     conn.commit()
-    removed = cur.rowcount
+    removed = len(old_ids)
     mf._storage._add_audit(
         "passport_revoke", "", actor or "", session_id or "", "",
         {"passport_id": passport_id, "removed": removed})

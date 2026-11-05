@@ -728,6 +728,9 @@ class StorageEngine:
         self._access_last_prune: float = 0.0  # v5.6.5 P1 #4
         # v5.6.4: 挂账与刷盘的并发保护（flush 的 IO 部分在锁外执行）
         self._access_lock = threading.RLock()
+        # v6.2.0 增长治理：搜索审计去抖状态（同词 60s 内只落一条）
+        self._search_dedup_lock = threading.Lock()
+        self._search_dedup: Dict[str, float] = {}
         self._init_db()
 
     def _get_conn(self) -> sqlite3.Connection:
@@ -9182,15 +9185,87 @@ class StorageEngine:
         搜索历史此前为休眠功能：无任何写入路径，且 get_search_history 的 SQL
         引用了 audit_log 不存在的 query 列，恒返回空。本方法在搜索完成后由
         QueryEngine 调用；写入失败仅降级记录，不阻断搜索主路径。
+
+        v6.2.0 增长治理：同一查询词在去抖窗口（默认 60s）内只落一条审计。
+        之前「每次搜索一条」在交互式会话里会让 audit_log 以每小时数万行
+        的速度膨胀，而其中绝大多数是同一词的重复采样。去抖后搜索历史
+        的 count 语义从「检索调用次数」变为「独立查询会话次数」，后者
+        才是 get_search_history 想表达的。合规类审计（写/删/导出）不采样。
         """
         q = (query or "").strip()[:128]
         if not q:
             return
+        now = time.monotonic()
+        try:
+            with self._search_dedup_lock:
+                last = self._search_dedup.get(q, 0.0)
+                if now - last < self._SEARCH_DEDUP_SECONDS:
+                    return
+                self._search_dedup[q] = now
+                # 防御内存增长：词表超上限时清最旧的一半
+                if len(self._search_dedup) > 1024:
+                    for k in sorted(self._search_dedup,
+                                    key=self._search_dedup.get)[:512]:
+                        del self._search_dedup[k]
+        except AttributeError:
+            # 兼容旧实例属性未初始化（防御，正常路径不会触发）
+            self._search_dedup_lock = threading.Lock()
+            self._search_dedup = {}
         try:
             self._add_audit("search", q, "", "", "INTERNAL",
                             {"query": q}, commit=True)
         except Exception as _err:
             logger.warning("record_search 审计写入失败: %s", _err)
+
+    #: 搜索审计去抖窗口（秒）
+    _SEARCH_DEDUP_SECONDS = 60.0
+
+    def prune_audit_log(self, keep_days: float = 90.0,
+                        actions: Optional[List[str]] = None) -> Dict[str, Any]:
+        """裁剪高频低价值审计行，控制 audit_log 无限增长（v6.2.0 新增）
+
+        默认只裁 ``search`` 类审计（高频、无合规价值），写/删/导出等
+        合规相关审计一律保留——审计的意义在留痕，搜索流水不属于留痕义务。
+
+        Args:
+            keep_days: 保留最近 N 天的 search 审计（默认 90 天）
+            actions: 允许裁剪的 action 列表（默认 ['search']，
+                传空列表等于全部保留、无操作）
+
+        Returns:
+            {deleted, kept_search_rows, total_rows, cutoff_days}
+        """
+        if actions is None:
+            actions = ["search"]
+        actions = [a for a in actions if isinstance(a, str) and a.strip()]
+        if not actions or keep_days <= 0:
+            conn = self._get_conn()
+            return {"deleted": 0,
+                    "kept_search_rows": int(conn.execute(
+                        "SELECT COUNT(*) FROM audit_log WHERE action='search'"
+                    ).fetchone()[0]),
+                    "total_rows": int(conn.execute(
+                        "SELECT COUNT(*) FROM audit_log").fetchone()[0]),
+                    "cutoff_days": keep_days}
+        cutoff = time.time() - keep_days * 86400
+        ph = ",".join(["?"] * len(actions))
+        conn = self._get_conn()
+        cur = conn.execute(
+            f"DELETE FROM audit_log WHERE action IN ({ph}) AND timestamp < ?",
+            actions + [cutoff])
+        deleted = cur.rowcount
+        conn.commit()
+        kept = int(conn.execute(
+            "SELECT COUNT(*) FROM audit_log WHERE action='search'").fetchone()[0])
+        total = int(conn.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0])
+        # v6.2.0：去抖缓存同样过期，避免与裁剪后的库状态脱节
+        try:
+            with self._search_dedup_lock:
+                self._search_dedup.clear()
+        except AttributeError:
+            pass
+        return {"deleted": deleted, "kept_search_rows": kept,
+                "total_rows": total, "cutoff_days": keep_days}
 
     def get_search_history(self, limit: int = 20) -> List[Dict[str, Any]]:
         """获取搜索历史（v5.2.0 新增，v5.7.0 P2 修复）

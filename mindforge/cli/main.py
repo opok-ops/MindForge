@@ -4136,6 +4136,13 @@ def main(argv=None):
     p_doctor = sub.add_parser("doctor", help="全面诊断数据库（v5.1.8 新增）")
     p_doctor.add_argument("--fix", action="store_true", help="自动修复可修复的问题")
 
+    p_audit_prune = sub.add_parser(
+        "audit-prune", help="裁剪历史搜索审计流水（v6.2.0 新增）", parents=[json_parser])
+    p_audit_prune.add_argument("--days", type=float, default=90.0,
+                               help="保留最近 N 天的搜索流水（默认 90）")
+    p_audit_prune.add_argument("--dry-run", action="store_true",
+                               help="只统计将删除的行数，不动数据")
+
     p_find = sub.add_parser("find", help="高级查找记忆（v5.1.8 新增）")
     p_find.add_argument("--category", "-c", help="按分类筛选")
     p_find.add_argument("--layer", "-l", help="按层级筛选")
@@ -7104,6 +7111,7 @@ def _main_dispatch(args, parser=None):
         "backup": cmd_backup,
         "restore": cmd_restore,
         "doctor": cmd_doctor,
+        "audit-prune": cmd_audit_prune,
         "find": cmd_find,
         "audit": cmd_audit,
         "recent": cmd_recent,
@@ -9100,6 +9108,49 @@ def cmd_backup_restore(args):
     return 0
 
 
+def cmd_audit_prune(args):
+    """裁剪历史搜索审计流水（v6.2.0 新增）
+
+    只裁 action='search' 的行（高频低价值流水），合规类审计
+    （写/删/导出/GDPR）默认全部保留。
+    """
+    cm = _get_memory(args)
+    storage = cm._storage
+    if getattr(args, "dry_run", False):
+        conn = storage._get_conn()
+        cutoff = time.time() - (args.days or 0) * 86400
+        would = conn.execute(
+            "SELECT COUNT(*) FROM audit_log WHERE action='search' AND timestamp < ?",
+            (cutoff,)).fetchone()[0]
+        total = conn.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0]
+        if getattr(args, "json", False):
+            print(json.dumps({
+                "dry_run": True, "would_delete": would,
+                "keep_days": args.days, "total_rows": total},
+                ensure_ascii=False))
+        else:
+            print_banner()
+            print(c("🧹 审计流水裁剪（预览）", "bold"))
+            print(f"   保留窗口: 最近 {args.days:.0f} 天")
+            print(f"   将删除搜索流水: {would} 行")
+            print(f"   审计日志总行数: {total}")
+            print(c("\n去掉 --dry-run 即执行实际裁剪", "cyan"))
+        cm.close()
+        return 0
+    result = storage.prune_audit_log(keep_days=args.days)
+    if getattr(args, "json", False):
+        print(json.dumps(result, ensure_ascii=False))
+    else:
+        print_banner()
+        print(c("🧹 审计流水裁剪完成", "bold"))
+        print(f"   已删除搜索流水: {result['deleted']} 行")
+        print(f"   剩余搜索流水:   {result['kept_search_rows']} 行")
+        print(f"   审计日志总行数: {result['total_rows']}")
+        print("   （合规类审计未触碰）")
+    cm.close()
+    return 0
+
+
 def cmd_doctor(args):
     """全面诊断数据库（v5.1.8 新增）"""
     cm = _get_memory(args)
@@ -9111,7 +9162,7 @@ def cmd_doctor(args):
     fixes_applied = 0
 
     # 1. 完整性检查
-    print(c("\n[1/6] 数据库完整性...", "cyan"))
+    print(c("\n[1/7] 数据库完整性...", "cyan"))
     health = cm.health_check()
     if health["integrity_check"] == "ok":
         print("  ✅ 完整性校验通过")
@@ -9120,7 +9171,7 @@ def cmd_doctor(args):
         issues.append("数据库完整性校验失败，可能存在损坏")
 
     # 2. FTS 孤立记录
-    print(c("\n[2/6] FTS 索引一致性...", "cyan"))
+    print(c("\n[2/7] FTS 索引一致性...", "cyan"))
     if health["fts_orphans"] == 0:
         print("  ✅ FTS 索引无孤立记录")
     else:
@@ -9135,7 +9186,7 @@ def cmd_doctor(args):
             issues.append("存在孤立 FTS 记录，加 --fix 可重建 FTS 索引")
 
     # 3. 索引检查
-    print(c("\n[3/6] 数据库索引...", "cyan"))
+    print(c("\n[3/7] 数据库索引...", "cyan"))
     idx = health["indexes"]
     if idx["found"] == idx["expected"]:
         print(f"  ✅ 索引完整 ({idx['found']}/{idx['expected']})")
@@ -9146,7 +9197,7 @@ def cmd_doctor(args):
         issues.append("存在缺失索引，可能影响查询性能")
 
     # 4. 加密一致性
-    print(c("\n[4/6] 加密一致性...", "cyan"))
+    print(c("\n[4/7] 加密一致性...", "cyan"))
     if health["encrypted_inconsistent"] == 0:
         print("  ✅ 加密状态一致")
     else:
@@ -9154,7 +9205,7 @@ def cmd_doctor(args):
         issues.append("存在加密不一致的记忆")
 
     # 5. 数据库版本
-    print(c("\n[5/6] 数据库版本...", "cyan"))
+    print(c("\n[5/7] 数据库版本...", "cyan"))
     try:
         current_ver = cm.storage.get_db_version()
         latest_ver = cm.storage.get_latest_db_version()
@@ -9174,7 +9225,7 @@ def cmd_doctor(args):
     # 6. 孤儿数据（v6.1.3 新增：图谱失效引用 + 子表孤儿行）
     # 背景：v6.1.2 之前级联删除存在 4 处 bug（kg_edges 表名错误等），
     # 历史硬删除留下的脏数据不会自愈，此项检查并可选修复。
-    print(c("\n[6/6] 孤儿数据一致性...", "cyan"))
+    print(c("\n[7/7] 孤儿数据一致性...", "cyan"))
     try:
         rep = cm._storage.repair_orphaned_data(dry_run=not args.fix)
         g = rep["graph"]
@@ -9199,6 +9250,27 @@ def cmd_doctor(args):
                     f"{orphan_total} 行，加 --fix 可修复")
     except Exception as e:
         print(f"  ⚠️  孤儿数据检查失败: {e}")
+
+    # 7. 审计日志增长（v6.2.0 新增：搜索流水是 audit_log 主要膨胀源）
+    print(c("\n[7/7] 审计日志增长...", "cyan"))
+    try:
+        conn = cm._storage._get_conn()
+        total_audit = conn.execute(
+            "SELECT COUNT(*) FROM audit_log").fetchone()[0]
+        search_audit = conn.execute(
+            "SELECT COUNT(*) FROM audit_log WHERE action='search'").fetchone()[0]
+        if total_audit <= 50000:
+            print(f"  ✅ 审计日志规模健康（{total_audit} 行，其中搜索流水 {search_audit}）")
+        else:
+            pct = search_audit * 100 // max(total_audit, 1)
+            print(f"  ⚠️  审计日志 {total_audit} 行，搜索流水占 {pct}%")
+            print("     建议: mindforge audit-prune --days 90 释放历史搜索流水")
+            print("     （合规类审计（写/删/导出）默认保留，不受影响）")
+            issues.append(
+                f"审计日志增长至 {total_audit} 行（搜索流水 {search_audit}），"
+                "可用 audit-prune 裁剪")
+    except Exception as e:
+        print(f"  ⚠️  审计日志检查失败: {e}")
 
     # 汇总
     print(c("\n" + "=" * 50, "reset"))

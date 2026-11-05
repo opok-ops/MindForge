@@ -466,6 +466,9 @@ class TestStorageToolMethods(_StoreCase):
 
     def test_get_search_history_via_record(self):
         self.assertEqual(self.storage.get_search_history(), [])
+        # v6.2.0 语义变更：record_search 同词 60s 去抖——count 从
+        # 「检索调用次数」变为「独立查询会话次数」（见 CHANGELOG 6.2.0）。
+        # strip 后同词的两次调用在去抖窗口内合并为一条。
         self.storage.record_search("  你好  ")
         self.storage.record_search("你好")
         self.storage.record_search("测试")
@@ -474,7 +477,7 @@ class TestStorageToolMethods(_StoreCase):
         self.assertIn("你好", qs)
         self.assertIn("测试", qs)
         by_q = {h["query"]: h["count"] for h in hist}
-        self.assertEqual(by_q["你好"], 2)
+        self.assertEqual(by_q["你好"], 1)
 
     def test_timeline_view(self):
         tl = self.storage.timeline_view()

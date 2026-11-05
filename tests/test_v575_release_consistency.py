@@ -40,8 +40,8 @@ class TestVersionTruth(unittest.TestCase):
     def test_core_version_matches_release(self):
         # 版本推进时必须一并更新此处的钉值（与 test_v568_fixes 的
         # _EXPECTED_VERSION 同一约定：让「忘记 bump 版本」在测试里显形）。
-        self.assertEqual(core_version.__version__, "6.1.3")
-        self.assertEqual(core_version.VERSION_INFO, (6, 1, 3))
+        self.assertEqual(core_version.__version__, "6.2.0")
+        self.assertEqual(core_version.VERSION_INFO, (6, 2, 0))
 
     def test_pyproject_matches_core_version(self):
         # v5.8.13 起 pyproject 不再写死静态版本：

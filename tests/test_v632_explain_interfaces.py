@@ -90,7 +90,16 @@ class TestMCPExplain(unittest.TestCase, _MFMixin):
         # 至少一条召回路给出数值分
         roads = [k for k in ("tfidf", "fts5", "fuzzy", "vector") if k in bd]
         self.assertGreaterEqual(len(roads), 1)
-        self.assertAlmostEqual(bd["final"], bd[bd["winner"]], places=6)
+        # v6.3.0 语义：winner 为单路（tfidf/fts5/fuzzy/vector）或融合路径
+        # text+vector（文本+向量双命中时）。final 必须与胜出分一致：
+        # 单路 = 该路原始分；融合 = fusion.fused（此时 fusion 必在位）
+        winner = bd["winner"]
+        if winner == "text+vector":
+            self.assertIn("fusion", bd)
+            self.assertAlmostEqual(bd["final"], bd["fusion"]["fused"], places=6)
+        else:
+            self.assertIn(winner, ("tfidf", "fts5", "fuzzy", "vector"))
+            self.assertAlmostEqual(bd["final"], bd[winner], places=6)
 
     def test_explain_non_bool_coerced_off(self):
         """explain 传非布尔值：按 false 处理（类型安全，不炸）"""

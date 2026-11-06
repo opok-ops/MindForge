@@ -39,8 +39,11 @@ Install from source, then start writing and reading memories in minutes:
 ```bash
 git clone https://github.com/opok-ops/MindForge.git
 cd MindForge
-pip install -e .
+pip install -e .               # zero ML deps: 3-path retrieval (TF-IDF + FTS5 + fuzzy)
+pip install -e ".[embedding]"  # + vector path → full 6-way hybrid search
 ```
+
+> Without the `embedding` extra, MindForge runs in zero-dependency mode — fully functional, but paraphrased queries may go unrecalled (no semantic path). With it, a small sentence-transformers model downloads on first vector search.
 
 ```python
 from mindforge import MindForge
@@ -59,9 +62,18 @@ MindForge search "what does user like"
 MindForge stats
 ```
 
+## What's New
+
+v6.1.3, v6.2.0, and v6.3.0 all shipped on 2026-11-05, guarded by **1,149 passing tests**.
+
+- **v6.3.0 — Retrieval explainability** (`search --explain`). Hybrid search used to be a black box: you saw the ranking, not the reasoning. Every result can now carry its full score breakdown — per-path scores (TF-IDF / FTS5 / fuzzy / vector), the winning path, and text+vector fusion weights when both hit. Debug why a memory ranked first — or why another was never recalled at all. Zero overhead when disabled.
+- **v6.2.0 — Growth governance & reproducible benchmarks.** Audit logs get a brake: search-audit debouncing (one row per unique query per 60 s, compliance events never sampled or pruned), `audit-prune` for trimming, and a 7th doctor check that flags runaway growth. Also ships `benchmarks/repro_benchmark.py` — the methodology that killed the "encrypted writes are faster" benchmark artifact: same-N alternating rounds, P50/P95 latency over 50 samples per query type, 8-thread concurrency runs, orphan-repair verification.
+- **v6.1.3 — Self-healing data integrity.** GDPR erasure now removes derived data too — embeddings, notes, review schedules, evolution history, and graph relations (five tables previously survived "the right to be forgotten"). `doctor` gained orphan detection with one-command repair (`--fix`): dangling graph references, orphaned versions, and stray embeddings left behind by older cascade deletes are found and cleaned, with `dry_run` for impact assessment.
+- **v6.1.1 — Follow-up closed loop.** Memories don't just wait to be queried — they nudge. Follow-up items can now trigger proactive reminders when their time comes (87 MCP tools total).
+
 ## Features
 
-**v6.0.0 — released 2026-10-31**
+**v6.0.0 — multi-agent spaces & 6G preview (2026-10-31)**
 
 - **Multi-agent memory spaces** — shared spaces with three-tier roles (owner / editor / reader), last-write-wins conflict resolution, and PRIVATE / STRICT privacy guardrails. Promoted from experimental to a supported capability; available through the `multi_agent` facade, CLI `space-*`, MCP `space_*`, and the v6 port registry (status `AVAILABLE`).
 - **6G AI memory preview** — four capabilities on the preview port, each replacing a former stub: parallel Preview Channels (isolated SQLite stores that never touch the stable database), context distillation (`distill_context` ranks memories HIGH / MEDIUM / LOW under a token budget), incremental index statistics (write-time indexing with near-real-time recall metrics), and per-memory timelines (versions, evolutions, and audit trail). Available through CLI `preview-*`, REST `/api/preview/*`, and MCP `preview_*`.
@@ -206,13 +218,14 @@ memory:
 - **Encrypted databases**: when a key file is present, set `MINDFORGE_PASSWORD` so the process can unlock the store. This is required for the dsh-mindforge bridge and any non-interactive integration (MCP / REST API / scripts) accessing an encrypted store.
 - **API authentication**: if `MINDFORGE_API_KEY` is configured, unauthenticated callers are treated as `anonymous` and can only reach PUBLIC memories. All read/write paths carry actor identity for authorization and audit.
 - **Access logs are sanitized**: search terms and memory IDs are stripped from logs.
-- **Upgrade note**: v5.5.7 removed the experimental HMAC-XOR downgrade path (config flag `EXPERIMENTAL_HMAC_XOR`, 即「降级加密」). Blobs created under that flag can no longer be decrypted — back up your database before upgrading if you enabled it.
+- **Upgrade note**: v5.5.7 removed the experimental HMAC-XOR downgrade path (config flag `EXPERIMENTAL_HMAC_XOR`). Blobs created under that flag can no longer be decrypted — back up your database before upgrading if you enabled it.
 
 See [SECURITY.md](SECURITY.md) for the full security policy.
 
 ## Roadmap
 
 - [x] **v6.0** — multi-agent memory spaces and the 6G AI memory preview, both promoted from experimental ports to supported capabilities, alongside an eight-feature agent workflow toolkit (released 2026-10-31)
+- [x] **v6.1 – v6.3** — trust & quality: retrieval explainability (`search --explain`), data-integrity self-repair in `doctor`, GDPR-complete erasure, audit-log growth governance, reproducible benchmarks (released 2026-11-05)
 - [ ] Vector database backend (Qdrant / Chroma)
 - [ ] Web UI dashboard
 - [ ] Plugin ecosystem

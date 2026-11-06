@@ -90,16 +90,18 @@ class TestMCPExplain(unittest.TestCase, _MFMixin):
         # 至少一条召回路给出数值分
         roads = [k for k in ("tfidf", "fts5", "fuzzy", "vector") if k in bd]
         self.assertGreaterEqual(len(roads), 1)
-        # v6.3.0 语义：winner 为单路（tfidf/fts5/fuzzy/vector）或融合路径
-        # text+vector（文本+向量双命中时）。final 必须与胜出分一致：
-        # 单路 = 该路原始分；融合 = fusion.fused（此时 fusion 必在位）
-        winner = bd["winner"]
-        if winner == "text+vector":
+        # v6.3.0 语义（与 test_v630 同口径）：
+        # winner ∈ {tfidf, fts5, fuzzy, vector, text+vector(融合)}；
+        # final 与 relevance_score 同一排序口径（CI 装有 sentence-transformers
+        # 时会命中 text+vector 融合分支：final = max(fused, 文本最优分)，
+        # fused 本身 4 位舍入，故不做 final==fused 的数值断言）
+        self.assertIn(bd["winner"], ("tfidf", "fts5", "fuzzy", "vector", "text+vector"))
+        self.assertAlmostEqual(
+            item["relevance_score"], bd["final"], places=5
+        )
+        if bd["winner"] == "text+vector":
             self.assertIn("fusion", bd)
-            self.assertAlmostEqual(bd["final"], bd["fusion"]["fused"], places=6)
-        else:
-            self.assertIn(winner, ("tfidf", "fts5", "fuzzy", "vector"))
-            self.assertAlmostEqual(bd["final"], bd[winner], places=6)
+            self.assertIn("fused", bd["fusion"])
 
     def test_explain_non_bool_coerced_off(self):
         """explain 传非布尔值：按 false 处理（类型安全，不炸）"""

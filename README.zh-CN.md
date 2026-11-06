@@ -39,8 +39,11 @@ MindForge 为 AI Agent 提供持久、结构化的长期记忆：四层记忆生
 ```bash
 git clone https://github.com/opok-ops/MindForge.git
 cd MindForge
-pip install -e .
+pip install -e .               # 零 ML 依赖：三路检索（TF-IDF + FTS5 + 模糊）
+pip install -e ".[embedding]"  # + 向量通路 → 完整六路混合检索
 ```
+
+> 未安装 `embedding` 扩展时，MindForge 以零依赖模式运行——功能完整，但换词表述的查询可能无法召回（无语义通路）。安装后首次向量检索会下载一个轻量 sentence-transformers 模型。
 
 ```python
 from mindforge import MindForge
@@ -59,9 +62,18 @@ MindForge search "用户喜欢什么"
 MindForge stats
 ```
 
+## 最新动态
+
+v6.1.3、v6.2.0 与 v6.3.0 均于 2026-11-05 发布，由 **1149 项全绿测试**护航。
+
+- **v6.3.0 — 检索可解释性**（`search --explain`）。混合检索不再是黑盒：每条结果可携带完整得分分解——四条召回路（TF-IDF / FTS5 / 模糊 / 向量）各自的原始分、胜出路径、文本+向量双命中时的融合权重。调试「这条记忆为什么排第一」「那条为什么没召回」，直接看数据。关闭 explain 时热路径零开销。
+- **v6.2.0 — 增长治理与可复现基准**。审计日志装上刹车：搜索审计 60 秒去抖（合规类事件不采样不裁剪）、`audit-prune` 裁剪命令、doctor 第 7 项增长检查。同时收编 `benchmarks/repro_benchmark.py`——那套杀死「加密写入更快」基准伪影的方法学：同 N 交替对照、每类查询 50 轮 P50/P95 分位、8 线程并发压测、孤儿修复验证。
+- **v6.1.3 — 数据完整性自愈**。GDPR 擦除覆盖派生数据：嵌入、笔记、复习计划、演变历史与图谱关系（此前五张表在「被遗忘权」行使后残留）。`doctor` 新增孤儿数据检测与一键修复（`--fix`），清理历史级联删除留下的失效引用与孤儿行，`dry_run` 可先评估影响面。
+- **v6.1.1 — 跟进闭环**。记忆不再只等着被查——到点主动催办。跟进事项支持自动触发提醒（MCP 工具增至 87 个）。
+
 ## 核心特性
 
-**v6.0.0 — 2026-10-31 正式发布**
+**v6.0.0 — 多 Agent 空间与 6G 预览（2026-10-31）**
 
 - **多 Agent 记忆空间** — 三级角色（owner / editor / reader）的共享空间、last-write-wins
   冲突仲裁，以及 PRIVATE / STRICT 隐私护栏。本版由实验性能力升级为正式支持能力，
@@ -202,6 +214,7 @@ memory:
 ## 路线图
 
 - [x] **v6.0** — 多 Agent 记忆空间与 6G AI 记忆预览均由实验性端口升级为正式支持能力，并同步落地八项 Agent 工作流功能（2026-10-31 发布）
+- [x] **v6.1 – v6.3** — 信任与质量：检索可解释性（`search --explain`）、doctor 数据自愈、GDPR 全量擦除、审计增长治理、可复现基准（2026-11-05 发布）
 - [ ] 向量数据库后端（Qdrant / Chroma）
 - [ ] Web UI 仪表盘
 - [ ] 插件生态

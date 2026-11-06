@@ -23,15 +23,15 @@ publish-pypi.yml ：Release 工作流成功（workflow_run，仅 v* 标签触发
 于是出现「代码与 README 已到 v6.1.1、git tag 也已推送，但 Releases 页面的
 Latest 仍停在 v5.8.13」的漂移。v6.1.2 用 `release.yml` 把这一环自动化了。
 
-## 当前状态（v6.1.2）
+## 当前状态（v6.3.0，2026-11-06 更新）
 
 - 发行名：**`mindforge-memory`**（PyPI 项目名大小写不敏感，规范名 `mindforge`
   已被 mindforge.ai 的第三方客户端占用，故改名发布；Python 模块名
   `mindforge.*`、CLI 入口、`MindForge.py` 兼容层均不受影响）。
-- 版本真值：`mindforge/core/version.py` 的 `__version__` = `6.1.2`；
+- 版本真值：`mindforge/core/version.py` 的 `__version__` = `6.3.0`；
   `pyproject.toml` 经 dynamic version 读取同一处，打包元数据与运行时一致。
 - **标签已全部补齐**（2026-11-01）：CHANGELOG 声明的 50 个发布版本现在均有
-  对应标签，最新为 `v6.1.1`（`d60f5b4`）。此前缺失的 13 个历史标签
+  对应标签，最新为 `v6.3.0`。此前缺失的 13 个历史标签
   （v5.5.2–v5.5.7、v5.5.10、v5.6.8、v5.6.9、v5.7.0、v5.7.1、v6.0.0、v6.1.0）
   已按「版本行最后一个声明该版本的 first-parent 提交」补打，
   目标均经 version 声明（`version.py` / `pyproject.toml` / `setup.py`）与
@@ -40,18 +40,15 @@ Latest 仍停在 v5.8.13」的漂移。v6.1.2 用 `release.yml` 把这一环自�
   注意：推送旧标签会按各提交当时的 `ci.yml` 触发历史配置的运行
   （含已 EOL 的 3.9 与当时的工具数断言），出现红色记录属预期，
   不代表当前 master 回归。
-- **Release 补齐进度**：`v6.1.2` 的 Release 已由 `release.yml` 在标签推送时
-  自动创建并置为 Latest（2026-11-02）。首次 tag 触发的 run 曾因校验 job 只装
-  `requirements.txt`（缺 pytest）而失败，已修复并重打标签（`v6.1.2` →
-  `829b778`）。v6.0.0 / v6.1.0 / v6.1.1 仍待补发：Actions 页面
-  `Release → Run workflow` 填对应 tag 各跑一次；补发走 master 的最新
-  workflow 文件（checkout 到该 tag、不带 `--latest`，不会把 Latest 从
-  v6.1.2 抢走，正文取自该 tag 自己的 CHANGELOG）。
-- 测试状态：本地在与 CI 等价的依赖环境下全量 1120 项通过
-  （`pytest tests/`，Python 3.12.15 + cryptography 50.0.1 + pytest 8.4.2
-  + pytest-cov 6.3.0；覆盖率沿用 v6.1.1 的 71%，本版未调整门槛）。
+- **Release 已全量补齐**（2026-11-05 复核）：v6.0.0 – v6.3.0 全部七个
+  版本的 GitHub Release 均已创建；`release.yml` 自 v6.1.2 起接管
+  tag → Release → Latest 全链路，v6.1.3 / v6.2.0 / v6.3.0 三个版本
+  均由该链路当日自动发布（含官网部署与百度推送）。
+- 测试状态：全量 **1149** 项通过（v6.3.0 发布口径，
+  `pytest tests/` 收集数与通过数一致；Python 3.10–3.13 CI 矩阵全绿）。
 - **尚未发布**：PyPI 项目未注册（`mindforge-memory` 在 pypi.org 为 404），
-  发布工作流失败属预期（`invalid-publisher`）。
+  发布工作流失败属预期（`invalid-publisher`）。计划 2026-11-06 16:30
+  配置 Trusted Publisher 启用。
 
 ## 启用发布（一次性）
 

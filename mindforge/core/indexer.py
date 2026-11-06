@@ -285,6 +285,8 @@ class IndexEngine:
         scores = []
 
         for doc_id, text in self._doc_texts.items():
+            if not text:
+                continue  # v6.1.5 Bug-2 fix: 空文本除零守卫
             text_lower = text.lower()
             score = 0
             for word in query_lower.split():

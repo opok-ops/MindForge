@@ -1279,6 +1279,94 @@ def cmd_list(args):
     return 0
 
 
+def cmd_compress(args):
+    """自动压缩相似记忆簇（v6.3.5）"""
+    cm = _get_memory(args)
+    try:
+        result = cm.compress_memories(
+            threshold=args.threshold,
+            dry_run=args.dry_run,
+            categories=[args.category] if args.category else None,
+            min_cluster_size=args.min_cluster_size,
+        )
+        cm.close()
+    except Exception as e:
+        print(c(f"❌ 压缩失败: {e}", "red"))
+        cm.close()
+        return 1
+
+    mode = "（dry-run，未写入）" if args.dry_run else ""
+    print(c(f"\n🗜️ 记忆压缩完成{mode}", "green"))
+    print(f"  压缩簇数:      {result['compressed_count']}")
+    print(f"  跳过 STRICT:   {result['skipped_strict']} 条（隐私保护，永不参与）")
+    for cl in result.get("clusters", []):
+        print(f"  - 簇 {cl.get('cluster_id', '')[:8]}… "
+              f"{len(cl.get('source_ids', []))} 条源 → 摘要")
+    if not args.dry_run and result["compressed_count"] > 0:
+        print(c("\n💡 使用 compress-list 查看，decompress <簇ID> 可还原", "cyan"))
+    return 0
+
+
+def cmd_compress_list(args):
+    """列出全部压缩簇（v6.3.5）"""
+    cm = _get_memory(args)
+    try:
+        items = cm.list_compressions()
+        cm.close()
+    except Exception as e:
+        print(c(f"❌ 读取失败: {e}", "red"))
+        cm.close()
+        return 1
+    if not items:
+        print("暂无压缩簇")
+        return 0
+    print(f"共 {len(items)} 个压缩簇：")
+    for it in items:
+        print(f"  - {it['cluster_id'][:12]}… | 源 {len(it['source_ids'])} 条 | "
+              f"{it['created_at'][:19] if isinstance(it['created_at'], str) else it['created_at']} | "
+              f"{it.get('category', '')}")
+    return 0
+
+
+def cmd_decompress(args):
+    """解压指定簇：源恢复独立召回，摘要删除（v6.3.5）"""
+    cm = _get_memory(args)
+    try:
+        result = cm.decompress_cluster(args.cluster_id)
+        cm.close()
+    except Exception as e:
+        print(c(f"❌ 解压失败: {e}", "red"))
+        cm.close()
+        return 1
+    if result.get("decompressed"):
+        print(c(f"\n✅ 解压完成：恢复 {result['restored_count']} 条源记忆，摘要已删除", "green"))
+        return 0
+    print(c(f"❌ {result.get('error', '解压失败')}", "red"))
+    return 1
+
+
+def cmd_adaptive_search(args):
+    """自适应检索：按会话活跃度动态调整阈值（v6.3.5）"""
+    cm = _get_memory(args)
+    try:
+        result = cm.adaptive_search(
+            query=args.query,
+            session_id=args.session,
+            max_results=args.limit,
+        )
+        cm.close()
+    except Exception as e:
+        print(c(f"❌ 检索失败: {e}", "red"))
+        cm.close()
+        return 1
+    print(c(f"\n🔍 自适应检索（阈值 {result['min_relevance_used']:.2f}，"
+            f"会话已记录 {result['window_pattern_count']} 次查询）", "cyan"))
+    for chunk in result["chunks"]:
+        print(f"  [{chunk['relevance_score']:.3f}] {chunk['content'][:60]}")
+    print(f"  共 {result['total']} 条")
+    return 0
+
+
 def cmd_stats(args):
     """统计信息"""
     cm = _get_memory(args)
@@ -3845,6 +3933,34 @@ def main(argv=None):
     p_stats.add_argument(
         "--detailed", action="store_true", help="显示详细统计（v5.1.4 新增）"
     )
+
+    # v6.3.5：记忆压缩与自适应检索
+    p_compress = sub.add_parser(
+        "compress", help="自动压缩相似记忆簇（v6.3.5）", parents=[json_parser]
+    )
+    p_compress.add_argument("--threshold", type=float, default=0.75,
+                            help="相似度阈值（默认 0.75）")
+    p_compress.add_argument("--dry-run", action="store_true",
+                            help="只报告将压缩的簇，不写入")
+    p_compress.add_argument("--category", help="限定类别")
+    p_compress.add_argument("--min-cluster-size", type=int, default=3,
+                            help="最小簇大小（默认 3）")
+
+    p_compress_list = sub.add_parser(
+        "compress-list", help="列出全部压缩簇（v6.3.5）", parents=[json_parser]
+    )
+
+    p_decompress = sub.add_parser(
+        "decompress", help="解压压缩簇：源恢复独立召回（v6.3.5）"
+    )
+    p_decompress.add_argument("cluster_id", help="压缩簇 ID（compress-list 可查）")
+
+    p_adaptive = sub.add_parser(
+        "adaptive-search", help="自适应检索（v6.3.5）", parents=[json_parser]
+    )
+    p_adaptive.add_argument("query", help="搜索查询")
+    p_adaptive.add_argument("--session", default="cli", help="会话 ID")
+    p_adaptive.add_argument("--limit", type=int, default=10, help="最大结果数")
 
     p_star = sub.add_parser("star", help="收藏记忆")
     p_star.add_argument("id", help="记忆 ID")
@@ -7104,6 +7220,10 @@ def _main_dispatch(args, parser=None):
         "update": cmd_update,
         "delete": cmd_delete,
         "stats": cmd_stats,
+        "compress": cmd_compress,
+        "compress-list": cmd_compress_list,
+        "decompress": cmd_decompress,
+        "adaptive-search": cmd_adaptive_search,
         "star": cmd_star,
         "unstar": cmd_unstar,
         "batch-delete": cmd_batch_delete,

@@ -3,6 +3,75 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.3.5] - 2026-11-07
+
+记忆压缩与自适应上下文。两个新模块（MemoryCompressor、
+AdaptiveContextEngine，作者于 2026-11-06 夜间提交，本版完成集成与
+安全修复）、一项除零修复，以及 CLI 四条新命令。工具数不变（87，
+新能力先接门面与 CLI 层，MCP/REST 暴露列入下版计划）。测试规模
+1180 → 1210（功能 23 项 + 集成 7 项）。
+
+### 版本号勘误
+
+作者夜间提交时将版本写为 6.1.5——低于已发布的 6.3.2（版本倒流），
+触发全仓版本守卫 7 项红灯。本版重订为 **6.3.5**（新增功能本应为
+minor 号，从作者指定值）。
+
+### 新增：记忆压缩（`mindforge/modules/memory_compressor.py`）
+
+- **聚类检测**：TF-IDF 余弦相似度贪心聚类（`find_similar_clusters`），
+  阈值 / 最小簇 / 最大簇 / 类别过滤可调
+- **摘要生成**：簇内关键词（TF-IDF top-8）+ 首句要点抽取
+- **压缩语义**：源记忆打 `compressed_into` 标记后**不再独立参与召回**
+  （由摘要代表，检索管线在 chunk 构建点过滤，对 query / recall /
+  CLI / REST / MCP 全路径生效）；`decompress` 一步还原
+- **隐私红线**：STRICT 记忆永不参与压缩（自动跳过并计数）
+- **dry_run**：只报告将压缩的簇，不动数据
+
+### 修复：压缩写路径五项集成缺陷（P1，含一项安全缺陷）
+
+作者原实现（v6.1.5 草稿）直插 memories 表：
+1. `created_at` 以 TEXT 写入 REAL 列（类型错配）
+2. FTS 索引不同步——摘要对 FTS5 检索路**不可见**
+3. **加密库明文直插**（安全缺陷：摘要绕过加密层直写明文行）
+4. 不生成嵌入向量——向量路不可见
+5. 不落审计日志
+
+重写为走存储层标准通道：摘要经 `add_memory`（id 分配 / FTS / 嵌入 /
+审计自动正确），源标记经 `update_memory`（读-合并-写回），解压时
+摘要经 `delete_memory` 级联清理（FTS / 嵌入 / 子表）。加密库在
+`auto_compress` / `compress_group` 入口即显式拒绝（防明文直插）。
+
+### 修复：`_keyword_search` 空文本 ZeroDivisionError（Bug-2）
+
+`IndexEngine._keyword_search` 遍历 `_doc_texts` 时空文本触发除零
+崩溃。修复：空文本 `continue` 跳过（一行守卫，作者提交，保留原样）。
+
+### 新增：自适应上下文引擎（`mindforge/modules/context_window.py`）
+
+- 会话窗口追踪查询模式（QueryPattern：时间戳 / 结果数 / 命中类别）
+- **自适应阈值**：连续快速查询（≥5 次/30s，探索模式）→ 阈值降
+  0.08 多召回；长时间空闲（>60s，聚焦模式）→ 阈值升高精准召回
+- 有界调整：floor 0.15 / ceiling 0.5，防失控
+
+### 接线（v6.3.5 完成：门面 + CLI）
+
+- 门面：`compress_memories()` / `list_compressions()` /
+  `decompress_cluster()` / `adaptive_search()`
+- CLI：`compress [--dry-run --threshold --category --min-cluster-size]`、
+  `compress-list`、`decompress <cluster_id>`、`adaptive-search <query>`
+- MCP / REST 暴露：列入下一版本计划（保持三层一致暴露承诺的推进）
+
+### 测试
+
+- `tests/test_v635_features.py` 23 项（作者提交，原名
+  test_v615_fixes，随版本勘误更名；行为契约层面全部保留通过）
+- `tests/test_v635_integration.py` 7 项：压缩后源隐藏/摘要可见、
+  解压完整还原、dry_run 零写入、加密库入口拒绝、STRICT 排除
+  （存储层通道）、CLI 冒烟
+- 全量 **1210** 项通过（`pytest tests/` 收集数与通过数一致）。
+
+
 ## [6.3.2] - 2026-11-06
 
 检索可解释性全接口对齐。v6.3.0 把 `search --explain` 给了 CLI 与

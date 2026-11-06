@@ -197,6 +197,110 @@ class MindForge:
         if self._storage and self._index:
             self._query = QueryEngine(self._storage, self._index)
 
+    # ------------------------------------------------------------------
+    # v6.3.5：记忆压缩与自适应上下文（门面接线，懒加载）
+    # ------------------------------------------------------------------
+    def _require_ready(self):
+        """门面就绪检查（v6.3.5）：存储已初始化且加密初始化不挂起"""
+        from mindforge.core.encryption import SecurityError as _SecErr
+        if self._pending_encryption:
+            raise _SecErr("加密引擎未初始化，请先调用 init_with_password()")
+        if self._storage is None or self._query is None:
+            raise _SecErr("存储/检索引擎未初始化")
+
+    def _get_compressor(self):
+        """懒加载 MemoryCompressor（v6.3.5 接线）"""
+        if getattr(self, "_compressor", None) is None:
+            from mindforge.modules.memory_compressor import MemoryCompressor
+            self._compressor = MemoryCompressor(self._storage, self._index)
+        return self._compressor
+
+    def _get_adaptive_engine(self):
+        """懒加载 AdaptiveContextEngine（v6.3.5 接线）"""
+        if getattr(self, "_adaptive_engine", None) is None:
+            from mindforge.modules.context_window import AdaptiveContextEngine
+            self._adaptive_engine = AdaptiveContextEngine(self._storage, self._index)
+        return self._adaptive_engine
+
+    def compress_memories(self,
+                          threshold: float = 0.75,
+                          dry_run: bool = False,
+                          categories: Optional[List[str]] = None,
+                          min_cluster_size: int = 3) -> dict:
+        """自动压缩相似记忆簇（v6.3.5）
+
+        检测 TF-IDF 相似簇 → 生成摘要记忆 → 源标记 compressed_into
+        （检索由摘要代表）。STRICT 隐私记忆永不参与。
+
+        Args:
+            threshold: 相似度阈值（0-1）
+            dry_run: 只报告将压缩的簇，不写入
+            categories: 限定类别
+            min_cluster_size: 最小簇大小
+
+        Returns:
+            {"compressed_count", "clusters", "skipped_strict"}
+        """
+        self._require_ready()
+        return self._get_compressor().auto_compress(
+            threshold=threshold,
+            dry_run=dry_run,
+            categories=categories,
+            min_cluster_size=min_cluster_size,
+        )
+
+    def list_compressions(self) -> List[dict]:
+        """列出全部压缩簇（v6.3.5）"""
+        self._require_ready()
+        return self._get_compressor().list_compressions()
+
+    def decompress_cluster(self, cluster_id: str) -> dict:
+        """解压指定簇：源恢复独立召回，摘要级联删除（v6.3.5）"""
+        self._require_ready()
+        return self._get_compressor().decompress(cluster_id)
+
+    def adaptive_search(self,
+                        query: str,
+                        session_id: str = "default",
+                        max_results: int = 10,
+                        base_relevance: float = 0.3) -> dict:
+        """自适应检索：按会话活跃度动态调整阈值（v6.3.5）
+
+        连续快速查询（探索模式）→ 降低阈值多召回；长时间空闲后
+        （聚焦模式）→ 提高阈值精准召回。查询结果计入会话窗口统计。
+
+        Returns:
+            {"chunks", "total", "min_relevance_used", "window_pattern_count"}
+        """
+        self._require_ready()
+        engine = self._get_adaptive_engine()
+        min_rel = engine.adaptive_min_relevance(
+            session_id, base=base_relevance
+        )
+        result = self.search(
+            query=query,
+            max_results=max_results,
+            min_relevance=min_rel,
+            session_id=session_id,
+        )
+        engine.record_search(session_id, query, result.chunks)
+        return {
+            "chunks": [
+                {
+                    "id": c.memory_id,
+                    "content": c.content,
+                    "category": c.category,
+                    "relevance_score": c.relevance_score,
+                }
+                for c in result.chunks
+            ],
+            "total": result.total_found,
+            "min_relevance_used": min_rel,
+            "window_pattern_count": len(
+                engine.get_or_create_window(session_id).patterns
+            ),
+        }
+
     def _rebuild_index_from_storage(self):
         """从存储层重建内存索引（v5.5.5 修复：替代不存在的方法调用）
 
@@ -309,7 +413,7 @@ class MindForge:
         #    P1 修复：**先重加密数据库，成功后再换密钥文件和引擎**。
         #    原顺序（先换密钥再重加密）有数据丢失风险：若重加密中途崩溃，
         #    数据库事务回滚（旧密文）但密钥文件已是新的 → 重启后全量解密失败。
-        from mindforge.core.encryption import EncryptionEngine, PBKDF2_ITERATIONS_CURRENT
+        from mindforge.core.encryption import SecurityError, EncryptionEngine, PBKDF2_ITERATIONS_CURRENT
         from mindforge.core.encryption import _set_global_engine, _verify_key_password
         from mindforge.core.encryption import KDFParams, KDF_ALGORITHM_LEGACY
         import os as _os

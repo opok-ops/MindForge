@@ -146,6 +146,9 @@ class MemoryCompressor:
     ) -> Dict[str, Any]:
         """自动压缩：检测 + 生成摘要 + 写入。
 
+        v6.3.5：加密库入口即拒绝（此前守卫深埋在 _write_compression，
+        聚空簇时静默返回 0，用户无从知晓原因）。
+
         Args:
             threshold: 相似度阈值
             min_cluster_size: 最小簇大小
@@ -160,6 +163,14 @@ class MemoryCompressor:
                 "skipped_strict": int,
             }
         """
+        # v6.3.5：加密库入口即拒绝（摘要需进 FTS，当前实现仅支持明文库）
+        if getattr(self.storage, "encrypted", False) is True:
+            from mindforge.core.encryption import SecurityError
+            raise SecurityError(
+                "加密库暂不支持记忆压缩（摘要需进入明文 FTS 索引）。"
+                "如需压缩请先解密数据库。"
+            )
+
         clusters = self.find_similar_clusters(
             threshold=threshold,
             min_cluster_size=min_cluster_size,
@@ -226,6 +237,14 @@ class MemoryCompressor:
         """
         if len(memory_ids) < 2:
             return None
+
+        # v6.3.5：加密库入口即拒绝（与 auto_compress 一致）
+        if getattr(self.storage, "encrypted", False) is True:
+            from mindforge.core.encryption import SecurityError
+            raise SecurityError(
+                "加密库暂不支持记忆压缩（摘要需进入明文 FTS 索引）。"
+                "如需压缩请先解密数据库。"
+            )
 
         # STRICT guard
         safe_ids = []
@@ -311,6 +330,12 @@ class MemoryCompressor:
     def decompress(self, cluster_id: str) -> Dict[str, Any]:
         """解压缩：恢复原始记忆的独立检索状态。
 
+        v6.3.5 重写：与 _write_compression 对称走存储层通道。原实现裸
+        DELETE memories——摘要行在 memory_fts / memory_embeddings /
+        审计的派生数据全部残留（v6.1.2 级联删除修复前同类问题）。
+        现改为：源恢复走 update_memory（读-合并-写回去除标记），
+        摘要删除走 delete_memory（级联清理 FTS / 嵌入 / 子表）。
+
         Args:
             cluster_id: 压缩簇 ID
 
@@ -333,21 +358,26 @@ class MemoryCompressor:
             source_ids = json.loads(row[0])
             summary_id = row[1]
 
-            # Remove compressed_into markers from source entries
+            # Restore source entries: remove compressed_into marker
+            # (update_memory 的 metadata 为整体替换语义——读旧、去键、写回)
+            restored = 0
             for mid in source_ids:
-                conn.execute(
-                    "UPDATE memories SET metadata = json_set("
-                    "COALESCE(metadata, '{}'), '$.compressed_into', NULL) "
-                    "WHERE id = ?",
-                    (mid,)
-                )
+                entry = self.storage.get_memory(mid)
+                if entry is None:
+                    continue  # 源已被独立删除，跳过
+                meta = dict(entry.metadata or {})
+                meta.pop("compressed_into", None)
+                if self.storage.update_memory(mid, metadata=meta, actor="memory-compressor"):
+                    restored += 1
 
-            # Delete the summary memory entry
-            conn.execute("DELETE FROM memories WHERE id = ?", (summary_id,))
+            # Delete summary memory (cascade: FTS / embeddings / subtables)
+            self.storage.delete_memory(summary_id, actor="memory-compressor")
+
+            # Remove mapping row
             conn.execute("DELETE FROM compressions WHERE cluster_id = ?", (cluster_id,))
             conn.commit()
 
-            return {"decompressed": True, "restored_count": len(source_ids), "error": ""}
+            return {"decompressed": True, "restored_count": restored, "error": ""}
 
         except Exception as e:
             logger.error("解压缩失败: %s", e)
@@ -395,36 +425,58 @@ class MemoryCompressor:
         """)
 
     def _write_compression(self, cluster: CompressionCluster):
-        """原子写入压缩结果：创建摘要记忆 + 标记源条目 + 记录映射"""
-        conn = self.storage._get_conn()
-        summary_id = str(uuid.uuid4())[:8]
+        """原子写入压缩结果：创建摘要记忆 + 标记源条目 + 记录映射。
 
-        self._ensure_table(conn)
+        v6.3.5 重写：写路径全部改走存储层标准通道。原实现（v6.1.5 草稿）
+        直插 memories 表存在五项缺陷——created_at 以 TEXT 写入 REAL 列、
+        FTS 索引不同步（摘要对 FTS5 路不可见）、加密库明文直插（安全缺陷）、
+        不生成嵌入向量（向量路不可见）、不落审计。现改为：
+          - 摘要走 add_memory（id 分配 / FTS / 嵌入 / 审计 自动正确）
+          - 源标记走 update_memory（读-合并-写回，metadata 为整体替换语义）
+          - compressions 映射表保留模块私有 SQL（不触碰 memories 表）
+        """
+        if getattr(self.storage, "encrypted", False) is True:
+            from mindforge.core.encryption import SecurityError
+            raise SecurityError(
+                "加密库暂不支持记忆压缩：摘要需进入 FTS 检索索引，"
+                "而当前压缩实现仅支持明文库。如需压缩请先解密数据库，"
+                "或等待后续版本的加密库压缩支持。"
+            )
 
-        # Add summary as a new memory entry
-        conn.execute("""
-            INSERT INTO memories (id, content, category, importance,
-                layer, tags, metadata, created_at, updated_at)
-            VALUES (?, ?, ?, ?, 'LONG_TERM', '[]', ?, ?, ?)
-        """, (
-            summary_id,
-            cluster.summary,
-            cluster.category,
-            cluster.importance,
-            json.dumps({"is_compression_summary": True, "cluster_id": cluster.cluster_id}),
-            cluster.created_at,
-            cluster.created_at,
-        ))
+        from mindforge.core.types import Importance, MemoryLayer
 
-        # Mark source entries with compressed_into
+        # 1. 摘要记忆：标准写入通道（FTS + 嵌入 + 审计 + 完整 uuid）
+        try:
+            importance_enum = Importance(cluster.importance)
+        except ValueError:
+            importance_enum = Importance.MEDIUM
+
+        summary_entry = self.storage.add_memory(
+            content=cluster.summary,
+            category=cluster.category,
+            importance=importance_enum,
+            layer=MemoryLayer.LONG_TERM,
+            tags=["compression-summary"],
+            metadata={
+                "is_compression_summary": True,
+                "cluster_id": cluster.cluster_id,
+            },
+            source_session="memory-compressor",
+        )
+        summary_id = summary_entry.id
+
+        # 2. 源条目标记 compressed_into（合并语义：读旧 → 合并 → 写回）
         for mid in cluster.source_ids:
-            conn.execute("""
-                UPDATE memories
-                SET metadata = json_set(COALESCE(metadata, '{}'), '$.compressed_into', ?)
-                WHERE id = ?
-            """, (cluster.cluster_id, mid))
+            entry = self.storage.get_memory(mid)
+            if entry is None:
+                continue  # 源已不存在（并发删除）——摘要仍成立
+            meta = dict(entry.metadata or {})
+            meta["compressed_into"] = cluster.cluster_id
+            self.storage.update_memory(mid, metadata=meta, actor="memory-compressor")
 
-        # Record the mapping
+        # 3. 映射记录（模块私有表，不触碰 memories）
+        conn = self.storage._get_conn()
+        self._ensure_table(conn)
         conn.execute("""
             INSERT INTO compressions (cluster_id, summary_id, source_ids, category, importance, created_at)
             VALUES (?, ?, ?, ?, ?, ?)
@@ -436,7 +488,6 @@ class MemoryCompressor:
             cluster.importance,
             cluster.created_at,
         ))
-
         conn.commit()
 
     def _ensure_fitted(self):

@@ -1,5 +1,5 @@
 """
-MindForge v6.1.5 回归测试
+MindForge v6.3.5 回归测试
 
 覆盖：
   - Bug-1: expand_query 组合扩展正确性验证（确认当前代码无 bug）
@@ -65,7 +65,7 @@ class TestBug2KeywordSearch(unittest.TestCase):
         query_lower = "hello"
         scores = []
         for doc_id, text in doc_texts.items():
-            if not text:  # v6.1.5 fix
+            if not text:  # v6.3.5 fix
                 continue
             text_lower = text.lower()
             score = 0

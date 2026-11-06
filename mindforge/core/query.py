@@ -435,6 +435,13 @@ class QueryEngine:
                 continue
             seen_contents.add(content_key)
 
+            # v6.3.5：已被压缩合并的源记忆不再独立参与召回（由其摘要代表）。
+            # 摘要本身无 compressed_into 标记，不受此过滤影响；解压后标记
+            # 移除，源恢复独立召回。过滤位于 chunk 构建点，对 query_engine
+            # 直调 / recall / CLI / REST / MCP 全部检索路径生效。
+            if (entry.metadata or {}).get("compressed_into"):
+                continue
+
             chunk = MemoryChunk(
                 memory_id=entry.id,
                 content=content_text,

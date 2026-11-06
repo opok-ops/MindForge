@@ -775,14 +775,14 @@ button.chip[aria-pressed="true"] { color: var(--text); background: var(--grad-so
       <div class="pv-head">
         <div class="pv-head-row">
           <h1 id="t-agents">多 Agent 协作</h1>
-          <span class="chip chip-plan">v6.0.0 规划</span>
+          <span class="chip chip-ok">v6.0.0 已发布</span>
         </div>
-        <p>下面每一项都是当前源码里的真实情况，不含示例数据。该能力<b>尚未发布</b>，REST 也没有对应端点。</p>
+        <p>多 Agent 记忆空间与 6G AI 记忆预览已于 <b>v6.0.0（2026-10-31）正式发布</b>：八项 Agent 工作流能力全部落地，统一接入 CLI / REST / MCP 三层接口。本视图基于 v6.3.5 源码复核。</p>
       </div>
 
       <p class="pv-notice" role="note">
         <svg class="icon icon-sm" aria-hidden="true"><use href="#i-alert"/></svg>
-        <span><b>本视图不含任何数据</b>，只陈述可校验的事实：引擎的 <code>v6_status()</code> 实测输出、源码里的角色枚举与已存在的实验性 CLI 命令。</span>
+        <span>引擎的 <code>v6_status()</code> 输出与 REST <code>/api/v6/status</code> 端点已上线；预览页数据通道按需开启（<code>/api/preview/open</code>）。</span>
       </p>
 
       <div class="pv-block">
@@ -790,7 +790,7 @@ button.chip[aria-pressed="true"] { color: var(--text); background: var(--grad-so
           <svg class="icon" aria-hidden="true"><use href="#i-cpu"/></svg>
           <span>v6 端口真实状态</span>
         </h2>
-        <p class="pv-block-desc">取自 <code>modules/v6.py</code> 的 <code>v6_status()</code> 实测输出（v5.7.0）。</p>
+        <p class="pv-block-desc">取自 <code>modules/v6.py</code> 的 <code>v6_status()</code> 输出（v6.3.5 复核：v6.0.0 起由实验性端口升级为正式支持）。</p>
         <div class="pv-table-scroll">
           <table class="pv-table">
             <caption class="sr-only">v6 能力端口状态</caption>
@@ -801,17 +801,17 @@ button.chip[aria-pressed="true"] { color: var(--text); background: var(--grad-so
               <tr>
                 <th scope="row">multi_agent_collaboration</th>
                 <td>MultiAgentCollaborationPort</td>
-                <td class="c no">planned</td><td class="c no">false</td><td class="c">6.0.0</td>
+                <td class="c yes">released</td><td class="c yes">true</td><td class="c">6.0.0 ✓</td>
               </tr>
               <tr>
                 <th scope="row">memory_preview</th>
                 <td>MemoryPreviewPort</td>
-                <td class="c no">planned</td><td class="c no">false</td><td class="c">6.0.0</td>
+                <td class="c yes">released</td><td class="c yes">true</td><td class="c">6.0.0 ✓</td>
               </tr>
             </tbody>
           </table>
         </div>
-        <p class="pv-block-desc" style="margin-top:12px">调用未实现的端口方法会直接抛 <code>NotImplementedError</code>，不会静默返回结果。</p>
+        <p class="pv-block-desc" style="margin-top:12px">MCP 工具数 56 → 86（v6.0.0），REST <code>/api/preview/*</code> 系列端点同步上线。</p>
       </div>
 
       <div class="pv-block">
@@ -841,9 +841,9 @@ button.chip[aria-pressed="true"] { color: var(--text); background: var(--grad-so
       <div class="pv-block">
         <h2 class="pv-block-title">
           <svg class="icon" aria-hidden="true"><use href="#i-terminal"/></svg>
-          <span>已经存在的实验性能力（CLI，非 REST）</span>
+          <span>多 Agent 相关 CLI 命令（已正式，含 REST 端点）</span>
         </h2>
-        <p class="pv-block-desc">这些命令在 v5.7.0 的 CLI 里真实存在，但归类为实验性，且没有 REST 端点，所以预览页无法展示其实时数据。</p>
+        <p class="pv-block-desc">这些命令在 v6.0.0 起由实验性转正式，并已接入 REST（<code>/api/v6/status</code>、<code>/api/preview/*</code>）与 MCP（工具数 56 → 86）。</p>
         <div class="pv-chips">
           <span class="chip">space-create</span><span class="chip">space-list</span><span class="chip">space-join</span>
           <span class="chip">space-add-member</span><span class="chip">space-share</span><span class="chip">space-memories</span>
@@ -853,8 +853,8 @@ button.chip[aria-pressed="true"] { color: var(--text); background: var(--grad-so
       </div>
 
       <div class="pv-foot">
-        <span>事实来源：v5.7.0 源码实测（<code>modules/v6.py</code>、<code>modules/multi_agent.py</code>、<code>cli/main.py</code>）。版本升级后需同步本页。</span>
-        <a href="https://github.com/opok-ops/MindForge/milestones" target="_blank" rel="noopener noreferrer">查看 v6.0 路线图</a>
+        <span>事实来源：v6.3.5 源码复核（<code>modules/v6.py</code>、<code>modules/multi_agent.py</code>、<code>api/server.py</code>）。本页数据块为源码实测快照。</span>
+        <a href="https://github.com/opok-ops/MindForge/releases" target="_blank" rel="noopener noreferrer">查看 Release 历史</a>
       </div>
     </section>
 
@@ -870,9 +870,9 @@ button.chip[aria-pressed="true"] { color: var(--text); background: var(--grad-so
 
       <div class="pv-stats">
         <article class="pv-stat"><div class="k">当前连接版本</div><div class="v" id="engine-version">—</div><div class="sub">GET / 的 version 字段</div></article>
-        <article class="pv-stat"><div class="k">REST 端点</div><div class="v">8</div><div class="sub">api/server.py 真实路由数</div></article>
+        <article class="pv-stat"><div class="k">REST 端点</div><div class="v">60</div><div class="sub">api/server.py 真实路由数（GET 37 / POST 21 / PUT 1 / DELETE 1，v6.3.5 实测）</div></article>
         <article class="pv-stat"><div class="k">运行依赖</div><div class="v">1</div><div class="sub">仅 cryptography</div></article>
-        <article class="pv-stat"><div class="k">读限流</div><div class="v">100<small>/60s</small></div><div class="sub">超限返回 429</div></article>
+        <article class="pv-stat"><div class="k">读限流</div><div class="v">100<small>/60s</small></div><div class="sub">写 30 / 导入 10，超限 429</div></article>
       </div>
 
       <div class="pv-block">
@@ -880,7 +880,7 @@ button.chip[aria-pressed="true"] { color: var(--text); background: var(--grad-so
           <svg class="icon" aria-hidden="true"><use href="#i-api"/></svg>
           <span>REST 真实表面</span>
         </h2>
-        <p class="pv-block-desc">预览页能用的数据只有这些端点；不在表里的能力，页面一律不展示。</p>
+        <p class="pv-block-desc">预览页直接调用的是前 8 个只读端点；v6.0.0 起新增的 52 个端点（多 Agent / 6G 预览 / 遗忘引擎 / 连接器）按需调用。不在表里的能力，页面一律不展示。</p>
         <div class="pv-table-scroll">
           <table class="pv-table">
             <caption class="sr-only">REST API 端点清单</caption>
@@ -894,9 +894,16 @@ button.chip[aria-pressed="true"] { color: var(--text); background: var(--grad-so
               <tr><th scope="row"><code>GET /api/tags</code></th><td>标签与出现次数</td><td class="c no">需认证</td></tr>
               <tr><th scope="row"><code>GET /api/memories</code></th><td>记忆列表，参数仅 <code>limit / offset / category</code></td><td class="c no">需认证</td></tr>
               <tr><th scope="row"><code>GET /api/memories/&lt;id&gt;</code></th><td>单条记忆全部字段</td><td class="c no">需认证</td></tr>
-              <tr><th scope="row"><code>GET /api/search</code></th><td>查询、命中列表、单一 <code>relevance_score</code>、<code>approximate</code></td><td class="c no">需认证</td></tr>
+              <tr><th scope="row"><code>GET /api/search</code></th><td>查询、命中列表、<code>relevance_score</code>、<code>approximate</code>；<code>?explain=</code>（v6.3.2）返回每条得分分解</td><td class="c no">需认证</td></tr>
               <tr><th scope="row"><code>GET /api/export</code></th><td>导出 JSON，上限 5000 条</td><td class="c no">需认证</td></tr>
               <tr><th scope="row"><code>POST /api/memories</code> · <code>POST /api/import</code></th><td>写入与批量导入（本页只读，不调用）</td><td class="c no">需认证</td></tr>
+              <tr><th scope="row"><code>GET /api/valid-at</code> · <code>GET /api/connectors</code></th><td>按事实有效时间查询（v5.7.6）/ 数据连接器列表（v5.7.7）</td><td class="c no">需认证</td></tr>
+              <tr><th scope="row"><code>GET /api/v6/status</code></th><td>v6 端口总览：多 Agent + 6G 预览（v6.0.0）</td><td class="c no">需认证</td></tr>
+              <tr><th scope="row"><code>GET /api/preview/*</code></th><td>6G 预览通道：channels / index / timeline（v6.0.0）</td><td class="c no">需认证</td></tr>
+              <tr><th scope="row"><code>POST /api/preview/open|close|snapshot|distill</code></th><td>6G 预览通道写操作（v6.0.0）</td><td class="c no">需认证</td></tr>
+              <tr><th scope="row"><code>GET /api/forget/stats</code> · <code>POST /api/forget/run</code></th><td>遗忘引擎统计与有原则遗忘 GC（v6.1.2 起支持 <code>days</code> 冷却窗口）</td><td class="c no">需认证</td></tr>
+              <tr><th scope="row"><code>POST /api/agent/forget</code> · <code>POST /api/conflicts/reconcile</code></th><td>Agent 自主遗忘 / 冲突自动调和（v5.7.7）</td><td class="c no">需认证</td></tr>
+              <tr><th scope="row"><code>PUT /api/memories/&lt;id&gt;</code> · <code>DELETE /api/memories/&lt;id&gt;</code></th><td>更新 / 删除记忆</td><td class="c no">需认证</td></tr>
             </tbody>
           </table>
         </div>
@@ -933,7 +940,7 @@ button.chip[aria-pressed="true"] { color: var(--text); background: var(--grad-so
       </div>
 
       <div class="pv-foot">
-        <span>上述常量取自 v5.7.0 实测；运行时事实随环境变化，以你本机实际响应为准。</span>
+        <span>上述常量经 v6.3.5 源码复核仍然成立；运行时事实随环境变化，以你本机实际响应为准。</span>
         <a href="https://github.com/opok-ops/MindForge" target="_blank" rel="noopener noreferrer">仓库源码</a>
       </div>
     </section>

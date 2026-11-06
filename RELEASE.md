@@ -47,8 +47,9 @@ Latest 仍停在 v5.8.13」的漂移。v6.1.2 用 `release.yml` 把这一环自�
 - 测试状态：全量 **1172** 项通过（v6.3.1 发布口径：新增 22 项 scrypt/rekey 回归 + 1 项兼容语义钉，
   `pytest tests/` 收集数与通过数一致；Python 3.10–3.13 CI 矩阵全绿）。
 - **尚未发布**：PyPI 项目未注册（`mindforge-memory` 在 pypi.org 为 404），
-  发布工作流失败属预期（`invalid-publisher`）。计划 2026-11-06 16:30
-  配置 Trusted Publisher 启用。
+  发布工作流失败属预期（`invalid-publisher`）。v6.3.1 已验证 build +
+  twine check 通过（2026-11-06），随时可发布；Trusted Publisher
+  配置时间待定（用户暂停，2026-11-06）。
 
 ## 启用发布（一次性）
 

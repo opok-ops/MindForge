@@ -218,7 +218,7 @@ memory:
 - **Encrypted databases**: when a key file is present, set `MINDFORGE_PASSWORD` so the process can unlock the store. This is required for the dsh-mindforge bridge and any non-interactive integration (MCP / REST API / scripts) accessing an encrypted store.
 - **API authentication**: if `MINDFORGE_API_KEY` is configured, unauthenticated callers are treated as `anonymous` and can only reach PUBLIC memories. All read/write paths carry actor identity for authorization and audit.
 - **Access logs are sanitized**: search terms and memory IDs are stripped from logs.
-- **Upgrade note**: v5.5.7 removed the experimental HMAC-XOR downgrade path (config flag `EXPERIMENTAL_HMAC_XOR`). Blobs created under that flag can no longer be decrypted — back up your database before upgrading if you enabled it.
+- **Upgrade note**: v5.5.7 removed the experimental HMAC-XOR downgrade path (config flag `EXPERIMENTAL_HMAC_XOR`, the 「降级加密」 experiment). Blobs created under that flag can no longer be decrypted — back up your database before upgrading if you enabled it.
 
 See [SECURITY.md](SECURITY.md) for the full security policy.
 

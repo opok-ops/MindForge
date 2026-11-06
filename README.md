@@ -6,11 +6,11 @@
 
 MindForge gives AI agents a persistent, structured long-term memory: a four-tier lifecycle model, knowledge graphs, hybrid retrieval, end-to-end encryption, and MCP / CLI / REST interfaces. All data stays on your machine.
 
-> **The story** — one developer, seven months, from v1.0 (March 2026) to v6.3.0: no team, no funding, 1,149 passing tests. [Read the journey →](https://opok-ops.github.io/MindForge/#developer)
+> **The story** — one developer, seven months, from v1.0 (March 2026) to v6.3.1: no team, no funding, 1,172 passing tests. [Read the journey →](https://opok-ops.github.io/MindForge/#developer)
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-6.3.0-green.svg)](https://github.com/opok-ops/MindForge/releases)
+[![Version](https://img.shields.io/badge/version-6.3.1-green.svg)](https://github.com/opok-ops/MindForge/releases)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
 [![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
@@ -66,8 +66,9 @@ MindForge stats
 
 ## What's New
 
-v6.1.3, v6.2.0, and v6.3.0 all shipped on 2026-11-05, guarded by **1,149 passing tests**.
+v6.1.3 – v6.3.1 shipped in six days (2026-11-01 → 11-06), guarded by **1,172 passing tests**.
 
+- **v6.3.1 — Encryption upgrade: scrypt KDF** (2026-11-06). The default key-derivation function moves from PBKDF2 to scrypt (N=2^16, r=8, p=1 — a 64 MiB memory wall): GPU/ASIC rigs can no longer parallelize offline brute-force; per-derivation cost ~0.3 s. New key files and encrypted exports use scrypt; every historical key file (PBKDF2 600k / 60k / legacy) still decrypts unchanged, and `rekey` migrates an existing store in one step. Also fixes a P0: facade `rekey()` had been broken since v5.8.13 (dead import path), and bumps cryptography to ≥50.0.2.
 - **v6.3.0 — Retrieval explainability** (`search --explain`). Hybrid search used to be a black box: you saw the ranking, not the reasoning. Every result can now carry its full score breakdown — per-path scores (TF-IDF / FTS5 / fuzzy / vector), the winning path, and text+vector fusion weights when both hit. Debug why a memory ranked first — or why another was never recalled at all. Zero overhead when disabled.
 - **v6.2.0 — Growth governance & reproducible benchmarks.** Audit logs get a brake: search-audit debouncing (one row per unique query per 60 s, compliance events never sampled or pruned), `audit-prune` for trimming, and a 7th doctor check that flags runaway growth. Also ships `benchmarks/repro_benchmark.py` — the methodology that killed the "encrypted writes are faster" benchmark artifact: same-N alternating rounds, P50/P95 latency over 50 samples per query type, 8-thread concurrency runs, orphan-repair verification.
 - **v6.1.3 — Self-healing data integrity.** GDPR erasure now removes derived data too — embeddings, notes, review schedules, evolution history, and graph relations (five tables previously survived "the right to be forgotten"). `doctor` gained orphan detection with one-command repair (`--fix`): dangling graph references, orphaned versions, and stray embeddings left behind by older cascade deletes are found and cleaned, with `dry_run` for impact assessment.
@@ -128,7 +129,7 @@ v6.1.3, v6.2.0, and v6.3.0 all shipped on 2026-11-05, guarded by **1,149 passing
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│           MindForge v6.3.0            │
+│           MindForge v6.3.1            │
 │  Cognitive Layer  Personality · KnowledgeGraph       │
 │                   MemoryEvolution · FederatedMemory  │
 ├──────────────────────────────────────────────────────┤

@@ -1,6 +1,7 @@
 """
 MindForge 加密引擎
-AES-256-GCM + PBKDF2 密钥派生（版本化 KDF 参数）
+AES-256-GCM + 版本化密钥派生（v6.3.1 起默认 scrypt，内存难解抗 GPU 暴力破解；
+PBKDF2-SHA256 保留用于解密历史密钥文件与密文）
 """
 
 import os
@@ -22,8 +23,10 @@ def _get_crypto():
         try:
             from cryptography.hazmat.primitives.ciphers.aead import AESGCM
             from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+            from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
             from cryptography.hazmat.primitives import hashes
-            _CRYPTO_MODULE = (AESGCM, PBKDF2HMAC, hashes)
+            # v6.3.1: 增加 Scrypt（第 4 位）；下标解包保持向后兼容
+            _CRYPTO_MODULE = (AESGCM, PBKDF2HMAC, hashes, Scrypt)
         except ImportError:
             _CRYPTO_MODULE = False
     return _CRYPTO_MODULE
@@ -33,18 +36,26 @@ def _get_crypto():
 # KDF 参数版本化
 # =============================================================================
 # 当前推荐的 PBKDF2 迭代次数（OWASP 2023 推荐：SHA-256 至少 600,000）
-# 新创建的密钥文件使用此值
+# v6.3.1 起仅用于解密历史密钥文件；新密钥文件默认 scrypt
 PBKDF2_ITERATIONS_CURRENT = 600_000
 
 # 历史最低迭代次数（v5.5.10 及之前使用 60,000）
 # 用于解密旧数据时的向后兼容，不作为新加密的默认值
 PBKDF2_ITERATIONS_LEGACY = 60_000
 
-# 密钥文件格式版本
-KEY_FILE_VERSION = "5.6"
+# v6.3.1: 当前默认 KDF —— scrypt（内存难解，抗 GPU/ASIC 并行暴力破解）
+# N=2^16, r=8, p=1 → 64 MiB 内存墙，实测约 0.3s/次派生（单次启动开销）
+SCRYPT_N_CURRENT = 65_536
+SCRYPT_R_CURRENT = 8
+SCRYPT_P_CURRENT = 1
+
+# 密钥文件格式版本（v6.3 = scrypt 默认；5.6 = PBKDF2 版本化；更早 = legacy）
+KEY_FILE_VERSION = "6.3"
 
 # KDF 算法标识
-KDF_ALGORITHM = "PBKDF2-SHA256"
+KDF_ALGORITHM = "PBKDF2-SHA256"  # 历史标识，保留供兼容路径与旧数据描述
+KDF_ALGORITHM_LEGACY = "PBKDF2-SHA256"
+KDF_ALGORITHM_CURRENT = "scrypt"
 
 # 密钥验证令牌（用于验证密码是否正确，而无需解密实际数据）
 _KEY_VERIFY_TOKEN = "MindForge-Key-Verify-v1"
@@ -55,31 +66,99 @@ class KDFParams:
     """KDF 参数集合，用于版本化密钥派生
 
     存储在密钥文件和密文头中，确保解密时使用与加密时相同的参数，
-    从而支持 KDF 参数的平滑升级（如迭代次数从 60k → 600k）。
+    从而支持 KDF 参数的平滑升级（60k → 600k PBKDF2 → v6.3.1 scrypt）。
+
+    algorithm 为 "scrypt" 时：iterations 字段承载 N（信息性，便于旧读端识别成本量级），
+    n / r / p 为实际派生参数；algorithm 为 "PBKDF2-SHA256" 时仅使用 iterations。
     """
-    algorithm: str = KDF_ALGORITHM
-    iterations: int = PBKDF2_ITERATIONS_CURRENT
+    algorithm: str = KDF_ALGORITHM_CURRENT
+    iterations: int = SCRYPT_N_CURRENT
     salt_length: int = 16
+    n: int = SCRYPT_N_CURRENT
+    r: int = SCRYPT_R_CURRENT
+    p: int = SCRYPT_P_CURRENT
 
     def to_dict(self) -> dict:
-        return {
+        result = {
             "algorithm": self.algorithm,
             "iterations": self.iterations,
             "salt_length": self.salt_length,
         }
+        if self.algorithm == KDF_ALGORITHM_CURRENT:
+            result["n"] = self.n
+            result["r"] = self.r
+            result["p"] = self.p
+        return result
 
     @classmethod
     def from_dict(cls, data: dict) -> "KDFParams":
         """从字典构造，缺失字段用安全默认值
 
-        向后兼容：旧密钥文件可能只有 "iterations" 字段，没有 "algorithm" 等。
+        向后兼容：旧密钥文件可能只有 "iterations" 字段，没有 "algorithm" 等，
+        此时按 PBKDF2 处理（历史上唯一的选择）。
+        v6.3.1: algorithm == "scrypt" 时读取 n / r / p。
         """
-        iterations = data.get("iterations", PBKDF2_ITERATIONS_LEGACY)
+        algorithm = data.get("algorithm", KDF_ALGORITHM_LEGACY)
+        iterations = int(data.get("iterations", PBKDF2_ITERATIONS_LEGACY))
+        if algorithm == KDF_ALGORITHM_CURRENT:
+            # scrypt：iterations 承载 N（信息性）；实际派生用 n/r/p
+            n = int(data.get("n", iterations))
+            return cls(
+                algorithm=algorithm,
+                iterations=n,
+                salt_length=int(data.get("salt_length", 16)),
+                n=n,
+                r=int(data.get("r", SCRYPT_R_CURRENT)),
+                p=int(data.get("p", SCRYPT_P_CURRENT)),
+            )
         return cls(
-            algorithm=data.get("algorithm", KDF_ALGORITHM),
-            iterations=int(iterations),
+            algorithm=algorithm,
+            iterations=iterations,
             salt_length=int(data.get("salt_length", 16)),
+            n=SCRYPT_N_CURRENT,
+            r=SCRYPT_R_CURRENT,
+            p=SCRYPT_P_CURRENT,
         )
+
+
+def _derive_key(password: str, salt: bytes, params: KDFParams) -> bytes:
+    """按 KDF 参数分派密钥派生算法（v6.3.1）
+
+    - algorithm == "scrypt": Scrypt(N=params.n, r=params.r, p=params.p)，内存难解
+    - 其余（含 "PBKDF2-SHA256"）: PBKDF2-HMAC-SHA256(iterations)
+
+    统一在此分派，派生失败抛 SecurityError（不泄露具体参数给调用方日志）。
+    """
+    crypto = _get_crypto()
+    if not crypto:
+        # P1-008: 移除 fallback，cryptography 缺失时直接拒绝
+        raise SecurityError(
+            "cryptography library is required for encryption. "
+            "Install with: pip install cryptography"
+        )
+    try:
+        if params.algorithm == KDF_ALGORITHM_CURRENT:
+            _, _, _, Scrypt = crypto
+            kdf = Scrypt(
+                salt=salt,
+                length=32,
+                n=params.n,
+                r=params.r,
+                p=params.p,
+            )
+        else:
+            _, PBKDF2HMAC, hashes, _ = crypto
+            kdf = PBKDF2HMAC(
+                algorithm=hashes.SHA256(),
+                length=32,
+                salt=salt,
+                iterations=params.iterations,
+            )
+        return kdf.derive(password.encode("utf-8"))
+    except SecurityError:
+        raise
+    except Exception as exc:  # 参数非法 / OpenSSL 资源不足等
+        raise SecurityError(f"密钥派生失败（KDF 参数非法或资源不足）：{exc}")
 
 
 class SecurityError(Exception):
@@ -155,45 +234,50 @@ class EncryptionEngine:
         password: str,
         salt: Optional[bytes] = None,
         iterations: Optional[int] = None,
+        kdf_params: Optional["KDFParams"] = None,
     ) -> Tuple["EncryptionEngine", bytes]:
         """从密码派生密钥
 
         Args:
             password: 用户密码
             salt: 盐值，为 None 时随机生成
-            iterations: PBKDF2 迭代次数，为 None 时使用当前推荐值
+            iterations: PBKDF2 迭代次数。传 None 且未传 kdf_params 时
+                使用当前默认 KDF（v6.3.1 起 scrypt）；传具体值则强制 PBKDF2
+                路径（历史密钥文件/密文解密用）
+            kdf_params: 完整 KDF 参数（优先级最高），按其 algorithm 分派派生算法
 
-        v5.6.0: 新增 iterations 参数，支持版本化 KDF。旧数据解密时
-        传入历史迭代次数，新加密使用当前推荐值。
+        v5.6.0: 新增 iterations 参数，支持版本化 KDF。
+        v6.3.1: 新增 kdf_params 参数；默认 KDF 由 PBKDF2-600k 升级为 scrypt
+        （N=2^16, r=8, p=1，64 MiB 内存墙，抗 GPU/ASIC 并行暴力破解）。
+        传 iterations（非 None）为 PBKDF2 兼容路径，行为与旧版一致。
         """
         if salt is None:
             salt = os.urandom(16)
 
-        if iterations is None:
-            iterations = PBKDF2_ITERATIONS_CURRENT
-
-        crypto = _get_crypto()
-        if not crypto:
-            # P1-008: 移除 fallback，cryptography 缺失时直接拒绝
-            raise SecurityError(
-                "cryptography library is required for encryption. "
-                "Install with: pip install cryptography"
+        if kdf_params is not None:
+            params = kdf_params
+        elif iterations is not None:
+            # 显式迭代次数 = 历史兼容路径，强制 PBKDF2
+            params = KDFParams(
+                algorithm=KDF_ALGORITHM_LEGACY,
+                iterations=iterations,
+                salt_length=len(salt),
             )
-        _, PBKDF2HMAC, hashes = crypto
-        kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=salt,
-            iterations=iterations,
-        )
-        key = kdf.derive(password.encode())
+        else:
+            params = KDFParams(salt_length=len(salt))
 
-        kdf_params = KDFParams(
-            algorithm=KDF_ALGORITHM,
-            iterations=iterations,
-            salt_length=len(salt),
-        )
-        return cls(key, kdf_params=kdf_params), salt
+        key = _derive_key(password, salt, params)
+        # 保留实际盐长，便于审计
+        if params.salt_length != len(salt):
+            params = KDFParams(
+                algorithm=params.algorithm,
+                iterations=params.iterations,
+                salt_length=len(salt),
+                n=params.n,
+                r=params.r,
+                p=params.p,
+            )
+        return cls(key, kdf_params=params), salt
 
     def encrypt(self, plaintext: str) -> EncryptedBlob:
         """加密文本
@@ -353,8 +437,9 @@ def init_engine(password: str, key_file: str = "./data/.key") -> EncryptionEngin
     出现 UnicodeDecodeError 或编码不一致问题。
     v5.4.7 修复 H-4：添加线程锁保护全局引擎初始化。
     v5.4.7 修复 H-2：密钥文件创建时即设置受限权限，避免权限窗口期。
-    v5.6.0 升级：版本化 KDF 参数——读取密钥文件中的 iterations 解密旧数据，
-    新创建的密钥使用 OWASP 推荐的 600,000 次迭代。
+    v5.6.0 升级：版本化 KDF 参数——读取密钥文件中的 KDF 参数解密旧数据。
+    v6.3.1 升级：新密钥文件默认 scrypt（64 MiB 内存墙）；历史密钥文件
+    （PBKDF2 600k / 60k / legacy）按原参数解密，兼容不变。
     """
     global _global_engine
 
@@ -370,10 +455,14 @@ def init_engine(password: str, key_file: str = "./data/.key") -> EncryptionEngin
             # v5.6.0: 从密钥文件读取 KDF 参数，向后兼容
             kdf_params = get_key_params(key_file)
             if kdf_params is None:
-                kdf_params = KDFParams(iterations=PBKDF2_ITERATIONS_LEGACY)
+                kdf_params = KDFParams(
+                    algorithm=KDF_ALGORITHM_LEGACY,
+                    iterations=PBKDF2_ITERATIONS_LEGACY,
+                )
 
+            # v6.3.1: 传完整 kdf_params 按算法分派（scrypt / PBKDF2 均可）
             engine, _ = EncryptionEngine.from_password(
-                password, salt, iterations=kdf_params.iterations
+                password, salt, kdf_params=kdf_params
             )
 
             # v5.6.0: 验证密码正确性（有 verify_blob 时才验证）
@@ -394,11 +483,9 @@ def init_engine(password: str, key_file: str = "./data/.key") -> EncryptionEngin
                     "已跳过自动格式升级；如需升级请运行 `mindforge rekey`。"
                 )
         else:
-            # 新密钥文件：使用当前推荐的 KDF 参数
+            # 新密钥文件：使用当前推荐的 KDF 参数（v6.3.1 起为 scrypt）
             kdf_params = KDFParams()
-            engine, salt = EncryptionEngine.from_password(
-                password, iterations=kdf_params.iterations
-            )
+            engine, salt = EncryptionEngine.from_password(password)
             _write_key_file(key_path, salt, kdf_params, engine)
 
         _global_engine = engine
@@ -435,14 +522,18 @@ def rekey_engine(
     # 1. 用旧密码和旧参数解密（验证旧密码）
     old_kdf_params = get_key_params(key_file)
     if old_kdf_params is None:
-        old_kdf_params = KDFParams(iterations=PBKDF2_ITERATIONS_LEGACY)
+        old_kdf_params = KDFParams(
+            algorithm=KDF_ALGORITHM_LEGACY,
+            iterations=PBKDF2_ITERATIONS_LEGACY,
+        )
 
     with open(key_path, "r", encoding="utf-8") as f:
         key_data = json.load(f)
     old_salt = base64.b64decode(key_data["salt"])
 
+    # v6.3.1: 完整 kdf_params 分派，支持从 scrypt 或 PBKDF2 密钥文件 rekey
     old_engine, _ = EncryptionEngine.from_password(
-        old_password, old_salt, iterations=old_kdf_params.iterations
+        old_password, old_salt, kdf_params=old_kdf_params
     )
 
     # 1.5 验证旧密码正确性（关键安全检查）
@@ -450,16 +541,18 @@ def rekey_engine(
         raise SecurityError("旧密码错误")
 
     # 2. 生成新的 KDF 参数和密钥
+    #    v6.3.1: 默认升级到 scrypt；显式传 new_iterations 则维持 PBKDF2
+    #    语义（兼容旧调用方与测试）
     if new_iterations is None:
-        new_iterations = PBKDF2_ITERATIONS_CURRENT
-
-    new_kdf_params = KDFParams(
-        algorithm=KDF_ALGORITHM,
-        iterations=new_iterations,
-    )
+        new_kdf_params = KDFParams()
+    else:
+        new_kdf_params = KDFParams(
+            algorithm=KDF_ALGORITHM_LEGACY,
+            iterations=new_iterations,
+        )
     new_salt = os.urandom(16)
     new_engine, _ = EncryptionEngine.from_password(
-        new_password, new_salt, iterations=new_iterations
+        new_password, new_salt, kdf_params=new_kdf_params
     )
 
     # 3-4. 写入新密钥文件 + 更新全局引擎（原子临界区）

@@ -8223,12 +8223,11 @@ def cmd_export_json(args):
 
     password = getattr(args, "password", None)
     if password:
-        # v5.7.3 加密导出（AES-256-GCM + PBKDF2-SHA256）
+        # v5.7.3 加密导出；v6.3.1 起 KDF 默认 scrypt，密文头自带完整参数
         import base64 as _b64
         from mindforge.core.encryption import (
             EncryptionEngine,
-            KDF_ALGORITHM,
-            PBKDF2_ITERATIONS_CURRENT,
+            KDFParams,
         )
 
         try:
@@ -8241,14 +8240,12 @@ def cmd_export_json(args):
         kdf_params = engine.kdf_params
         payload = {
             "format": "mindforge-encrypted-export",
-            "version": 1,
+            "version": 2,
             "export_time": export_data["export_time"],
             "total": len(entries),
+            # v6.3.1: 完整 KDF 参数（含 scrypt n/r/p），导入端按算法分派
             "kdf": {
-                "algorithm": kdf_params.algorithm if kdf_params else KDF_ALGORITHM,
-                "iterations": kdf_params.iterations
-                if kdf_params
-                else PBKDF2_ITERATIONS_CURRENT,
+                **(kdf_params.to_dict() if kdf_params else KDFParams().to_dict()),
                 "salt": _b64.b64encode(salt).decode(),
             },
             "cipher": blob.to_dict(),
@@ -8259,7 +8256,8 @@ def cmd_export_json(args):
         print(c("\n🔐 JSON 加密导出完成！", "green"))
         print(f"   文件：{output_path}")
         print(f"   记忆数：{len(entries)}")
-        print(c("   加密算法：AES-256-GCM（PBKDF2-SHA256 密钥派生）", "cyan"))
+        _kdf_algo = kdf_params.algorithm if kdf_params else "scrypt"
+        print(c(f"   加密算法：AES-256-GCM（{_kdf_algo} 密钥派生）", "cyan"))
         print(c("   ⚠️  请牢记密码，忘记密码将无法恢复数据", "yellow"))
         cm.close()
         return 0
@@ -8318,13 +8316,22 @@ def cmd_import_json(args):
         try:
             import base64 as _b64
             from mindforge.core.encryption import EncryptionEngine, EncryptedBlob, SecurityError
+            from mindforge.core.encryption import KDFParams
 
             kdf = data.get("kdf", {})
             salt = _b64.b64decode(kdf.get("salt", "") or "")
-            iterations = kdf.get("iterations")
-            engine, _ = EncryptionEngine.from_password(
-                password, salt=salt, iterations=iterations
-            )
+            # v6.3.1: 优先按完整 KDF 参数分派（v2 导出的 scrypt / v1 的
+            # PBKDF2-SHA256 均自带 algorithm 字段）；仅 iterations 的极旧
+            # 格式回落 PBKDF2 路径
+            if kdf.get("algorithm"):
+                engine, _ = EncryptionEngine.from_password(
+                    password, salt=salt, kdf_params=KDFParams.from_dict(kdf)
+                )
+            else:
+                iterations = kdf.get("iterations")
+                engine, _ = EncryptionEngine.from_password(
+                    password, salt=salt, iterations=iterations
+                )
             blob = EncryptedBlob.from_dict(data["cipher"])
             plaintext = engine.decrypt(blob)
             data = json.loads(plaintext)
@@ -8835,11 +8842,15 @@ def cmd_rekey(args):
     )
     print("=" * 55)
     print(f"  当前 KDF 算法:    {key_params.algorithm}")
-    print(f"  当前迭代次数:    {key_params.iterations:,}")
-    is_current = key_params.iterations == PBKDF2_ITERATIONS_CURRENT
-    status = c("✅ 已是最新", "green") if is_current else c("⚠️  低于推荐值", "yellow")
+    if key_params.algorithm == "scrypt":
+        print(f"  当前参数:        N={key_params.n:,} r={key_params.r} p={key_params.p}")
+    else:
+        print(f"  当前迭代次数:    {key_params.iterations:,}")
+    from mindforge.core.encryption import KDFParams as _KDFParams
+    is_current = key_params.to_dict() == _KDFParams().to_dict()
+    status = c("✅ 已是最新", "green") if is_current else c("⚠️  低于当前推荐", "yellow")
     print(f"  状态:            {status}")
-    print(f"  推荐迭代次数:    {PBKDF2_ITERATIONS_CURRENT:,} (OWASP 2023)")
+    print(f"  推荐算法:        scrypt (N=65,536 r=8 p=1, 64 MiB 内存墙, v6.3.1+)")
     print()
 
     # 获取旧密码（P2 #20 修复：环境变量优先，防命令行参数泄露）
@@ -8882,10 +8893,14 @@ def cmd_rekey(args):
 
     # 确认提示
     if not args.yes:
-        target_iters = args.iterations or PBKDF2_ITERATIONS_CURRENT
+        target_desc = (
+            f"{args.iterations:,} 次迭代"
+            if args.iterations
+            else "scrypt N=65,536 r=8 p=1（64 MiB 内存墙）"
+        )
         print()
         print(c("⚠️  此操作将：", "yellow"))
-        print(f"  1. 生成新的加密密钥（{target_iters:,} 次迭代）")
+        print(f"  1. 生成新的加密密钥（{target_desc}）")
         print(f"  2. 重加密所有加密记忆（事务保障，失败自动回滚）")
         print(f"  3. 备份旧密钥文件到 .key.bak")
         print()
@@ -8947,16 +8962,21 @@ def cmd_rekey(args):
     print(c(f"{COLORS['bold']}✅ rekey 完成！{COLORS['reset']}", "green"))
     print("=" * 55)
     print(f"  重加密记忆数:    {result['rekeyed_count']} 条")
-    print(f"  旧迭代次数:      {result['old_iterations']:,}")
-    print(f"  新迭代次数:      {result['new_iterations']:,}")
-    improvement = (
-        (result["new_iterations"] - result["old_iterations"])
-        / result["old_iterations"]
-        * 100
-        if result["old_iterations"] > 0
-        else 0
-    )
-    print(f"  安全提升:        +{improvement:.0f}%")
+    print(f"  旧 KDF:          {result.get('old_iterations', 0):,} iter（PBKDF2）" if result.get('old_iterations') else "  旧 KDF:          -")
+    new_algo = result.get("new_algorithm", "scrypt")
+    if new_algo == "scrypt":
+        print(f"  新 KDF:          scrypt N={result['new_iterations']:,} r=8 p=1")
+        print(f"  安全提升:        PBKDF2 → scrypt（64 MiB 内存墙，抗 GPU 并行破解）")
+    else:
+        print(f"  新 KDF:          PBKDF2-SHA256 {result['new_iterations']:,} iter")
+        improvement = (
+            (result["new_iterations"] - result["old_iterations"])
+            / result["old_iterations"]
+            * 100
+            if result["old_iterations"] and result["old_iterations"] > 0
+            else 0
+        )
+        print(f"  安全提升:        +{improvement:.0f}%")
     print(f"  密钥备份:        {result['backup_path']}")
     print()
     print(c("💡 建议：确认一切正常后可手动删除 .key.bak 备份文件", "cyan"))

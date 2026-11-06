@@ -95,8 +95,13 @@ class TestEncryptedExportImport(unittest.TestCase):
 
         self.assertEqual(data["format"], "mindforge-encrypted-export")
         self.assertIn("kdf", data)
-        self.assertEqual(data["kdf"]["algorithm"], "PBKDF2-SHA256")
+        # v6.3.1: 默认 KDF 为 scrypt，kdf 字段携带完整 n/r/p
+        self.assertEqual(data["kdf"]["algorithm"], "scrypt")
         self.assertGreater(data["kdf"]["iterations"], 0)
+        self.assertEqual(data["kdf"]["n"], 65536)
+        self.assertEqual(data["kdf"]["r"], 8)
+        self.assertEqual(data["kdf"]["p"], 1)
+        self.assertEqual(data["version"], 2)
         self.assertIn("cipher", data)
         self.assertIn("ciphertext", data["cipher"])
         self.assertIn("nonce", data["cipher"])
@@ -119,8 +124,10 @@ class TestEncryptedExportImport(unittest.TestCase):
             data = json.load(f)
         kdf = data["kdf"]
         salt = base64.b64decode(kdf["salt"])
+        # v6.3.1: 与 CLI 导入端一致——按完整 kdf_params 分派（scrypt/PBKDF2）
+        from mindforge.core.encryption import KDFParams
         engine, _ = EncryptionEngine.from_password(
-            pwd, salt=salt, iterations=kdf["iterations"]
+            pwd, salt=salt, kdf_params=KDFParams.from_dict(kdf)
         )
         blob = EncryptedBlob.from_dict(data["cipher"])
         plain = json.loads(engine.decrypt(blob))

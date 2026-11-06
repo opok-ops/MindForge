@@ -6,11 +6,11 @@
 
 MindForge 为 AI Agent 提供持久、结构化的长期记忆：四层记忆生命周期、知识图谱、混合检索、端到端加密，以及 MCP / CLI / REST 统一接口。所有数据运行并存储在本机。
 
-> **开发历程** — 一个人，七个多月，从 v1.0（2026 年 3 月）到 v6.3.0：没有团队，没有融资，1149 项测试全绿。[读完整故事 →](https://opok-ops.github.io/MindForge/#developer)
+> **开发历程** — 一个人，七个多月，从 v1.0（2026 年 3 月）到 v6.3.1：没有团队，没有融资，1172 项测试全绿。[读完整故事 →](https://opok-ops.github.io/MindForge/#developer)
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-6.3.0-green.svg)](https://github.com/opok-ops/MindForge/releases)
+[![Version](https://img.shields.io/badge/version-6.3.1-green.svg)](https://github.com/opok-ops/MindForge/releases)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
 [![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
@@ -66,8 +66,9 @@ MindForge stats
 
 ## 最新动态
 
-v6.1.3、v6.2.0 与 v6.3.0 均于 2026-11-05 发布，由 **1149 项全绿测试**护航。
+v6.1.3 – v6.3.1 六天连发（2026-11-01 → 11-06），由 **1172 项全绿测试**护航。
 
+- **v6.3.1 — 加密系统升级：scrypt KDF**（2026-11-06）。默认密钥派生从 PBKDF2 升级为 scrypt（N=2^16, r=8, p=1，64 MiB 内存墙）：GPU/ASIC 无法再并行离线暴破，单次派生约 0.3s。新密钥文件与加密导出默认 scrypt；全部历史密钥文件（PBKDF2 600k / 60k / 极旧格式）解密兼容不变，`rekey` 一步迁移存量库。同版修复 P0：门面 `rekey()` 自 v5.8.13 起因死导入路径不可用；cryptography 升至 ≥50.0.2。
 - **v6.3.0 — 检索可解释性**（`search --explain`）。混合检索不再是黑盒：每条结果可携带完整得分分解——四条召回路（TF-IDF / FTS5 / 模糊 / 向量）各自的原始分、胜出路径、文本+向量双命中时的融合权重。调试「这条记忆为什么排第一」「那条为什么没召回」，直接看数据。关闭 explain 时热路径零开销。
 - **v6.2.0 — 增长治理与可复现基准**。审计日志装上刹车：搜索审计 60 秒去抖（合规类事件不采样不裁剪）、`audit-prune` 裁剪命令、doctor 第 7 项增长检查。同时收编 `benchmarks/repro_benchmark.py`——那套杀死「加密写入更快」基准伪影的方法学：同 N 交替对照、每类查询 50 轮 P50/P95 分位、8 线程并发压测、孤儿修复验证。
 - **v6.1.3 — 数据完整性自愈**。GDPR 擦除覆盖派生数据：嵌入、笔记、复习计划、演变历史与图谱关系（此前五张表在「被遗忘权」行使后残留）。`doctor` 新增孤儿数据检测与一键修复（`--fix`），清理历史级联删除留下的失效引用与孤儿行，`dry_run` 可先评估影响面。

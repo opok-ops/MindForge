@@ -40,11 +40,17 @@ class TestKDFParams(unittest.TestCase):
     """KDFParams 数据类测试"""
 
     def test_default_values(self):
-        """默认值应为当前推荐参数"""
-        from mindforge.core.encryption import KDFParams, PBKDF2_ITERATIONS_CURRENT, KDF_ALGORITHM
+        """默认值应为当前推荐参数（v6.3.1 起为 scrypt）"""
+        from mindforge.core.encryption import (
+            KDFParams, SCRYPT_N_CURRENT, SCRYPT_R_CURRENT, SCRYPT_P_CURRENT,
+            KDF_ALGORITHM_CURRENT,
+        )
         params = KDFParams()
-        self.assertEqual(params.algorithm, KDF_ALGORITHM)
-        self.assertEqual(params.iterations, PBKDF2_ITERATIONS_CURRENT)
+        self.assertEqual(params.algorithm, KDF_ALGORITHM_CURRENT)
+        self.assertEqual(params.n, SCRYPT_N_CURRENT)
+        self.assertEqual(params.r, SCRYPT_R_CURRENT)
+        self.assertEqual(params.p, SCRYPT_P_CURRENT)
+        self.assertEqual(params.iterations, SCRYPT_N_CURRENT)  # iterations 承载 N
         self.assertEqual(params.salt_length, 16)
 
     def test_to_dict_from_dict_roundtrip(self):
@@ -83,11 +89,25 @@ class TestEncryptionEngineKDF(unittest.TestCase):
     """EncryptionEngine KDF 参数版本化测试"""
 
     def test_from_password_carries_kdf_params(self):
-        """from_password 创建的引擎应携带 KDF 参数"""
-        from mindforge.core.encryption import EncryptionEngine, PBKDF2_ITERATIONS_CURRENT
+        """from_password 创建的引擎应携带 KDF 参数（v6.3.1 默认 scrypt）"""
+        from mindforge.core.encryption import (
+            EncryptionEngine, KDF_ALGORITHM_CURRENT, SCRYPT_N_CURRENT,
+        )
         engine, salt = EncryptionEngine.from_password("testpass")
         self.assertIsNotNone(engine.kdf_params)
-        self.assertEqual(engine.kdf_params.iterations, PBKDF2_ITERATIONS_CURRENT)
+        self.assertEqual(engine.kdf_params.algorithm, KDF_ALGORITHM_CURRENT)
+        self.assertEqual(engine.kdf_params.n, SCRYPT_N_CURRENT)
+
+    def test_from_password_explicit_iterations_is_pbkdf2(self):
+        """显式传 iterations 必须走 PBKDF2 兼容路径（v6.3.1 语义）"""
+        from mindforge.core.encryption import (
+            EncryptionEngine, KDF_ALGORITHM_LEGACY, PBKDF2_ITERATIONS_LEGACY,
+        )
+        engine, _ = EncryptionEngine.from_password(
+            "testpass", iterations=PBKDF2_ITERATIONS_LEGACY
+        )
+        self.assertEqual(engine.kdf_params.algorithm, KDF_ALGORITHM_LEGACY)
+        self.assertEqual(engine.kdf_params.iterations, PBKDF2_ITERATIONS_LEGACY)
 
     def test_legacy_iterations_engine(self):
         """使用 legacy 迭代次数创建的引擎参数正确"""
@@ -173,13 +193,16 @@ class TestKeyFileOperations(unittest.TestCase):
 
     def test_init_engine_creates_current_params(self):
         """新创建的密钥文件使用当前推荐迭代次数"""
-        from mindforge.core.encryption import init_engine, get_key_params, PBKDF2_ITERATIONS_CURRENT
+        from mindforge.core.encryption import (
+            init_engine, get_key_params, KDF_ALGORITHM_CURRENT, SCRYPT_N_CURRENT,
+        )
         engine = init_engine("mypassword", self.key_file)
         self.assertIsNotNone(engine)
 
         params = get_key_params(self.key_file)
         self.assertIsNotNone(params)
-        self.assertEqual(params.iterations, PBKDF2_ITERATIONS_CURRENT)
+        self.assertEqual(params.algorithm, KDF_ALGORITHM_CURRENT)
+        self.assertEqual(params.n, SCRYPT_N_CURRENT)
 
     def test_init_engine_reads_legacy_key_file(self):
         """能读取 legacy 格式的密钥文件并使用其迭代次数"""
@@ -220,8 +243,9 @@ class TestKeyFileOperations(unittest.TestCase):
         """rekey_engine 可将 legacy 迭代次数升级到当前推荐值"""
         from mindforge.core.encryption import (
             init_engine, rekey_engine, get_key_params,
-            PBKDF2_ITERATIONS_CURRENT, PBKDF2_ITERATIONS_LEGACY,
-            EncryptionEngine, KDF_ALGORITHM,
+            PBKDF2_ITERATIONS_LEGACY,
+            EncryptionEngine, KDF_ALGORITHM, KDF_ALGORITHM_LEGACY,
+            KDF_ALGORITHM_CURRENT, SCRYPT_N_CURRENT,
         )
         password = "rekeytest"
         salt = os.urandom(16)
@@ -242,13 +266,16 @@ class TestKeyFileOperations(unittest.TestCase):
         old_params = get_key_params(self.key_file)
         self.assertEqual(old_params.iterations, PBKDF2_ITERATIONS_LEGACY)
 
-        # 执行 rekey（相同密码，仅升级迭代次数）
+        # 执行 rekey（相同密码，仅升级 KDF；v6.3.1 起默认升级到 scrypt）
         old_engine, new_engine = rekey_engine(
             password, password, key_file=self.key_file
         )
 
         new_params = get_key_params(self.key_file)
-        self.assertEqual(new_params.iterations, PBKDF2_ITERATIONS_CURRENT)
+        self.assertEqual(new_params.algorithm, KDF_ALGORITHM_CURRENT)
+        self.assertEqual(new_params.n, SCRYPT_N_CURRENT)
+        # 旧引擎仍按 legacy PBKDF2 参数派生（兼容验证）
+        self.assertEqual(old_engine.kdf_params.algorithm, KDF_ALGORITHM_LEGACY)
 
         # 验证备份文件存在
         self.assertTrue(os.path.exists(self.key_file + ".bak"))

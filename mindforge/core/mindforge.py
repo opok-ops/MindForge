@@ -311,10 +311,13 @@ class MindForge:
         #    数据库事务回滚（旧密文）但密钥文件已是新的 → 重启后全量解密失败。
         from mindforge.core.encryption import EncryptionEngine, PBKDF2_ITERATIONS_CURRENT
         from mindforge.core.encryption import _set_global_engine, _verify_key_password
+        from mindforge.core.encryption import KDFParams, KDF_ALGORITHM_LEGACY
+        import os as _os
 
         old_engine = self._encryption  # 当前引擎就是旧引擎
 
         # 验证旧密码（从 key 文件读取 salt 验证，防止误操作）
+        # v6.3.1: 传完整 kdf_params 按算法分派（scrypt / PBKDF2 密钥文件均可验证）
         key_path = Path(self.config.key_file)
         if key_path.exists():
             import json as _json
@@ -322,19 +325,30 @@ class MindForge:
             with open(key_path, "r", encoding="utf-8") as f:
                 key_data = _json.load(f)
             old_salt = _b64.b64decode(key_data["salt"])
+            verify_params = old_params if old_params else KDFParams(
+                algorithm=KDF_ALGORITHM_LEGACY,
+                iterations=PBKDF2_ITERATIONS_CURRENT,
+            )
             verify_engine, _ = EncryptionEngine.from_password(
                 old_password, old_salt,
-                iterations=old_params.iterations if old_params else PBKDF2_ITERATIONS_CURRENT
+                kdf_params=verify_params,
             )
             if not _verify_key_password(verify_engine, key_data):
                 raise SecurityError("旧密码错误")
 
+        # v6.3.1: 默认升级到 scrypt（64 MiB 内存墙）；显式传 new_iterations
+        # 则维持 PBKDF2 语义（兼容旧调用方与既有测试）
         if new_iterations is None:
-            new_iterations = PBKDF2_ITERATIONS_CURRENT
+            new_kdf_params = KDFParams()
+        else:
+            new_kdf_params = KDFParams(
+                algorithm=KDF_ALGORITHM_LEGACY,
+                iterations=new_iterations,
+            )
 
-        new_salt = __import__("os").urandom(16)
+        new_salt = _os.urandom(16)
         new_engine, _ = EncryptionEngine.from_password(
-            new_password, new_salt, iterations=new_iterations
+            new_password, new_salt, kdf_params=new_kdf_params
         )
 
         # 3. 批量重加密所有记忆（数据库事务内，失败自动回滚）
@@ -345,8 +359,11 @@ class MindForge:
         # 4. 重加密成功 → 原子切换密钥文件 + 引擎引用
         #    此时数据库已是新密文，切换密钥后两边一致；
         #    若切换中途崩溃，重启时用新 key 文件初始化 → 新密钥解新密文，正确。
-        _write_key_file = __import__("core.encryption", fromlist=["_write_key_file"])._write_key_file
-        from mindforge.core.encryption import KDFParams, KDF_ALGORITHM
+        # v6.3.1 修复：改用包内正确导入路径。原 `__import__("core.encryption")`
+        # 是 v5.8.13 命名空间迁移前的顶层路径，包安装模式下必然
+        # ModuleNotFoundError——门面 rekey 自 v5.8.13 起实际不可用，
+        # 本次修复并以回归测试钉死（见 tests/test_v631_scrypt.py）。
+        from mindforge.core.encryption import _write_key_file
         backup_path = Path(self.config.key_file).with_suffix(
             Path(self.config.key_file).suffix + ".bak"
         )
@@ -354,7 +371,6 @@ class MindForge:
         if Path(self.config.key_file).exists():
             shutil.copy2(self.config.key_file, backup_path)
 
-        new_kdf_params = KDFParams(algorithm=KDF_ALGORITHM, iterations=new_iterations)
         _write_key_file(Path(self.config.key_file), new_salt, new_kdf_params, new_engine)
 
         self._encryption = new_engine
@@ -362,12 +378,13 @@ class MindForge:
             self._storage.encryption = new_engine
         _set_global_engine(new_engine)
 
-        new_iterations_val = new_iterations
+        new_iterations_val = new_kdf_params.iterations
 
         return {
             "rekeyed_count": count,
             "old_iterations": old_iterations,
             "new_iterations": new_iterations_val,
+            "new_algorithm": new_kdf_params.algorithm,
             "backup_path": str(Path(self.config.key_file).with_suffix(".key.bak")),
         }
 
@@ -381,11 +398,18 @@ class MindForge:
             return None
 
         params = get_key_params(self.config.key_file)
+        # v6.3.1: "current" = 默认 KDF（scrypt N=2^16/r=8/p=1）
+        from mindforge.core.encryption import KDFParams as _KDFParams
+        is_current = (
+            params is not None
+            and params.to_dict() == _KDFParams().to_dict()
+        )
         return {
             "enabled": True,
             "algorithm": params.algorithm if params else None,
             "iterations": params.iterations if params else None,
-            "is_current": (params.iterations == PBKDF2_ITERATIONS_CURRENT) if params else False,
+            "kdf_params": params.to_dict() if params else None,
+            "is_current": is_current,
         }
 
     def add(self,

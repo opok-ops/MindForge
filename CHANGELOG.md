@@ -3,6 +3,81 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.3.1] - 2026-11-06
+
+加密系统升级 + 安全加固 + 门面 rekey 修复。三件事：默认 KDF 从
+PBKDF2 升级为 scrypt（内存难解，抗 GPU/ASIC 并行暴力破解）、修复
+门面 rekey 自 v5.8.13 起不可用的死路径、cryptography 依赖地板升至
+50.0.2。工具数不变（87），测试规模 1149 → 1172（新增 22 项 scrypt /
+rekey 回归与 1 项 PBKDF2 兼容语义钉，另有 4 项 v5.6.0 KDF 测试改钉新默认值）。
+
+### 加密系统升级：默认 KDF = scrypt（N=2^16, r=8, p=1）
+
+- **为什么**：PBKDF2 无论迭代多少次都可被 GPU/ASIC 高度并行暴力
+  破解；scrypt 是内存难解函数（本次参数 64 MiB 内存墙），攻击者
+  每秒可尝试的密码数被内存带宽而非算力限制，离线暴破成本提升
+  数个量级。实测单次派生约 0.3s（进程启动一次的开销）。
+- **库层**：`KDFParams` 扩展 `n / r / p` 字段，`algorithm` 支持
+  `"scrypt"`；`from_password()` 新增 `kdf_params` 参数按算法分派
+  派生（`_derive_key` 统一分派器）；`_get_crypto()` 懒加载元组增加
+  `Scrypt`（第 4 位，下标兼容）。
+- **默认值变化**：`KDFParams()` / `from_password()` 不带参 /
+  `init_engine` 新建密钥文件 / `rekey`（不指定 `new_iterations`）/
+  加密导出——全部默认 scrypt。**显式传 `iterations`（非 None）仍为
+  PBKDF2 兼容路径，行为与旧版一致**。
+- **密钥文件**：格式版本 `5.6` → `6.3`（`kdf_params` 含 n/r/p）。
+  历史密钥文件（PBKDF2 600k / 60k / 仅 iterations 极旧格式）解密
+  兼容不变——升级后旧库照常打开，无需任何迁移。
+- **加密导出**：payload `version` 1 → 2，`kdf` 字段携带完整
+  KDF 参数（含 n/r/p）；导入端按 `algorithm` 分派派生，v1（PBKDF2）
+  与仅 iterations 的极旧导出均可继续导入。注意：v2（scrypt）导出
+  文件无法被 ≤6.3.0 的旧版本导入（派生参数缺失，报解密失败）。
+- **rekey**：密码不变仅升级 KDF 时，默认升级到 scrypt——
+  「rekey 即 KDF 迁移通道」，旧 PBKDF2 库一步换到内存难解派生。
+
+### 修复：门面 `MindForge.rekey()` 自 v5.8.13 起不可用（P0）
+
+- 症状：包安装模式下调用门面 rekey 必然抛
+  `ModuleNotFoundError: No module named 'core'`——密钥文件写入前
+  的 `_write_key_file = __import__("core.encryption", ...)` 用的是
+  v5.8.13 命名空间迁移前的顶层路径。v5.8.13（2026-10-02）起顶层
+  `core.*` 已不存在，该行成为死代码；既有测试只覆盖模块级
+  `rekey_engine`，门面路径漏网 1149 项测试全绿。
+- 修复：改为 `from mindforge.core.encryption import _write_key_file`
+  包内绝对导入；同时门面旧密码验证路径改传完整 `kdf_params`（原
+  `iterations=` 强制 PBKDF2，scrypt 密钥文件会误报「旧密码错误」）。
+- 回归：`tests/test_v631_scrypt.py::TestFacadeRekeyFixed` 端到端钉死
+  （创建 → 加数据 → rekey → 新密码下读回）。
+
+### 安全加固
+
+- **cryptography 依赖地板 50.0.1 → 50.0.2**（Dependabot #17），
+  `requirements.txt` 锁定同步；pyproject 与 CI 安装路径一致。
+- `_derive_key` 派生失败统一转 `SecurityError`，不向调用方泄露
+  KDF 参数细节。
+- 门面 `get_encryption_info()`：`is_current` 判定改为与当前默认
+  KDF（scrypt）全参数比对（原 `iterations == 600000` 对 scrypt 密钥
+  文件恒为 False）；返回值新增 `kdf_params` 完整字段。
+- CLI `rekey` 命令状态区与结果区改按算法展示（scrypt N/r/p vs
+  PBKDF2 迭代次数），移除对 scrypt 无意义的「迭代次数提升 %」展示。
+
+### 测试
+
+- 新增 `tests/test_v631_scrypt.py` 22 项：scrypt 默认值与往返、
+  密钥文件 v6.3 创建/重载/错密码、三类历史密钥文件兼容
+  （600k / 60k / 仅 iterations）、`rekey_engine` 升级路径与显式
+  iterations 兼容路径、门面 rekey 端到端与错密码拒绝、
+  `get_encryption_info().is_current`、加密导出 v2/v1/v0 三代
+  payload 导入兼容、错密码导入干净失败。
+- 更新 `tests/test_v560_kdf_versioning.py` 4 项：默认值断言从
+  PBKDF2-600k 改钉 scrypt（`test_default_values`、
+  `test_from_password_carries_kdf_params`、
+  `test_init_engine_creates_current_params`、
+  `test_rekey_engine_upgrades_iterations`），并新增
+  `test_from_password_explicit_iterations_is_pbkdf2` 钉死兼容语义。
+- 全量 **1172** 项通过（`pytest tests/` 收集数与通过数一致）。
+
+
 ## [6.3.0] - 2026-11-05
 
 检索可解释性（search --explain）。六路混合检索一直是黑盒：用户只看到

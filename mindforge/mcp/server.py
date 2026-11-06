@@ -246,7 +246,7 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
     },
     {
         "name": "memory_search",
-        "description": "Hybrid search: vector recall + TF-IDF + fuzzy (v5.4.5). Set use_embedding=false to disable vector search.",
+        "description": "Hybrid search: vector recall + TF-IDF + FTS5 + fuzzy (v5.4.5). Set use_embedding=false to disable vector search. Set explain=true for a per-result score breakdown (v6.3.2).",
         "inputSchema": {
             "type": "object",
             "required": ["query"],
@@ -257,6 +257,7 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
                 "category": {"type": "string", "description": "按分类过滤（可选）"},
                 "agent_id": {"type": "string", "description": "按 Agent ID 过滤（可选）"},
                 "use_embedding": {"type": "boolean", "default": True, "description": "启用向量召回（v5.4.5，默认 true）"},
+                "explain": {"type": "boolean", "default": False, "description": "返回每条结果的得分分解：四路召回各自原始分、胜出路径、文本+向量融合明细（v6.3.2，默认 false 零开销）"},
             },
         },
     },
@@ -1289,6 +1290,10 @@ def h_memory_search(mf, args: Dict[str, Any]) -> Dict[str, Any]:
     use_emb = args.get("use_embedding", True)
     if not isinstance(use_emb, bool):
         use_emb = True
+    # v6.3.2: explain 透传（默认 False 零开销；True 时每条结果携带得分分解）
+    explain = args.get("explain", False)
+    if not isinstance(explain, bool):
+        explain = False
     res = mf.search(
         query=str(args["query"]),
         max_results=_safe_int(args.get("max_results", 5), 5, 1, 100),
@@ -1296,17 +1301,22 @@ def h_memory_search(mf, args: Dict[str, Any]) -> Dict[str, Any]:
         categories=categories,
         agent_id=args.get("agent_id") or "",
         use_embedding=use_emb,
+        explain=explain,
     )
     items = []
     for c in res.chunks:
-        items.append({
+        item = {
             "relevance_score": float(c.relevance_score),
             "memory_id": str(c.memory_id),
             "content": str(c.content),
             "category": str(c.category),
             "tags": list(getattr(c, "tags", None) or []),
             "layer": _clean(getattr(c, "layer", None)),
-        })
+        }
+        # v6.3.2: 仅 explain=true 时携带（不请求则响应形状与旧版完全一致）
+        if explain:
+            item["score_breakdown"] = getattr(c, "score_breakdown", None)
+        items.append(item)
     return {"count": len(items), "results": items}
 
 

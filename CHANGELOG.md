@@ -3,6 +3,38 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.3.2] - 2026-11-06
+
+检索可解释性全接口对齐。v6.3.0 把 `search --explain` 给了 CLI 与
+Python 门面，但 REST 与 MCP 两层未暴露——违背项目「三层接口一致
+暴露」的自身承诺。本版补齐：MCP `memory_search` 与 REST
+`/api/search` 均支持 explain。工具数不变（87，参数加在既有工具上），
+测试规模 1172 → 1180（新增 8 项接口回归）。
+
+### MCP：`memory_search` 新增 `explain` 参数
+
+- schema 增加布尔参数（默认 `false`，描述注明零开销）
+- handler 透传至门面 `search(..., explain=)`；`explain=true` 时每条
+  结果携带 `score_breakdown`（四路召回原始分、`winner` 胜出路径、
+  `final` 最终分、双命中时 `fusion` 融合明细）
+- 非布尔值按 `false` 处理（类型安全，不炸）
+- **不传 explain 时响应键集与 v6.3.1 完全一致**——不新增 null 键，
+  既有客户端零感知
+
+### REST：`/api/search` 新增 `explain` 查询参数
+
+- `?explain=1/true/yes/on` 开启，其余值（含缺省）关闭
+- 开启时每条结果携带 `score_breakdown`；响应顶层结构不变
+- 路由文档字符串同步（`?q=&limit=&explain=`）
+
+### 测试
+
+- 新增 `tests/test_v632_explain_interfaces.py` 8 项：MCP schema
+  声明、explain off/on 键集与分解字段完整性（final 与 winner 一致）、
+  非布尔容错、REST 缺省/`0`/`1`/`true` 四种参数行为。
+- 全量 **1180** 项通过（`pytest tests/` 收集数与通过数一致）。
+
+
 ## [6.3.1] - 2026-11-06
 
 加密系统升级 + 安全加固 + 门面 rekey 修复。三件事：默认 KDF 从

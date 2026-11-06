@@ -25,7 +25,7 @@ MindForge REST API Server
   GET     /api/health             健康状态（未授权可读）      do_GET
   GET     /api/stats              统计信息（需认证）          do_GET
   GET     /api/tags               标签列表（需认证）          do_GET
-  GET     /api/search             搜索（?q=&limit=…）         do_GET
+  GET     /api/search             搜索（?q=&limit=&explain=） do_GET
   GET     /api/memories           列出（?limit=&offset=&…）   do_GET
   GET     /api/memories/{id}      获取单条（需认证）          do_GET
   GET     /api/export             导出 JSON（上限 5000 条）    do_GET
@@ -710,6 +710,9 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                     max_val=1.0,
                 )
                 categories = qs.get("categories", None)
+                # v6.3.2: explain=1/true 时返回每条结果的得分分解
+                explain_raw = (qs.get("explain", ["false"])[0] or "false").strip().lower()
+                explain = explain_raw in ("1", "true", "yes", "on")
                 result = self.mindforge.search(
                     query=q,
                     max_results=limit,
@@ -718,19 +721,24 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                     # v5.7.3 安全修复：透传调用者身份，search 内部按隐私等级过滤
                     agent_id=self._extract_actor(qs),
                     session_id=(qs.get("session", [""])[0] or ""),
+                    explain=explain,
                 )
                 chunks = []
                 if hasattr(result, "chunks"):
                     for chunk in result.chunks:
-                        chunks.append(
-                            {
-                                "id": chunk.memory_id,
-                                "content": chunk.content,
-                                "category": chunk.category,
-                                "relevance_score": chunk.relevance_score,
-                                "tags": chunk.tags if hasattr(chunk, "tags") else [],
-                            }
-                        )
+                        item = {
+                            "id": chunk.memory_id,
+                            "content": chunk.content,
+                            "category": chunk.category,
+                            "relevance_score": chunk.relevance_score,
+                            "tags": chunk.tags if hasattr(chunk, "tags") else [],
+                        }
+                        # v6.3.2: 仅 explain=true 时携带（不请求则响应形状与旧版完全一致）
+                        if explain:
+                            item["score_breakdown"] = getattr(
+                                chunk, "score_breakdown", None
+                            )
+                        chunks.append(item)
                 self._send_json(
                     {
                         "query": q,

@@ -6,11 +6,11 @@
 
 MindForge gives AI agents a persistent, structured long-term memory: a four-tier lifecycle model, knowledge graphs, hybrid retrieval, end-to-end encryption, and MCP / CLI / REST interfaces. All data stays on your machine.
 
-> **The story** — one developer, seven months, from v1.0 (March 2026) to v6.3.5: no team, no funding, 1,210 passing tests. [Read the journey →](https://opok-ops.github.io/MindForge/#developer)
+> **The story** — one developer, seven months, from v1.0 (March 2026) to v6.3.6: no team, no funding, 1,219 passing tests. [Read the journey →](https://opok-ops.github.io/MindForge/#developer)
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-6.3.5-green.svg)](https://github.com/opok-ops/MindForge/releases)
+[![Version](https://img.shields.io/badge/version-6.3.6-green.svg)](https://github.com/opok-ops/MindForge/releases)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
 [![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
@@ -66,8 +66,9 @@ MindForge stats
 
 ## What's New
 
-v6.1.3 – v6.3.5 shipped in seven days (2026-11-01 → 11-07), guarded by **1,210 passing tests**.
+v6.1.3 – v6.3.6 shipped in seven days (2026-11-01 → 11-07), guarded by **1,219 passing tests**.
 
+- **v6.3.6 — E2E-verified fixes** (2026-11-07). Found by real-bridge E2E testing of dsh-mindforge v3.0: compression TF-IDF index was never hydrated on real stores (`compress` always reported 0 clusters — now hydrated from storage), four v6.3.5 commands ignored `--json` (fixed), `adaptive_search` leaked `session_id` into privacy access control (INTERNAL memories always rejected — permanently empty results, now separated), and `key_file=""` misdetected as encryption. Tests 1210 → 1219.
 - **v6.3.5 — Memory compression & adaptive context** (2026-11-07). Two new capabilities: MemoryCompressor clusters near-duplicate memories (TF-IDF cosine), replaces them with a searchable summary, and restores originals on `decompress` — compressed sources stop appearing in every retrieval path; STRICT memories never participate. AdaptiveContextEngine tracks per-session query patterns and dynamically adjusts the relevance threshold (exploration mode lowers it, focus mode raises it, always bounded). Facade methods + four new CLI commands (`compress`, `compress-list`, `decompress`, `adaptive-search`). Also fixes a P0-class integration issue in the draft compression write path (raw SQL bypassing FTS/embedding/audit — including a plaintext-into-encrypted-store flaw) and a ZeroDivisionError in keyword search.
 - **v6.3.2 — Explain everywhere** (2026-11-06). Retrieval explainability, previously CLI/Python-only, is now aligned across all three interfaces: MCP `memory_search` gains an `explain` parameter and REST `/api/search` accepts `?explain=1` — per-result score breakdowns (per-path scores, winner, fusion details) everywhere, zero overhead and byte-identical responses when not requested.
 - **v6.3.1 — Encryption upgrade: scrypt KDF** (2026-11-06). The default key-derivation function moves from PBKDF2 to scrypt (N=2^16, r=8, p=1 — a 64 MiB memory wall): GPU/ASIC rigs can no longer parallelize offline brute-force; per-derivation cost ~0.3 s. New key files and encrypted exports use scrypt; every historical key file (PBKDF2 600k / 60k / legacy) still decrypts unchanged, and `rekey` migrates an existing store in one step. Also fixes a P0: facade `rekey()` had been broken since v5.8.13 (dead import path), and bumps cryptography to ≥50.0.2.
@@ -131,7 +132,7 @@ v6.1.3 – v6.3.5 shipped in seven days (2026-11-01 → 11-07), guarded by **1,2
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│           MindForge v6.3.5            │
+│           MindForge v6.3.6            │
 │  Cognitive Layer  Personality · KnowledgeGraph       │
 │                   MemoryEvolution · FederatedMemory  │
 ├──────────────────────────────────────────────────────┤

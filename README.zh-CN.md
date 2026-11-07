@@ -6,11 +6,11 @@
 
 MindForge 为 AI Agent 提供持久、结构化的长期记忆：四层记忆生命周期、知识图谱、混合检索、端到端加密，以及 MCP / CLI / REST 统一接口。所有数据运行并存储在本机。
 
-> **开发历程** — 一个人，七个多月，从 v1.0（2026 年 3 月）到 v6.3.5：没有团队，没有融资，1210 项测试全绿。[读完整故事 →](https://opok-ops.github.io/MindForge/#developer)
+> **开发历程** — 一个人，七个多月，从 v1.0（2026 年 3 月）到 v6.3.6：没有团队，没有融资，1219 项测试全绿。[读完整故事 →](https://opok-ops.github.io/MindForge/#developer)
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-6.3.5-green.svg)](https://github.com/opok-ops/MindForge/releases)
+[![Version](https://img.shields.io/badge/version-6.3.6-green.svg)](https://github.com/opok-ops/MindForge/releases)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
 [![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
@@ -66,7 +66,7 @@ MindForge stats
 
 ## 最新动态
 
-v6.1.3 – v6.3.5 七天连发（2026-11-01 → 11-07），由 **1210 项全绿测试**护航。
+v6.1.3 – v6.3.6 七天连发（2026-11-01 → 11-07），由 **1219 项全绿测试**护航。
 
 - **v6.3.5 — 记忆压缩与自适应上下文**（2026-11-07）。两项新能力：MemoryCompressor 聚类近重复记忆（TF-IDF 余弦）并替换为可检索的摘要，`decompress` 一步还原——已压缩源在全部检索路径不再独立出现；STRICT 隐私记忆永不参与。AdaptiveContextEngine 按会话查询模式动态调整相关度阈值（探索模式降低、聚焦模式升高、恒有界）。门面方法 + CLI 四命令（`compress` / `compress-list` / `decompress` / `adaptive-search`）。同版修复压缩写路径草稿的五项集成缺陷（裸 SQL 绕过 FTS/嵌入/审计，含加密库明文直插安全缺陷）与关键词检索除零。
 - **v6.3.2 — 可解释性全接口对齐**（2026-11-06）。检索得分分解从 CLI/Python 门面扩展到全部三层接口：MCP `memory_search` 新增 `explain` 参数、REST `/api/search` 支持 `?explain=1`——每条结果的四路召回分、胜出路径、融合明细随处可得；不请求时零开销且响应与旧版逐字节一致。

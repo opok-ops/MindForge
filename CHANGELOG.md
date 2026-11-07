@@ -7,7 +7,7 @@ All notable changes to MindForge will be documented in this file.
 
 E2E 实测修复版。对 dsh-mindforge v3.0 插件做真实桥接测试
 （15 工具逐一真 CLI 调用）时发现 5 个缺陷，本版全部修复。
-测试规模 1210 → 1219（新增 10 项 v6.3.6 回归）。
+测试规模 1210 → 1219（新增 10 项 v6.3.6 回归），全量 1219 项通过。
 
 ### 修复：记忆压缩在真实库上恒为 0 簇（P0）
 

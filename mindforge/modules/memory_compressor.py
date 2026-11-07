@@ -60,6 +60,50 @@ class MemoryCompressor:
         self.storage = storage
         self.index = index
 
+    def _hydrate_index_from_storage(self) -> int:
+        """v6.3.6：从 storage 现场加载明文记忆到 TF-IDF 索引。
+
+        背景：门面/CLI 的搜索主路径走 FTS5 + 模糊，IndexEngine 的
+        _doc_texts 只有显式 index_memory 后才有内容；真实使用中几乎
+        恒为空，导致 find_similar_clusters 无候选可聚。
+
+        过滤规则与压缩语义一致：
+        - trash 不参与
+        - 已压缩源（metadata.compressed_into）不重复参与
+        - STRICT 隐私不参与（find 阶段仍会二次过滤，此处提前剪除）
+
+        Returns:
+            实际索引的记忆条数（失败返回 0，保持旧行为：0 簇）
+        """
+        try:
+            mems = self.storage.list_memories(limit=10000)
+        except Exception:
+            logger.warning("compressor 索引水合失败：list_memories 异常", exc_info=True)
+            return 0
+        count = 0
+        for m in mems:
+            content = getattr(m, "content", None)
+            mid = getattr(m, "id", None) or getattr(m, "memory_id", None)
+            if not content or not mid:
+                continue
+            if getattr(m, "category", "") == "trash":
+                continue
+            meta = getattr(m, "metadata", None)
+            if isinstance(meta, dict) and meta.get("compressed_into"):
+                continue
+            privacy = getattr(m, "privacy", None)
+            pval = getattr(privacy, "value", privacy)
+            if str(pval).upper() == "STRICT":
+                continue
+            self.index.index_memory(mid, content)
+            count += 1
+        if count:
+            # index_memory 在 >=5 条时自动 fit；小库手动补
+            if not getattr(self.index, "_fitted", False):
+                self.index._fit_vectorizer()
+            logger.info("compressor 索引水合完成：%d 条候选", count)
+        return count
+
     def find_similar_clusters(
         self,
         threshold: float = 0.75,
@@ -170,6 +214,12 @@ class MemoryCompressor:
                 "加密库暂不支持记忆压缩（摘要需进入明文 FTS 索引）。"
                 "如需压缩请先解密数据库。"
             )
+
+        # v6.3.6 修复：真实库上 _doc_texts 可能为空（搜索主路径走 FTS5，
+        # 不触发 TF-IDF 索引水合），find_similar_clusters 会静默返回 []，
+        # 压缩恒为 0 簇。此处从 storage 现场加载明文记忆并索引。
+        if not getattr(self.index, "_doc_texts", None):
+            self._hydrate_index_from_storage()
 
         clusters = self.find_similar_clusters(
             threshold=threshold,

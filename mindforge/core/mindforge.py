@@ -277,11 +277,16 @@ class MindForge:
         min_rel = engine.adaptive_min_relevance(
             session_id, base=base_relevance
         )
+        # v6.3.6 修复：不把 session_id 传给 self.search 的访问控制。
+        # adaptive 的 session 语义是"会话统计/权重调整"（下方
+        # record_search），不是"访问身份声明"——门面 search 会把它
+        # 透传给 privacy_engine.check_access，INTERNAL 记忆（写入默认
+        # 级别）对非空 session 一律精确匹配 source_session，导致
+        # adaptive_search 默认配置下恒为空结果。
         result = self.search(
             query=query,
             max_results=max_results,
             min_relevance=min_rel,
-            session_id=session_id,
         )
         engine.record_search(session_id, query, result.chunks)
         return {

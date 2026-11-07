@@ -3,6 +3,54 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.3.6] - 2026-11-07
+
+E2E 实测修复版。对 dsh-mindforge v3.0 插件做真实桥接测试
+（15 工具逐一真 CLI 调用）时发现 5 个缺陷，本版全部修复。
+测试规模 1210 → 1219（新增 10 项 v6.3.6 回归）。
+
+### 修复：记忆压缩在真实库上恒为 0 簇（P0）
+
+`MemoryCompressor.auto_compress` 依赖 `IndexEngine._doc_texts` 提供
+候选，但门面/CLI 的搜索主路径走 FTS5，索引从未被填充——
+`find_similar_clusters` 静默返回空列表，**compress 在任何真实
+库上都报告 0 簇**。单元测试用手工填充的索引未能暴露此问题。
+修复：空索引时从 storage 现场加载明文记忆并索引
+（`_hydrate_index_from_storage`，过滤 trash/已压缩源/STRICT，
+上限 10000 条）。实测 9 条种子库在低阈值下聚出 2 簇，管线全通。
+
+### 修复：四个 v6.3.5 命令无视 --json（P0）
+
+`compress` / `compress-list` / `decompress` / `adaptive-search`
+的 parser 挂了 `json_parser`，但 handler 只打印人类格式——插件
+与脚本集成只能拿到装饰字符文本，无法解析。四个 handler 补齐
+`json_output` 分支（decompress 未挂 json_parser，主 parser 的
+前置 `--json` 同样生效）。
+
+### 修复：adaptive_search 恒为空结果（P1）
+
+门面 `adaptive_search` 把 `session_id`（会话统计维度）透传给
+`search` 的隐私访问控制。INTERNAL 级记忆（写入默认级别）对
+非空 session 一律精确匹配 `source_session`（v5.7.3 防越权语义），
+而记忆通常无来源 session——**自适应检索在默认配置下永远返回
+空结果**。修复：不再把 session_id 传给访问控制，会话统计
+（`record_search`）照常记录。实测同查询从 0 条恢复至 3 条。
+
+### 修复：key_file 空串误判加密模式（P2）
+
+`_get_memory` 对 `key_file=""` 执行 `Path("")` 解析为 cwd
+（恒存在），明文库被误判为加密库并索要密码。空值现在跳过
+存在性检查。库用户以空串显式关闭加密时不再触发。
+
+### 说明：压缩阈值与中文语义相似
+
+TF-IDF 压缩为**字面相似**（字 bigram + 词级）。中文同义改写
+（如"喜欢/偏好/爱用"）两两相似度实测仅 0.12-0.21，默认阈值
+0.75 是 fail-closed 设计（宁缺勿误聚，误聚可用 decompress 还原
+但消耗位序）。CLI help 已注明：中文近重复建议 0.30-0.45；
+语义相似需安装 sentence-transformers 启用向量召回。
+
+
 ## [6.3.5] - 2026-11-07
 
 记忆压缩与自适应上下文。两个新模块（MemoryCompressor、

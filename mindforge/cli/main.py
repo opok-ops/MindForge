@@ -437,12 +437,15 @@ def cmd_init(args):
 
 def _get_memory(args) -> MindForge:
     # P0-001: key_file 单独存在时也启用加密
-    key_file_path = Path(args.key_file)
-    encrypted = key_file_path.exists()
+    # v6.3.6 修复：key_file 为空字符串/None 时不再误判——Path('') 会
+    # 解析为 cwd（恒存在），导致明文库被当加密库要求密码。
+    key_file_raw = getattr(args, "key_file", None)
+    key_file_path = Path(key_file_raw) if key_file_raw else None
+    encrypted = bool(key_file_path and key_file_path.exists())
 
     config = MemoryConfig(
-        db_path=args.db_path,
-        key_file=args.key_file,
+        db_path=getattr(args, "db_path", None),
+        key_file=key_file_raw or None,
         encrypted=encrypted,
     )
     mf = MindForge(config=config)
@@ -1295,6 +1298,13 @@ def cmd_compress(args):
         cm.close()
         return 1
 
+    # v6.3.6 修复：--json 输出（v6.3.5 接了 json_parser 但 handler 未实现，
+    # 插件/脚本集成只能拿到人类格式）
+    if getattr(args, "json_output", False):
+        _json_out(result)
+        cm.close()
+        return 0
+
     mode = "（dry-run，未写入）" if args.dry_run else ""
     print(c(f"\n🗜️ 记忆压缩完成{mode}", "green"))
     print(f"  压缩簇数:      {result['compressed_count']}")
@@ -1317,6 +1327,11 @@ def cmd_compress_list(args):
         print(c(f"❌ 读取失败: {e}", "red"))
         cm.close()
         return 1
+    # v6.3.6 修复：--json 输出
+    if getattr(args, "json_output", False):
+        _json_out({"total": len(items), "clusters": items})
+        cm.close()
+        return 0
     if not items:
         print("暂无压缩簇")
         return 0
@@ -1338,6 +1353,12 @@ def cmd_decompress(args):
         print(c(f"❌ 解压失败: {e}", "red"))
         cm.close()
         return 1
+    # v6.3.6 修复：--json 输出（decompress parser 未挂 json_parser，
+    # 但主 parser 的 --json 前置参数同样落到 json_output）
+    if getattr(args, "json_output", False):
+        _json_out(result)
+        cm.close()
+        return 0
     if result.get("decompressed"):
         print(c(f"\n✅ 解压完成：恢复 {result['restored_count']} 条源记忆，摘要已删除", "green"))
         return 0
@@ -1359,6 +1380,11 @@ def cmd_adaptive_search(args):
         print(c(f"❌ 检索失败: {e}", "red"))
         cm.close()
         return 1
+    # v6.3.6 修复：--json 输出
+    if getattr(args, "json_output", False):
+        _json_out(result)
+        cm.close()
+        return 0
     print(c(f"\n🔍 自适应检索（阈值 {result['min_relevance_used']:.2f}，"
             f"会话已记录 {result['window_pattern_count']} 次查询）", "cyan"))
     for chunk in result["chunks"]:
@@ -3939,7 +3965,9 @@ def main(argv=None):
         "compress", help="自动压缩相似记忆簇（v6.3.5）", parents=[json_parser]
     )
     p_compress.add_argument("--threshold", type=float, default=0.75,
-                            help="相似度阈值（默认 0.75）")
+                            help="相似度阈值（默认 0.75；TF-IDF 为字面相似，"
+                                 "中文同义改写建议 0.30-0.45，语义相似需装 "
+                                 "sentence-transformers）")
     p_compress.add_argument("--dry-run", action="store_true",
                             help="只报告将压缩的簇，不写入")
     p_compress.add_argument("--category", help="限定类别")

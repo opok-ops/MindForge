@@ -6,7 +6,7 @@
 
 MindForge gives AI agents a persistent, structured long-term memory: a four-tier lifecycle model, knowledge graphs, hybrid retrieval, end-to-end encryption, and MCP / CLI / REST interfaces. All data stays on your machine.
 
-> **The story** — one developer, seven months, from v1.0 (March 2026) to v6.3.6: no team, no funding, 1,219 passing tests. [Read the journey →](https://opok-ops.github.io/MindForge/#developer)
+> **The story** — one developer, seven months, from v1.0 (March 2026) to v6.3.6: no team, no funding, 1,220 passing tests. [Read the journey →](https://opok-ops.github.io/MindForge/#developer)
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -66,7 +66,7 @@ MindForge stats
 
 ## What's New
 
-v6.1.3 – v6.3.6 shipped in seven days (2026-11-01 → 11-07), guarded by **1,219 passing tests**.
+v6.1.3 – v6.3.6 shipped in seven days (2026-11-01 → 11-07), guarded by **1,220 passing tests**.
 
 - **v6.3.6 — E2E-verified fixes** (2026-11-07). Found by real-bridge E2E testing of dsh-mindforge v3.0: compression TF-IDF index was never hydrated on real stores (`compress` always reported 0 clusters — now hydrated from storage), four v6.3.5 commands ignored `--json` (fixed), `adaptive_search` leaked `session_id` into privacy access control (INTERNAL memories always rejected — permanently empty results, now separated), and `key_file=""` misdetected as encryption. Tests 1210 → 1219.
 - **v6.3.5 — Memory compression & adaptive context** (2026-11-07). Two new capabilities: MemoryCompressor clusters near-duplicate memories (TF-IDF cosine), replaces them with a searchable summary, and restores originals on `decompress` — compressed sources stop appearing in every retrieval path; STRICT memories never participate. AdaptiveContextEngine tracks per-session query patterns and dynamically adjusts the relevance threshold (exploration mode lowers it, focus mode raises it, always bounded). Facade methods + four new CLI commands (`compress`, `compress-list`, `decompress`, `adaptive-search`). Also fixes a P0-class integration issue in the draft compression write path (raw SQL bypassing FTS/embedding/audit — including a plaintext-into-encrypted-store flaw) and a ZeroDivisionError in keyword search.

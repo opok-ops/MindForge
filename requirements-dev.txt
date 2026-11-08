@@ -10,7 +10,7 @@ pytest-cov==6.3.0
 # 但升级会引入新的扫描规则、可能使 security 作业出现新告警，故本轮保持锁定；
 # 如需升级应单独提交并复核 bandit -lll 输出。
 # security job 使用未固定安装的 bandit，不受此 pin 影响。
-bandit==1.8.6
+bandit==1.9.4
 pip-audit==2.7.3
 
 # 性能基准与 PDF 报告（benchmarks/）

@@ -121,6 +121,29 @@ jobs:
       - name: Check docs & website consistency
         run: python scripts/check_docs_consistency.py
 
+  e2e:
+    # CLI 端到端守护（v6.3.6 引入）：mock 全绿 ≠ 真实可用——2026-11-07
+    # dsh-mindforge 真实桥接测试发现压缩索引从未水合（单测 mock 掩盖）。
+    # 每步断言对应一个历史实测缺陷（聚簇>0 / --json 契约 / adaptive 非空）。
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: CLI E2E guard (real subprocess calls, isolated temp store)
+        run: python scripts/e2e_cli.py
+
   typecheck:
     runs-on: ubuntu-latest
     continue-on-error: true

@@ -19,4 +19,4 @@ psutil==7.2.2
 # 运行时代码与 tests/ 均不导入。矩阵仍包含 3.10，故保留环境标记，
 # 使 3.10 CI 可正常安装并运行测试；需生成报告时在 Python 3.11+ 环境执行。
 matplotlib==3.11.2; python_version >= "3.11"
-reportlab==5.0.1
+reportlab==5.1.0

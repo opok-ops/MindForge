@@ -11,7 +11,7 @@ pytest-cov==6.3.0
 # 如需升级应单独提交并复核 bandit -lll 输出。
 # security job 使用未固定安装的 bandit，不受此 pin 影响。
 bandit==1.8.6
-pip-audit==2.7.3
+pip-audit==2.10.1
 
 # 性能基准与 PDF 报告（benchmarks/）
 psutil==7.2.2

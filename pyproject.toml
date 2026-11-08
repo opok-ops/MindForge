@@ -49,6 +49,7 @@ packages = [
     "mindforge.api",
     "mindforge.mcp",
     "mindforge.adapters",
+    "mindforge.daemon",
 ]
 py-modules = ["MindForge"]
 

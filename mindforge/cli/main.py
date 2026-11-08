@@ -1366,6 +1366,21 @@ def cmd_decompress(args):
     return 1
 
 
+def cmd_daemon(args):
+    """常驻守护进程（v6.4.0）：行式 JSON over stdio，毫秒级调用路径。
+
+    引擎实例只建一次并常驻；每行请求 {"id","cmd","args"}，
+    每行响应 {"id","ok","data"|"error"}。stdout 纯净、日志走 stderr。
+    延迟背景：引擎直连 2-3ms vs CLI 子进程 698ms（2026-11-08 实测）。
+    """
+    from mindforge.daemon.server import run_daemon
+
+    return run_daemon(
+        db_path=args.db_path,
+        key_file=args.key_file,
+    )
+
+
 def cmd_adaptive_search(args):
     """自适应检索：按会话活跃度动态调整阈值（v6.3.5）"""
     cm = _get_memory(args)
@@ -3989,6 +4004,11 @@ def main(argv=None):
     p_adaptive.add_argument("query", help="搜索查询")
     p_adaptive.add_argument("--session", default="cli", help="会话 ID")
     p_adaptive.add_argument("--limit", type=int, default=10, help="最大结果数")
+
+    p_daemon = sub.add_parser(
+        "daemon", help="常驻守护进程：行式 JSON over stdio，毫秒级调用（v6.4.0）"
+    )
+    p_daemon.add_argument("--agent", default="daemon", help="默认 Agent ID（写入类命令缺省值）")
 
     p_star = sub.add_parser("star", help="收藏记忆")
     p_star.add_argument("id", help="记忆 ID")
@@ -7252,6 +7272,7 @@ def _main_dispatch(args, parser=None):
         "compress-list": cmd_compress_list,
         "decompress": cmd_decompress,
         "adaptive-search": cmd_adaptive_search,
+        "daemon": cmd_daemon,
         "star": cmd_star,
         "unstar": cmd_unstar,
         "batch-delete": cmd_batch_delete,

@@ -3,6 +3,39 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.4.0] - 2026-11-08
+
+常驻守护进程（daemon）与 CI 性能守护版。延迟实测（2026-11-08）：
+引擎直连 add p50 2.0ms / search p50 2.9ms，但 CLI 子进程路径
+p50 698ms——差距全部来自 Python 解释器启动税。daemon 把引擎
+实例常驻在长生命周期进程里，宿主通过行式 JSON over stdio 调用。
+全量 1220 项通过（1219 passed + 1 skipped，无新增 pytest 项）。
+
+### 新增：常驻守护进程 `mindforge daemon`
+
+- 行式 JSON 协议：每行请求 `{"id","cmd","args"}`，每行响应
+  `{"id","ok","data"|"error"}`；stdout 纯净无横幅污染，日志走 stderr。
+- 单请求延迟 p50 2.5ms（对照 CLI 子进程 698ms，约 280 倍）。
+- 命令集 v1：add / search / memory-recall / memory-context / stats /
+  compress / compress-list / decompress / adaptive-search，输出契约
+  与 CLI `--json` 完全对齐（同一套键名，宿主可无缝切换）。
+- 生命周期：`ping` 握手（含 pid/uptime）、`shutdown` 优雅退出、
+  EOF 退出；单请求异常不杀进程。
+
+### 新增：CI 性能守护（性能回归也是回归）
+
+- `scripts/bench_latency.py`：引擎 in-process 基准进 CI，断言
+  add p95 < 50ms、search p50 < 30ms、search p95 < 150ms（阈值≈实测
+  10 倍余量，容忍 CI 抖动、拦数量级退化）。
+- `scripts/e2e_daemon.py`：daemon 13 步真实子进程守护（协议握手 →
+  种子 → 检索链 → 压缩链 → adaptive → 延迟契约 p50 < 50ms），
+  与 `scripts/e2e_cli.py` 共用 P0/P1 历史缺陷断言。
+
+### 新增：CLI E2E 守护（v6.3.6 后补强）
+
+- `scripts/e2e_cli.py`：16 步真实子进程调用进 CI（v6.3.6 引入，
+  此前未提交），每步断言钉住历史实测缺陷。
+
 ## [6.3.6] - 2026-11-07
 
 E2E 实测修复版。对 dsh-mindforge v3.0 插件做真实桥接测试

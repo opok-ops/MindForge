@@ -6,11 +6,11 @@
 
 MindForge gives AI agents a persistent, structured long-term memory: a four-tier lifecycle model, knowledge graphs, hybrid retrieval, end-to-end encryption, and MCP / CLI / REST interfaces. All data stays on your machine.
 
-> **The story** — one developer, seven months, from v1.0 (March 2026) to v6.3.6: no team, no funding, 1,220 passing tests. [Read the journey →](https://opok-ops.github.io/MindForge/#developer)
+> **The story** — one developer, seven months, from v1.0 (March 2026) to v6.4.0: no team, no funding, 1,220 passing tests. [Read the journey →](https://opok-ops.github.io/MindForge/#developer)
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-6.3.6-green.svg)](https://github.com/opok-ops/MindForge/releases)
+[![Version](https://img.shields.io/badge/version-6.4.0-green.svg)](https://github.com/opok-ops/MindForge/releases)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
 [![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
@@ -66,8 +66,9 @@ MindForge stats
 
 ## What's New
 
-v6.1.3 – v6.3.6 shipped in seven days (2026-11-01 → 11-07), guarded by **1,220 passing tests**.
+v6.1.3 – v6.4.0 shipped in seven days (2026-11-01 → 11-07), guarded by **1,220 passing tests**.
 
+- **v6.4.0 — resident daemon & performance guards** (2026-11-08). New `mindforge daemon` subcommand: line-JSON over stdio, engine resident in a long-lived process — per-request p50 2.5ms vs 698ms for CLI subprocess spawning (~280×). CI now guards latency (engine in-process thresholds) and daemon 13-step E2E alongside the 16-step CLI E2E guard.
 - **v6.3.6 — E2E-verified fixes** (2026-11-07). Found by real-bridge E2E testing of dsh-mindforge v3.0: compression TF-IDF index was never hydrated on real stores (`compress` always reported 0 clusters — now hydrated from storage), four v6.3.5 commands ignored `--json` (fixed), `adaptive_search` leaked `session_id` into privacy access control (INTERNAL memories always rejected — permanently empty results, now separated), and `key_file=""` misdetected as encryption. Tests 1210 → 1219.
 - **v6.3.5 — Memory compression & adaptive context** (2026-11-07). Two new capabilities: MemoryCompressor clusters near-duplicate memories (TF-IDF cosine), replaces them with a searchable summary, and restores originals on `decompress` — compressed sources stop appearing in every retrieval path; STRICT memories never participate. AdaptiveContextEngine tracks per-session query patterns and dynamically adjusts the relevance threshold (exploration mode lowers it, focus mode raises it, always bounded). Facade methods + four new CLI commands (`compress`, `compress-list`, `decompress`, `adaptive-search`). Also fixes a P0-class integration issue in the draft compression write path (raw SQL bypassing FTS/embedding/audit — including a plaintext-into-encrypted-store flaw) and a ZeroDivisionError in keyword search.
 - **v6.3.2 — Explain everywhere** (2026-11-06). Retrieval explainability, previously CLI/Python-only, is now aligned across all three interfaces: MCP `memory_search` gains an `explain` parameter and REST `/api/search` accepts `?explain=1` — per-result score breakdowns (per-path scores, winner, fusion details) everywhere, zero overhead and byte-identical responses when not requested.
@@ -132,7 +133,7 @@ v6.1.3 – v6.3.6 shipped in seven days (2026-11-01 → 11-07), guarded by **1,2
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│           MindForge v6.3.6            │
+│           MindForge v6.4.0            │
 │  Cognitive Layer  Personality · KnowledgeGraph       │
 │                   MemoryEvolution · FederatedMemory  │
 ├──────────────────────────────────────────────────────┤

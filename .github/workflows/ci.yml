@@ -144,6 +144,12 @@ jobs:
       - name: CLI E2E guard (real subprocess calls, isolated temp store)
         run: python scripts/e2e_cli.py
 
+      - name: Latency guard (engine in-process, p50/p95 thresholds)
+        run: python scripts/bench_latency.py
+
+      - name: Daemon E2E guard (resident process, line-JSON protocol)
+        run: python scripts/e2e_daemon.py
+
   typecheck:
     runs-on: ubuntu-latest
     continue-on-error: true

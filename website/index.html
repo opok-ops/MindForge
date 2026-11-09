@@ -36,7 +36,7 @@
   "applicationSubCategory": "AI Agent Memory System",
   "operatingSystem": "Windows, macOS, Linux",
   "programmingLanguage": "Python",
-  "softwareVersion": "6.4.1",
+  "softwareVersion": "6.4.2",
   "toolCount": 87,
   "moduleCount": 15,
   "testCount": 1224,
@@ -144,7 +144,7 @@
         </svg>
       </span>
       <span class="brand-name">MindForge</span>
-      <span class="brand-ver">v6.4.1</span>
+      <span class="brand-ver">v6.4.2</span>
     </a>
 
     <div class="search" id="site-search" role="search">
@@ -213,7 +213,7 @@
         <div class="hero-liquid" aria-hidden="true"><i></i><i></i><i></i></div>
       <div class="hero-badges reveal">
         <span class="hero-badge">
-          <b>v6.4.1</b>
+          <b>v6.4.2</b>
           <span class="sep" aria-hidden="true"></span>
           <span>四层记忆架构 · 六路混合检索 · 端侧加密 · 安全加固</span>
         </span>
@@ -336,7 +336,7 @@
           </div>
           <pre class="term-body"><code><span class="l"><span class="tk-prompt">$</span> git clone https://github.com/opok-ops/MindForge.git</span>
 <span class="l"><span class="tk-prompt">$</span> cd MindForge && pip install -e .</span>
-<span class="l dim">Successfully installed mindforge-memory-6.4.1</span>
+<span class="l dim">Successfully installed mindforge-memory-6.4.2</span>
 <span class="l"><span class="tk-prompt">$</span> python</span>
 <span class="l dim">&gt;&gt;&gt; from MindForge import MindForge</span>
 <span class="l dim">&gt;&gt;&gt; m = MindForge(db_path="./data/memory.db")</span>
@@ -454,8 +454,8 @@
   <div class="container">
     <div class="section-head reveal">
       <span class="tag"><span class="tag-dot" aria-hidden="true"></span>关于开发者</span>
-      <h2 id="dev-title">一个人，从第一行代码敲到 v6.4.1</h2>
-      <p>写这套系统的只有一个人。没有团队，没有融资——顾冯雨一个人从第一行代码敲到 v6.4.1，每一行都是自己写的。</p>
+      <h2 id="dev-title">一个人，从第一行代码敲到 v6.4.2</h2>
+      <p>写这套系统的只有一个人。没有团队，没有融资——顾冯雨一个人从第一行代码敲到 v6.4.2，每一行都是自己写的。</p>
     </div>
 
     <div class="web-card glass reveal" style="text-align:left;max-width:880px">
@@ -904,7 +904,7 @@
 
     <p class="arch-note qs-note reveal" style="justify-content:center;max-width:860px;margin:26px auto 0">
       <svg class="icon icon-md" aria-hidden="true"><use href="#i-check-circle"/></svg>
-      <span>项目维护 <b class="hl">1220</b> 个测试用例，覆盖存储、检索、加密、联邦与适配层；嵌入后端可按需切换，也支持 <code>--no-embedding</code> 完全关闭向量检索。</span>
+      <span>项目维护 <b class="hl">1224</b> 个测试用例，覆盖存储、检索、加密、联邦与适配层；嵌入后端可按需切换，也支持 <code>--no-embedding</code> 完全关闭向量检索。</span>
     </p>
   </div>
 </section>
@@ -958,12 +958,26 @@
     <div class="section-head reveal">
       <span class="tag"><span class="tag-dot" aria-hidden="true"></span>更新日志</span>
       <h2 id="cl-title">每次迭代，都在进化</h2>
-      <p>从 v5.3.3 到 v6.4.1，功能扩展、安全加固与性能守护的完整轨迹（近期重点版本）。</p>
+      <p>从 v5.3.3 到 v6.4.2，功能扩展、安全加固与性能守护的完整轨迹（近期重点版本）。</p>
     </div>
 
     <div class="cl-list">
       <article class="cl-item is-latest glass reveal">
-        <div class="cl-meta"><span class="cl-ver">v6.4.1</span><span class="cl-date">2026-11-09</span><span class="cl-kind cl-kind-latest">最新</span></div>
+        <div class="cl-meta"><span class="cl-ver">v6.4.2</span><span class="cl-date">2026-11-09</span><span class="cl-kind cl-kind-latest">最新</span></div>
+        <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
+        <div class="cl-body">
+          <h4>万字级延迟再压 2 倍</h4>
+          <ul>
+            <li><b>同机 A/B 实测</b>（4.7 万字库，各 3 轮中位）：search <b>p50 6.3→3.0ms（2.1×）、p95 11.7→4.2ms（2.8×）</b>；2.4 万字库 p50 2.5ms，快态 1.8ms；add 全程无退化。</li>
+            <li><b>五刀落地</b>：WAL + synchronous=NORMAL（commit 免逐次 fsync）、枚举降级 memo、行反序列化列集合复用、首访访问计数挂账 + search 尾单事务批量落库、search 审计 INSERT 合并进同一 commit。</li>
+            <li><b>契约保真</b>：v5.6.3 访问计数节流与 v5.5.4 recently_accessed 排序语义由 23 项契约测试钉住全绿；合规类审计仍即时落盘。</li>
+            <li><b>测试</b>：全量 1224 项通过。</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="cl-item glass reveal">
+        <div class="cl-meta"><span class="cl-ver">v6.4.1</span><span class="cl-date">2026-11-09</span></div>
         <div class="cl-axis"><span class="cl-dot" aria-hidden="true"></span></div>
         <div class="cl-body">
           <h4>百万字毫秒级检索</h4>

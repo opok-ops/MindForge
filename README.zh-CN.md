@@ -6,11 +6,11 @@
 
 MindForge 为 AI Agent 提供持久、结构化的长期记忆：四层记忆生命周期、知识图谱、混合检索、端到端加密，以及 MCP / CLI / REST 统一接口。所有数据运行并存储在本机。
 
-> **开发历程** — 一个人，七个多月，从 v1.0（2026 年 3 月）到 v6.4.1：没有团队，没有融资，1220 项测试全绿。[读完整故事 →](https://opok-ops.github.io/MindForge/#developer)
+> **开发历程** — 一个人，七个多月，从 v1.0（2026 年 3 月）到 v6.4.2：没有团队，没有融资，1224 项测试全绿。[读完整故事 →](https://opok-ops.github.io/MindForge/#developer)
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-6.4.1-green.svg)](https://github.com/opok-ops/MindForge/releases)
+[![Version](https://img.shields.io/badge/version-6.4.2-green.svg)](https://github.com/opok-ops/MindForge/releases)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
 [![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
@@ -66,8 +66,10 @@ MindForge stats
 
 ## 最新动态
 
-v6.1.3 – v6.4.1 连发（2026-11-01 → 11-09），由 **1224 项测试**（1219+4 通过、1 跳过）护航。
+v6.1.3 – v6.4.2 连发（2026-11-01 → 11-09），由 **1224 项测试**（全部通过）护航。
 
+- **v6.4.2 — 万字级延迟再压 2 倍**（2026-11-09）。同机 A/B 实测（400 条 / 4.7 万字，各 3 轮取中位）：**search p50 6.3→3.0ms（2.1×）、p95 11.7→4.2ms（2.8×）**；2.4 万字库 p50 2.5ms，快态 1.8ms；add 全程无退化。五刀：WAL + `synchronous=NORMAL`（commit 免逐次 fsync）、枚举降级 memo、行反序列化列集合复用、首访访问计数挂账 + search 尾单事务批量落库、search 审计 INSERT 合并进同一 commit。v5.6.3 节流契约与 v5.5.4 recently_accessed 语义由 23 项契约测试钉住全绿；合规类审计仍即时落盘。
+- **v6.4.1 — 百万字毫秒级检索**（2026-11-09）。规模化基准（8000 条 / 98.7 万字）揪出 fuzzy 兜底长尾（search p95 881ms）——SequenceMatcher 数学剪枝 + SQLite 层候选集预筛，**p95 881→30.7ms（28×）**，add p50 2.6ms 万条不退化。`scripts/bench_scale.py` + CI 规模守卫。
 - **v6.3.5 — 记忆压缩与自适应上下文**（2026-11-07）。两项新能力：MemoryCompressor 聚类近重复记忆（TF-IDF 余弦）并替换为可检索的摘要，`decompress` 一步还原——已压缩源在全部检索路径不再独立出现；STRICT 隐私记忆永不参与。AdaptiveContextEngine 按会话查询模式动态调整相关度阈值（探索模式降低、聚焦模式升高、恒有界）。门面方法 + CLI 四命令（`compress` / `compress-list` / `decompress` / `adaptive-search`）。同版修复压缩写路径草稿的五项集成缺陷（裸 SQL 绕过 FTS/嵌入/审计，含加密库明文直插安全缺陷）与关键词检索除零。
 - **v6.3.2 — 可解释性全接口对齐**（2026-11-06）。检索得分分解从 CLI/Python 门面扩展到全部三层接口：MCP `memory_search` 新增 `explain` 参数、REST `/api/search` 支持 `?explain=1`——每条结果的四路召回分、胜出路径、融合明细随处可得；不请求时零开销且响应与旧版逐字节一致。
 - **v6.3.1 — 加密系统升级：scrypt KDF**（2026-11-06）。默认密钥派生从 PBKDF2 升级为 scrypt（N=2^16, r=8, p=1，64 MiB 内存墙）：GPU/ASIC 无法再并行离线暴破，单次派生约 0.3s。新密钥文件与加密导出默认 scrypt；全部历史密钥文件（PBKDF2 600k / 60k / 极旧格式）解密兼容不变，`rekey` 一步迁移存量库。同版修复 P0：门面 `rekey()` 自 v5.8.13 起因死导入路径不可用；cryptography 升至 ≥50.0.2。

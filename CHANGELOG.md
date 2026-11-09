@@ -3,6 +3,42 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.4.2] - 2026-11-09
+
+万字级延迟压深版。目标：几万字库 search 延迟向 1ms 逼近。同机 A/B
+实测（400 条 / 4.7 万字，各 3 轮取中位，bench_scale.py）：
+**search p50 6.3→3.0ms（2.1×）、p95 11.7→4.2ms（2.8×）**；2.4 万字
+小库 p50 2.5ms；机器快态（IO 冷缓存刷净后）p50 1.8ms。add 全程无
+退化。剩余 ~2.5ms 为每查询固定开销（7.5 次 SQL 往返 + 行反序列化 +
+TF-IDF/FTS 打分本体），压入 1ms 属 v6.5 架构活（结果缓存/SQL 合并）。
+手段（五刀，全部幂等可回退）：
+
+- **WAL + synchronous=NORMAL**（SQLite 官方推荐组合）：commit 免逐次
+  fsync，checkpoint 统一刷盘。进程崩溃不丢事务；仅主机掉电可能丢未
+  checkpoint 的访问计数/search 审计（均非合规数据，与 v5.6.3 挂账
+  哲学一致）。
+- **枚举降级 memo**（`_ENUM_DOWNGRADE_MEMO`）：行反序列化每行 4 次
+  枚举逐值匹配 → dict 命中。值域天然有界（成员数 × 类数）；Enum
+  单例不可变共享安全；跨模块路径同名类身份不同，key 天然隔离。
+- **`_row_to_entry` 列集合复用**：每行 5 次 `row.keys()` 分配 + 线性
+  `in` 扫描 → 单次 set 构造。
+- **首访访问计数挂账 + search 尾批量 flush**（`get_memory(_batch_access)`
+  分流）：批量检索上下文首访只挂账，QueryEngine.search 尾部
+  `flush_access()` 单事务 executemany 统一落库；直连 `get_memory`/
+  `mf.get()` 首访仍立即落库——**v5.6.3 节流契约与 v5.5.4
+  recently_accessed 排序语义均保持**（测试钉住：23 项契约测试全绿）。
+- **search 审计 INSERT 合并进批量事务**：`record_search` 挂账
+  （`commit=False`，v5.6.0 既有机制），与 flush_access 的 UPDATE 同
+  一次 commit 提交。search 审计为非合规数据（v6.2.0 prune 同一分类），
+  崩溃丢失窗口 ≤ 单次 search 时长；合规类审计（写/删/导出）不受
+  影响仍即时 commit。
+
+全量 1224 项通过。排查（修 bug 面）：cProfile 三轮热点定位未发现存量
+功能 bug；分批 893 项 + 契约 53 项全绿。过程中发现 v6.4.2 开发自身
+引入的一处方法名笔误（`flush_all_access` → `flush_access`，AttributeError
+被兜底 except 静默吞掉导致 search 尾部批量落库从未执行）——已修复并
+将兜底语义收紧为显式调用。
+
 ## [6.4.1] - 2026-11-09
 
 百万字毫秒级检索修复版。规模化实测（8000 条 / 98.7 万字）发现 fuzzy

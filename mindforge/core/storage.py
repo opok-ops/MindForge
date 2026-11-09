@@ -694,6 +694,11 @@ class MemoryCache:
 
 
 # v5.6.3 性能修复：记忆读缓存 TTL（秒）。除写路径主动失效外的兜底，
+# v6.4.2 perf: 枚举降级 memo（行反序列化高频路径）。值域天然有界
+# （枚举成员数 × 类数）；Enum 单例不可变共享安全；跨模块路径加载的
+# 同名类副本身份不同，作为 dict key 天然隔离不串台。
+_ENUM_DOWNGRADE_MEMO: Dict[type, Dict[Any, Any]] = {}
+
 # 任何遗漏的写路径最多造成该窗口内的短时脏读，避免长期脏数据。
 _ENTRY_CACHE_TTL = 30.0
 
@@ -731,6 +736,8 @@ class StorageEngine:
         # v6.2.0 增长治理：搜索审计去抖状态（同词 60s 内只落一条）
         self._search_dedup_lock = threading.Lock()
         self._search_dedup: Dict[str, float] = {}
+        # v6.4.2 perf: search 审计挂账标记（INSERT 已进事务缓冲未 commit）
+        self._search_audit_dirty = False
         self._init_db()
 
     def _get_conn(self) -> sqlite3.Connection:
@@ -1168,7 +1175,23 @@ class StorageEngine:
         v5.5.4 fix: 兼容双重导入路径导致的枚举类不一致问题。
         当 isinstance() 因不同模块路径加载同名枚举而失败时，
         通过 .value / .name 属性匹配来识别。
+
+        v6.4.2 perf: str 输入路径先查 memo（命中即免逐值遍历匹配）；
+        key 含 default，不假设同一 value 恒定同一 default。
         """
+        if isinstance(value, str):
+            memo = _ENUM_DOWNGRADE_MEMO.setdefault(enum_cls, {})
+            hit = memo.get((value, default))
+            if hit is not None:
+                return hit
+            result = StorageEngine._downgrade_enum_slow(value, enum_cls, default)
+            memo[(value, default)] = result
+            return result
+        return StorageEngine._downgrade_enum_slow(value, enum_cls, default)
+
+    @staticmethod
+    def _downgrade_enum_slow(value: Any, enum_cls: type, default: Any) -> Any:
+        """未命中 memo 时的逐值匹配内核（原 _downgrade_enum 逻辑）。"""
         if isinstance(value, enum_cls):
             return value
         # 兼容双重导入：isinstance 失败但 value 有枚举属性时，用 .value 匹配
@@ -1345,7 +1368,8 @@ class StorageEngine:
         return entry
 
     def get_memory(self, memory_id: str,
-                   actor: str = "", session_id: str = "") -> Optional[MemoryEntry]:
+                   actor: str = "", session_id: str = "",
+                   _batch_access: bool = False) -> Optional[MemoryEntry]:
         """获取记忆
 
         v5.5.2: 自动过期检查——若 expires_at > 0 且已过期，自动移入回收站并返回 None。
@@ -1433,7 +1457,8 @@ class StorageEngine:
                 return entry
             return None
 
-        self._update_access(entry, actor, session_id)
+        self._update_access(entry, actor, session_id,
+                            _batch=_batch_access)
         return entry
 
     def get_memories_by_ids(self, memory_ids: List[str]) -> List[Optional[MemoryEntry]]:
@@ -7285,6 +7310,8 @@ class StorageEngine:
 
     def _row_to_entry(self, row: sqlite3.Row) -> MemoryEntry:
         # v5.3.7 修复：tags/metadata 可能已经是 list/dict（非 JSON 字符串）
+        # v6.4.2 perf: 一次构造列名集合，避免每行 5 次 row.keys() 分配 + 线性 in 扫描
+        _rk = set(row.keys())
         raw_tags = row["tags"]
         if isinstance(raw_tags, (list, tuple)):
             tags_val = list(raw_tags)
@@ -7324,11 +7351,11 @@ class StorageEngine:
             consolidation_count=row["consolidation_count"],
             forgetting_score=row["forgetting_score"],
             strength=row["strength"],
-            starred=bool(row["starred"]) if "starred" in row.keys() else False,
-            pinned=bool(row["pinned"]) if "pinned" in row.keys() else False,
-            expires_at=float(row["expires_at"]) if "expires_at" in row.keys() and row["expires_at"] else 0.0,
-            valid_from=float(row["valid_from"]) if "valid_from" in row.keys() and row["valid_from"] else 0.0,
-            valid_to=float(row["valid_to"]) if "valid_to" in row.keys() and row["valid_to"] else 0.0,
+            starred=bool(row["starred"]) if "starred" in _rk else False,
+            pinned=bool(row["pinned"]) if "pinned" in _rk else False,
+            expires_at=float(row["expires_at"]) if "expires_at" in _rk and row["expires_at"] else 0.0,
+            valid_from=float(row["valid_from"]) if "valid_from" in _rk and row["valid_from"] else 0.0,
+            valid_to=float(row["valid_to"]) if "valid_to" in _rk and row["valid_to"] else 0.0,
             metadata=meta_val,
             encrypted=bool(row["encrypted"]),
             ciphertext=row["ciphertext"],
@@ -7336,7 +7363,8 @@ class StorageEngine:
             salt=row["salt"],
         )
 
-    def _update_access(self, entry: MemoryEntry, actor: str, session_id: str):
+    def _update_access(self, entry: MemoryEntry, actor: str, session_id: str,
+                       _batch: bool = False):
         """更新访问计数
 
         v5.1.2：不再每次 get 都写审计日志。
@@ -7352,7 +7380,16 @@ class StorageEngine:
             self._access_pending[entry.id] = (
                 self._access_pending.get(entry.id, 0) + 1)
             last = self._access_last_flush.get(entry.id, 0.0)
-            if last > 0 and now - last < _ACCESS_PERSIST_INTERVAL:
+            if last == 0.0:
+                # v6.4.2 perf: 首访起表。批量检索上下文（_batch=True，如
+                # QueryEngine.search 的结果构建）首访只挂账，由调用方统一
+                # 批量落库（search 尾部 flush_all_access，单次 executemany
+                # + commit）；直连 get_memory 首访仍立即落库（v5.6.3 契约）。
+                self._access_last_flush[entry.id] = now
+                if _batch:
+                    self._maybe_prune_access_locked(now)
+                    return
+            elif now - last < _ACCESS_PERSIST_INTERVAL:
                 self._maybe_prune_access_locked(now)
                 return
             self._flush_access_locked(entry.id, now)
@@ -7420,8 +7457,10 @@ class StorageEngine:
         字典，计数不丢。
         """
         with self._access_lock:
-            if not self._access_pending:
+            audit_dirty = self._search_audit_dirty
+            if not self._access_pending and not audit_dirty:
                 return
+            self._search_audit_dirty = False
             now = time.time()
             pending = self._access_pending
             self._access_pending = {}
@@ -7429,10 +7468,12 @@ class StorageEngine:
         items = [(inc, now, mid) for mid, inc in pending.items()]
         conn = self._get_conn()
         try:
-            conn.executemany("""
-                UPDATE memories SET access_count = access_count + ?, last_accessed_at = ?
-                WHERE id = ?
-            """, items)
+            if items:
+                conn.executemany("""
+                    UPDATE memories SET access_count = access_count + ?, last_accessed_at = ?
+                    WHERE id = ?
+                """, items)
+            # v6.4.2 perf: 挂账的 search 审计 INSERT（若有）随本事务一并提交
             conn.commit()
         except Exception as e:
             with self._access_lock:
@@ -9248,8 +9289,14 @@ class StorageEngine:
             self._search_dedup_lock = threading.Lock()
             self._search_dedup = {}
         try:
+            # v6.4.2 perf: search 审计 INSERT 挂账不 commit，与下一次
+            # flush_access() 的批量 UPDATE 合并成同一次事务提交（IO 慢态
+            # 下 commit ~1ms，search 热路径 100 次 commit → 与挂账合并归零）。
+            # search 审计为非合规数据（v6.2.0 prune 同一分类），崩溃窗口
+            # ≤ 单次 search 时长，可接受；合规类审计不受影响仍即时 commit。
+            self._search_audit_dirty = True
             self._add_audit("search", q, "", "", "INTERNAL",
-                            {"query": q}, commit=True)
+                            {"query": q}, commit=False)
         except Exception as _err:
             logger.warning("record_search 审计写入失败: %s", _err)
 

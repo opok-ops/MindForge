@@ -380,7 +380,10 @@ class QueryEngine:
 
         def _cached_get(mid: str) -> Optional[Any]:
             if mid not in _entry_cache:
-                _entry_cache[mid] = self.storage.get_memory(mid)
+                # v6.4.2 perf: 批量检索上下文——首访访问计数走挂账，
+                # 由本 search 尾部的 flush_all_access 统一落库。
+                _entry_cache[mid] = self.storage.get_memory(
+                    mid, _batch_access=True)
             return _entry_cache[mid]
 
         # 预过滤：按 categories/layers 筛选 score_map，避免非匹配记忆占据排序位
@@ -469,6 +472,15 @@ class QueryEngine:
                 self.storage.record_search(query)
             except Exception:
                 pass
+
+        # v6.4.2 perf: 本轮 search 命中的首访访问计数 + 挂账的 search 审计
+        # 在此统一批量落库（executemany + 单次 commit，含审计 INSERT 合并）。
+        # 挂账期上限 = 单次 search 时长，recently_accessed 排序在 search
+        # 返回后即正确；同条记忆 60s 节流窗口内重复命中仍免落库（v5.6.3 契约）。
+        try:
+            self.storage.flush_access()
+        except Exception:
+            pass
 
         elapsed = (time.time() - start) * 1000
         token_estimate = sum(len(c.content) for c in chunks) // 4

@@ -3461,7 +3461,7 @@ def _install_shell_completion(shell: str):
         "agent-diff",
         "agent-purge",
         "drama-progress-update",
-        "drama-rec2",
+        "drama-smart-rec",
         "agent-timeline",
         "agent-heatmap",
         "drama-binge",
@@ -5021,7 +5021,11 @@ def main(argv=None):
         "--rating", "-r", type=float, help="用户评分（0-10）"
     )
 
-    p_drama_rec2 = sub.add_parser("drama-rec2", help="短剧智能推荐 v2（v5.3.2 新增）")
+    p_drama_rec2 = sub.add_parser(
+        "drama-smart-rec",
+        aliases=["drama-rec2"],
+        help="短剧智能推荐（状态感知；drama-rec2 为兼容别名）",
+    )
     p_drama_rec2.add_argument("--genre", "-g", help="类型过滤（ROMANCE/ACTION 等）")
     p_drama_rec2.add_argument(
         "--min-rating", "-r", type=float, default=0.0, help="最低评分（0-10）"
@@ -7332,6 +7336,7 @@ def _main_dispatch(args, parser=None):
         "agent-diff": cmd_agent_diff,
         "agent-purge": cmd_agent_purge,
         "drama-progress-update": cmd_drama_progress_update,
+        "drama-smart-rec": cmd_drama_rec2,
         "drama-rec2": cmd_drama_rec2,
         "agent-timeline": cmd_agent_timeline,
         "agent-heatmap": cmd_agent_heatmap,
@@ -10169,6 +10174,7 @@ def cmd_drama_list(args):
         )
         star = "⭐" if d.rating >= 8 else ""
         print(f"\n{i}. {star} {c(d.title, 'bold')} [{c(d.status.value, status_color)}]")
+        print(f"   ID: {d.id}")
         print(f"   类型: {d.genre.value} | 进度: {progress} | 评分: {d.rating}")
         if d.platform:
             print(f"   平台: {d.platform}")
@@ -10324,6 +10330,7 @@ def cmd_drama_recommend(args):
         for i, d in enumerate(recs, 1):
             star = "⭐" if d.rating >= 8 else ""
             print(f"\n{i}. {star} {c(d.title, 'bold')} [{d.genre.value}]")
+            print(f"   ID: {d.id}")
             print(f"   评分: {d.rating} | 类型: {d.genre.value}")
             if d.platform:
                 print(f"   平台: {d.platform}")
@@ -11801,9 +11808,9 @@ def cmd_drama_progress_update(args):
 
 
 def cmd_drama_rec2(args):
-    """短剧智能推荐 v2（v5.3.2 新增）"""
+    """短剧智能推荐（状态感知，原 drama-rec2）"""
     cm = _get_memory(args)
-    print(c("\n🎬 短剧智能推荐 v2（v5.3.2）", "bold"))
+    print(c("\n🎬 短剧智能推荐", "bold"))
     print("=" * 60)
     if args.genre:
         print(f"  类型:       {args.genre}")
@@ -11838,10 +11845,14 @@ def cmd_drama_rec2(args):
         ep_label = f"E{d['current_episode']}" if d["current_episode"] else "-"
         ur = f"{d['user_rating']}" if d["user_rating"] is not None else "-"
         ws = d["watch_status"] or "-"
+        genre_short = str(d["genre"]).split(".")[-1]
         print(
-            f"{i:<4}{d['title'][:18]:<20}{d['genre']:<10}{d['rating']:<8}"
+            f"{i:<4}{d['title'][:18]:<20}{genre_short:<10}{d['rating']:<8}"
             f"{ws:<12}{ep_label:<6}{ur:<6}"
         )
+    print(c("\nID 对照（drama-get / drama-progress-update 用）:", "cyan"))
+    for i, d in enumerate(results, 1):
+        print(f"  {i}. {d['title'][:18]:<20} {d['drama_id']}")
 
     cm.close()
     return 0

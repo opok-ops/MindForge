@@ -147,6 +147,9 @@ jobs:
       - name: Latency guard (engine in-process, p50/p95 thresholds)
         run: python scripts/bench_latency.py
 
+      - name: Scale guard (3000 memories / ~350k chars, millisecond search)
+        run: MF_SCALE_N=3000 python scripts/bench_scale.py
+
       - name: Daemon E2E guard (resident process, line-JSON protocol)
         run: python scripts/e2e_daemon.py
 

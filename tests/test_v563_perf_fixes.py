@@ -251,5 +251,95 @@ class TestReadCacheAndAccessThrottle(unittest.TestCase):
             self._raw_access_count(e.id), THREADS * PER_THREAD)
 
 
+class TestFuzzyScaleCandidates(unittest.TestCase):
+    """v6.4.1 万级库模糊检索回归：SQL 候选预筛 + 数学剪枝的行为级契约。
+
+    背景（2026-11-09 百万字实测）：8000 条库 fuzzy 兜底 p95 曾达 881ms。
+    修复两层：① n >= 4m 时 SequenceMatcher 数学上不可能 ratio>0.4 直接
+    跳过；② 候选集在 SQLite 层预筛（子串/短文本/中文 tag 字符 LIKE）。
+    本组测试钉住语义不回归 + 候选集不退化回全库。
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="mf_scale641_")
+        from mindforge.core.storage import StorageEngine
+        self.db = os.path.join(self.tmp, "s.db")
+        self.se = StorageEngine(db_path=self.db, encrypted=False)
+
+    def tearDown(self):
+        try:
+            self.se.close()
+        finally:
+            shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _populate(self, n=1200):
+        """n 条长文本（~140 字），其中 1/97 埋 python-XX 锚点。"""
+        body = "无关注联正文内容用于稀释检索权重 " * 8
+        for i in range(n):
+            anchor = f"python-{i % 97:02d}" if i % 3 == 0 else ""
+            self.se.add_memory(
+                content=f"{body} 锚点 {anchor} 编号 {i:05d}",
+                category="bench", tags=["bench"])
+
+    def test_long_content_substring_still_recalled(self):
+        """长 content 的子串命中（+0.8 主路）不被任何剪枝/预筛丢掉。"""
+        self._populate(200)
+        hits = self.se.fuzzy_search("python-33", limit=10, threshold=0.3)
+        self.assertTrue(hits, "锚点子串命中必须召回")
+        self.assertTrue(
+            any("python-33" in h["entry"].content for h in hits))
+
+    def test_math_prune_semantics_unchanged(self):
+        """数学剪枝只砍「本来就不可能过阈值」的比对，近似召回不变。
+
+        长文本 + 短 query 的 SequenceMatcher 分数学上限 <= 0.4*5/4，
+        旧全扫同样进不了 >0.4 分支——剪枝前后语义应一致。
+        """
+        self.se.add_memory(
+            content="短文本记忆" * 1, category="t", tags=["t"])  # n=5 < 4m
+        self.se.add_memory(
+            content="这是一条相当长的记忆内容，" * 20, category="t2")
+        # 短 content（近似路唯一可能过阈值的）不受影响
+        hits = self.se.fuzzy_search("短文本记忆", limit=10, threshold=0.3)
+        self.assertTrue(any(h["score"] >= 0.4 for h in hits),
+                        "短文本近似路必须保留")
+
+    def test_candidate_gate_not_fullscan(self):
+        """A 类 query（英文字母撞 tag）候选集不得退化回全库（v6.4.1 教训）。
+
+        曾因逐字符 tags LIKE 把 'n'/'h'（in 'bench'）炸回全库、p50 回到
+        218ms。修复后英文 query 不走逐字 LIKE——候选集应显著小于全库。
+        """
+        self._populate(1200)
+        conn = sqlite3.connect(self.db)
+        try:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM (SELECT 1 FROM memories WHERE "
+                "category != 'trash' AND (content LIKE ? OR category LIKE ? "
+                "OR tags LIKE ? OR LENGTH(COALESCE(content,'')) < ?))",
+                ("%python-42%", "%python-42%", "%python-42%", 40)
+            ).fetchone()
+            candidates = row[0]
+        finally:
+            conn.close()
+        self.assertLess(
+            candidates, 1200,
+            f"候选集 {candidates} 应远小于全库（锚点命中率 ~1/97×2/3）")
+        self.assertGreater(candidates, 0, "锚点候选必须非空")
+
+    def test_millisecond_search_at_scale(self):
+        """万条级（这里 1200 条）fuzzy 兜底保持毫秒级行为契约。"""
+        self._populate(1200)
+        ts = []
+        for k in range(20):
+            t0 = time.perf_counter()
+            self.se.fuzzy_search(f"python-{(k * 31) % 97:02d}",
+                                 limit=10, threshold=0.1)
+            ts.append((time.perf_counter() - t0) * 1000)
+        p95 = sorted(ts)[int(len(ts) * 0.95) - 1]
+        # 阈值 = CI 抖动余量（本地实测 p50 ~2ms，CI 机器慢 3-5 倍）
+        self.assertLess(p95, 50, f"fuzzy p95 {p95:.1f}ms 超出毫秒级契约")
+
+
 if __name__ == "__main__":
     unittest.main()

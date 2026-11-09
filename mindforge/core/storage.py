@@ -9034,8 +9034,37 @@ class StorageEngine:
         # v5.6.5 P2 #11：不再 fetchall 全表后一次性反序列化为 entries 列表
         # （万条以上时整行+全文同时驻留内存）。改为游标惰性生成，逐条
         # 反序列化并打分，仅保留过阈值结果，峰值内存与单行相当。
+        #
+        # v6.4.1 候选集 SQL 预筛：Python 逐条反序列化+打分在万条级的纯
+        # 开销约 50μs/条（百万字实测 8000 条 ≈ 400ms 白税）。此处在 SQLite
+        # 层收窄候选。等价性论证：
+        #   路1 子串（content/category/tags LIKE %q%）——精确等价
+        #   路2 content 近似（n < 4×len(q)，数学上唯一可能 ratio>0.4）
+        #     ——精确等价（见下方数学剪枝注释）
+        #   路3 词重叠（整词相等）与路2 tag 拼写容错（tag ratio>0.5 且无子
+        #     串）——词重叠归还 FTS5 路；tag 容错保真：ratio>0.5 必然与
+        #     query 共享字符，故「tags 与 query 共享任一字符」的条目全部
+        #     进候选（逐字 LIKE 全表 C 速度 ~2ms/字，限 query ≤ 16 字防
+        #     极端开销）。钉测：test_v563_perf_fixes.py::test_tag_fuzzy_match_kept。
+        # SQL 全表 LIKE 是 C 速度（万条 ~几 ms）。
+        conds = [
+            "content LIKE ?", "category LIKE ?", "tags LIKE ?",
+            "LENGTH(COALESCE(content, '')) < ?",
+        ]
+        params_or = [f"%{query_lower}%"] * 3 + [max(4 * len(query_lower), 8)]
+        if len(query_lower) <= 16:
+            # 只对中文字符逐字 LIKE：英文字母（26 个）遍布 tags（如 'n' in
+            # 'bench'），逐字条件会把候选集炸回全库（万条级实测 A 类 query
+            # p50 回到 218ms 的教训）。中文 3000 常用字分布稀疏，不撞车；
+            # 英文 tag 拼写容错由 FTS5 token 路（query.py 路3）覆盖。
+            for _ch in set(query_lower):
+                if "\u4e00" <= _ch <= "\u9fff":
+                    conds.append("tags LIKE ?")
+                    params_or.append(f"%{_ch}%")
+        cand_query = base_query + " AND (" + " OR ".join(conds) + ")"
+
         def _entry_iter():
-            for _r in conn.execute(base_query, params):
+            for _r in conn.execute(cand_query, params + params_or):
                 yield self._row_to_entry(_r)
         entries = _entry_iter()
 
@@ -9082,12 +9111,19 @@ class StorageEngine:
 
             # 2. SequenceMatcher 近似匹配（支持拼写纠错 / 近似词）
             if score < 0.8:
-                # 长文本剪枝：ratio = 2M/(m+n) > 0.4 要求 M > 0.2(m+n) 个匹配
-                # 字符。若与查询无任何共享 bigram 且共享单字不足 4 个，则
-                # M<=3，对 n > max(2m,12) 的长文本必有 2M/(m+n) <= 0.4，
-                # 不可能进入 >0.4 分支，直接跳过昂贵的序列比对。
+                # v6.4.1 终极剪枝（数学上限）：ratio = 2M/(m+n)，且 M <= m
+                # （匹配字符数不可能超过较短串长度）。因此当
+                # len(content) >= 4 * len(query) 时 ratio <= 2m/(5m) = 0.4，
+                # 永远不可能超过 0.4 门槛——直接跳过，无需任何比对。
+                # v5.6.3 的 bigram 剪枝对中文失效（高频单字随便共享 4 个），
+                # 万条级库曾因此整库白跑（百万字实测 p95 881ms 的根因）。
+                # 该剪枝对短 content（< 4×query 长度）不生效，语义无损。
                 run_content_seq = True
-                if len(content_lower) > max(2 * len(query_lower), 12):
+                if len(content_lower) >= 4 * len(query_lower) and len(query_lower) >= 2:
+                    run_content_seq = False
+                elif len(content_lower) > max(2 * len(query_lower), 12):
+                    # v5.6.3 保留：中长文本退回 bigram/单字门槛（此时数学
+                    # 上限未封死，近似匹配仍有可能过阈值）
                     if q_bigrams:
                         shared_singles = len(q_chars & set(content_lower))
                         run_content_seq = (

@@ -3,6 +3,27 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.4.1] - 2026-11-09
+
+百万字毫秒级检索修复版。规模化实测（8000 条 / 98.7 万字）发现 fuzzy
+兜底路严重长尾：search p95 881ms——根因两层：① SequenceMatcher 对
+「短 query vs 长文本」白跑（ratio = 2M/(m+n) 且 M ≤ m，n ≥ 4m 时
+数学上不可能超过 0.4 门槛，v5.6.3 剪枝对中文失效）；② Python 逐条
+反序列化+打分 ~50μs/条 的全库税。修复：
+
+- **数学上限剪枝**：content 长度 ≥ 4×query 时直接跳过 SequenceMatcher
+  （语义无损——该比对本来就不可能过阈值）；中长文本退回 bigram 门槛。
+- **SQLite 层候选集预筛**：子串 LIKE（content/category/tags）∪ 短文本
+  LENGTH 条件 ∪ 中文 tag 字符 LIKE（拼写容错保真，钉测
+  test_tag_fuzzy_match_kept）；词级召回归还 FTS5 路（消除重复劳动）；
+  英文 query 不走逐字 LIKE（字母撞 tag 曾把候选炸回全库、p50 回 218ms）。
+- **实测收益**：search p50 33.8→22.5ms，**p95 881→30.7ms（28×）**，
+  max 910→67ms；add p50 2.6ms 全程无退化（万条级写入稳定）。
+- **守卫固化**：scripts/bench_scale.py 入库（MF_SCALE_N 环境变量控
+  规模，CI 3000 条档），CI 新增 Scale guard 步骤（search p95 < 150ms
+  契约）；新增 4 项行为级回归测试（子串召回/近似语义/候选集不退化/
+  毫秒级契约），全量 1224 项通过（1219+4 passed、1 skipped）。
+
 ## [6.4.0] - 2026-11-08
 
 常驻守护进程（daemon）与 CI 性能守护版。延迟实测（2026-11-08）：

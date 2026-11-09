@@ -6,11 +6,11 @@
 
 MindForge gives AI agents a persistent, structured long-term memory: a four-tier lifecycle model, knowledge graphs, hybrid retrieval, end-to-end encryption, and MCP / CLI / REST interfaces. All data stays on your machine.
 
-> **The story** — one developer, seven months, from v1.0 (March 2026) to v6.4.0: no team, no funding, 1,220 passing tests. [Read the journey →](https://opok-ops.github.io/MindForge/#developer)
+> **The story** — one developer, seven months, from v1.0 (March 2026) to v6.4.1: no team, no funding, 1,220 passing tests. [Read the journey →](https://opok-ops.github.io/MindForge/#developer)
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-6.4.0-green.svg)](https://github.com/opok-ops/MindForge/releases)
+[![Version](https://img.shields.io/badge/version-6.4.1-green.svg)](https://github.com/opok-ops/MindForge/releases)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
 [![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
@@ -66,7 +66,9 @@ MindForge stats
 
 ## What's New
 
-v6.1.3 – v6.4.0 shipped in seven days (2026-11-01 → 11-07), guarded by **1,220 passing tests**.
+v6.1.3 – v6.4.1 shipped in nine days (2026-11-01 → 11-09), guarded by **1,224 tests** (1219+4 passed, 1 skipped).
+
+- **v6.4.1 — million-character millisecond search** (2026-11-09). Scale benchmark (8,000 memories / ~990k chars) exposed a fuzzy-fallback long tail: search p95 881ms. Root causes: SequenceMatcher wasted on mathematically-impossible matches (ratio = 2M/(m+n), M ≤ m, so n ≥ 4m can never pass 0.4) + a ~50μs/entry Python full-scan tax. Fixed with a math-capped prune + SQLite-level candidate pre-filtering: **search p95 881→30.7ms (28×)**, add p50 2.6ms flat at 10k-scale. New `scripts/bench_scale.py` + CI scale guard (3000 memories, millisecond contract) + 4 behavior-level regression tests pin the semantics.
 
 - **v6.4.0 — resident daemon & performance guards** (2026-11-08). New `mindforge daemon` subcommand: line-JSON over stdio, engine resident in a long-lived process — per-request p50 2.5ms vs 400–700ms for CLI subprocess spawning (two orders of magnitude; 2026-11-09 quiet-machine re-bench: 2.5ms vs 401ms p50, ~160×). CI now guards latency (engine in-process thresholds) and daemon 13-step E2E alongside the 16-step CLI E2E guard.
 - **v6.3.6 — E2E-verified fixes** (2026-11-07). Found by real-bridge E2E testing of dsh-mindforge v3.0: compression TF-IDF index was never hydrated on real stores (`compress` always reported 0 clusters — now hydrated from storage), four v6.3.5 commands ignored `--json` (fixed), `adaptive_search` leaked `session_id` into privacy access control (INTERNAL memories always rejected — permanently empty results, now separated), and `key_file=""` misdetected as encryption. Tests 1210 → 1219.
@@ -133,7 +135,7 @@ v6.1.3 – v6.4.0 shipped in seven days (2026-11-01 → 11-07), guarded by **1,2
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│           MindForge v6.4.0            │
+│           MindForge v6.4.1            │
 │  Cognitive Layer  Personality · KnowledgeGraph       │
 │                   MemoryEvolution · FederatedMemory  │
 ├──────────────────────────────────────────────────────┤

@@ -757,6 +757,15 @@ class StorageEngine:
                 conn.execute("PRAGMA journal_mode=DELETE")
             else:
                 conn.execute("PRAGMA journal_mode=WAL")
+                # v6.4.3 fix: WAL 配套 synchronous=NORMAL（SQLite 官方推荐
+                # 组合）。v6.4.2 文档宣称了该优化但代码从未落地——本补丁
+                # 将其补齐：WAL+NORMAL 下 commit 免逐次 fsync，挂账批量
+                # 落库（search 尾事务）不再付 fsync 代价。
+                # 注意：synchronous 是 per-connection 参数，必须在每个
+                # 新连接创建时设置，仅在 WAL 分支生效；网络 FS 降级
+                # DELETE journal 的分支维持默认 FULL（远程盘耐久性语义
+                # 从严，不做削弱）。
+                conn.execute("PRAGMA synchronous=NORMAL")
             conn.execute("PRAGMA foreign_keys=ON")
             conn.execute("PRAGMA busy_timeout=5000")
             self._conn_local.conn = conn

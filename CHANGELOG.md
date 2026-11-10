@@ -3,6 +3,32 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.4.3] - 2026-11-10
+
+文档-代码一致性修复版：v6.4.2 宣称的「WAL + synchronous=NORMAL」
+从未落地，本版补齐。
+
+- **问题**（发版前全仓审计发现）：v6.4.2 的 CHANGELOG / README /
+  官网与 commit message 均宣称五刀第一刀「WAL +
+  synchronous=NORMAL（commit 免逐次 fsync）」已上线；实测
+  `_get_conn()` 仅设置 `journal_mode=WAL`（v5.5.7 起即有），
+  `synchronous` 维持 SQLite 默认 FULL——**该优化只存在于文档里**。
+  v6.4.2 实测的 search 2.1× 由其余四刀独立达成：延迟数字真实、
+  归因失真。
+- **修复**：WAL 分支补 `PRAGMA synchronous=NORMAL`。synchronous 是
+  per-connection 参数，已在每连接创建点设置；网络 FS 降级 DELETE
+  journal 的分支维持默认 FULL（远程盘耐久性语义从严，不做削弱）。
+- **实测**（A/B 同机同时段，400 条 / 4.7 万字，各 3 轮取中位）：
+  search p50 1.8 → 1.8ms、add p50 0.4 → 0.4ms——SSD 快态下无统计
+  显著差异（fsync 开销 ~0.1ms 量级，叠入 search 尾单事务不显著）。
+  收益面在慢盘 / 高 IO 负载容器环境；更核心的是语义兑现：v6.4.2
+  文档声明的掉电窗口（未 checkpoint 的访问计数 / search 审计可能
+  丢失，进程崩溃不丢事务，合规类审计仍即时落盘）自此真实成立。
+- **守卫**：`tests/test_v643_fixes.py` 4 项——WAL 分支
+  `synchronous==1`、`journal_mode==wal`、跨线程新连接同样 NORMAL
+  （REST / daemon 多线程场景防静默回退）、版本钉值。
+  全量 **1228** 项通过（1227 passed + 1 环境性 skipped）。
+
 ## [6.4.2] - 2026-11-09
 
 万字级延迟压深版。目标：几万字库 search 延迟向 1ms 逼近。同机 A/B

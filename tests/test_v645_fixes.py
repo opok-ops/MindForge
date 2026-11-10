@@ -100,8 +100,8 @@ class TestWebsiteModuleCountTruth(unittest.TestCase):
 class TestVersionBump(unittest.TestCase):
     """版本钉值：忘记 bump 时在此显形。"""
 
-    def test_version_is_645(self):
-        self.assertEqual(__version__, "6.4.5")
+    def test_version_is_current(self):
+        self.assertEqual(__version__, "6.4.6")
 
 
 if __name__ == "__main__":

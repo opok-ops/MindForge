@@ -3,6 +3,7 @@ MindForge v5.0 索引引擎
 支持 TF-IDF、向量索引、FTS5 全文检索
 """
 
+import heapq
 import math
 import os
 import re
@@ -151,17 +152,35 @@ class VectorIndex:
         if query_norm == 0:
             return [(doc_id, 0.0) for doc_id in list(self.vectors.keys())[:top_k]]
 
+        # v6.4.6 perf: 低区分度查询维剪枝。100k 规模压测发现中文长查询
+        # p50 421ms，profile 定位到常见词（如「条目/陈述性/记忆」）的倒排
+        # 链全量遍历。两层剪枝：eps 相对阈值 + max_df 停用词（df > 0.5×N
+        # 的维是平滑 IDF 下 qval≈tf×1 的全库词——遍历整条链却无区分度，
+        # 所有文档点积同加近似常数，top-K 排序不变；30k profile 实证
+        # eps 剪不掉全库词，必须按链长剪）。
+        _EPS_REL = 0.02
+        _half = 0.5 * len(self.vectors)
+        active = [(idx, qval) for idx, qval in q.items()
+                  if qval > _EPS_REL * query_norm
+                  and len(self._postings.get(idx, ())) <= _half]
+        if not active:
+            # 全部维度被剪（极端退化查询）：退回原语义，保证不空召回
+            active = list(q.items())
+
         # 倒排链累加点积：只访问与查询共享非零维度的候选文档
         dots: Dict[str, float] = {}
-        for idx, qval in q.items():
+        for idx, qval in active:
             for doc_id, dval in self._postings.get(idx, {}).items():
                 dots[doc_id] = dots.get(doc_id, 0.0) + qval * dval
 
-        scores = [(doc_id, dot / (query_norm * self._norms[doc_id]))
-                  for doc_id, dot in dots.items()
-                  if self._norms.get(doc_id, 0.0) > 0]
-        scores.sort(key=lambda x: x[1], reverse=True)
-        return scores[:top_k]
+        # v6.4.6 perf: heapq.nlargest 替代全量 sort——候选集大时
+        # O(n·log k) 优于 O(n·log n)，且免建全量列表排序的中间开销。
+        return heapq.nlargest(
+            top_k,
+            ((doc_id, dot / (query_norm * self._norms[doc_id]))
+             for doc_id, dot in dots.items()
+             if self._norms.get(doc_id, 0.0) > 0),
+            key=lambda x: x[1])
 
     def _cosine(self, v1, v2) -> float:
         """保留原始接口（向后兼容），稀疏/稠密输入均支持"""

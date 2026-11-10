@@ -2959,6 +2959,20 @@ class StorageEngine:
         return len(ids)
 
     @_with_rollback
+    def is_in_trash(self, entry_id: str) -> bool:
+        """v6.4.6: 判定条目是否处于回收站（软删态）。
+
+        服务 delete(hard_delete=True) 的数据主权路径：get_memory 过滤
+        trash 条目（WHERE category != 'trash'），上层 None 分支需要此
+        轻量查询放行物理清除。幂等，只读，不产生任何写副作用。
+        """
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT 1 FROM memories WHERE id = ? AND category = 'trash'",
+            (entry_id,),
+        ).fetchone()
+        return row is not None
+
     def delete_memory(self, entry_id: str,
                       actor: str = "", session_id: str = "",
                       hard_delete: bool = False) -> bool:

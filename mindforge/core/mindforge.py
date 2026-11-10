@@ -1230,6 +1230,20 @@ class MindForge:
         # v5.6.2 安全修复：隐私访问控制
         entry = self._storage.get_memory(memory_id, actor, session_id)
         if entry is None:
+            # v6.4.6 fix: 硬删已软删（trash）条目的数据主权路径。get_memory
+            # 过滤 trash 条目，此前 delete(hard_delete=True) 对回收站内容
+            # 静默返回 False（CLI 显示「记忆不存在」，误导用户以为已彻底
+            # 清除，物理数据实际仍在库中）。GDPR erase 语义（storage 权利
+            # 清单 2122 行）要求：能软删活条目，就必须能物理清除其 trash
+            # 态。隐私读检查不适用此分支——内容已在 trash，仅物理清除；
+            # storage.delete_memory 自带审计写入（v5.6.1 同事务）。
+            if hard_delete:
+                if self._storage.is_in_trash(memory_id):
+                    success = self._storage.delete_memory(
+                        memory_id, actor, session_id, hard_delete=True)
+                    if success:
+                        self._index.remove_memory(memory_id)
+                    return success
             return False
         ok, _reason = self.privacy_engine.check_access(entry, actor, session_id)
         if not ok:

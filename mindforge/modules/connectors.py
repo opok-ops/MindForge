@@ -18,6 +18,10 @@ import ipaddress
 import ssl
 import urllib.parse
 import urllib.request
+
+# v6.4.5: User-Agent 版本动态化（唯一真值 mindforge/core/version.py）。
+# version.py 仅依赖 typing，无循环导入风险。
+from mindforge.core.version import __version__
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Type
 
@@ -308,7 +312,11 @@ class UrlConnector(BaseConnector):
             _FixedIPHTTPSHandler(fixed_ip),
         )
         req = urllib.request.Request(
-            source, headers={"User-Agent": "MindForge-Connector/5.8.9"})
+            # v6.4.5 fix: 此前硬编码 "MindForge-Connector/5.8.9"（5.8.9 时代
+            # 写死后再未跟上），对外请求谎报版本。改为动态引用唯一真值
+            # mindforge/core/version.py（与 event_bus.py / cli URL Importer
+            # 同款模式，v5.6.8 起已验证）。
+            source, headers={"User-Agent": f"MindForge-Connector/{__version__}"})
         with opener.open(req, timeout=kwargs.get("timeout", 15)) as resp:
             content_type = resp.headers.get("Content-Type", "")
             data = _read_limited(resp)

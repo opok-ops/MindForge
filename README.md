@@ -6,11 +6,11 @@
 
 MindForge gives AI agents a persistent, structured long-term memory: a four-tier lifecycle model, knowledge graphs, hybrid retrieval, end-to-end encryption, and MCP / CLI / REST interfaces. All data stays on your machine.
 
-> **The story** — one developer, seven months, from v1.0 (March 2026) to v6.4.3: no team, no funding, 1,227 passing tests. [Read the journey →](https://opok-ops.github.io/MindForge/#developer)
+> **The story** — one developer, seven months, from v1.0 (March 2026) to v6.4.5: no team, no funding, 1,232 passing tests. [Read the journey →](https://opok-ops.github.io/MindForge/#developer)
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-6.4.3-green.svg)](https://github.com/opok-ops/MindForge/releases)
+[![Version](https://img.shields.io/badge/version-6.4.5-green.svg)](https://github.com/opok-ops/MindForge/releases)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
 [![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
@@ -66,8 +66,9 @@ MindForge stats
 
 ## What's New
 
-v6.1.3 – v6.4.3 shipped in ten days (2026-11-01 → 11-10), guarded by **1,228 tests** (1,227 passing, 1 environment-skipped).
+v6.1.3 – v6.4.5 shipped in ten days (2026-11-01 → 11-10; two same-day releases), guarded by **1,233 tests** (1,232 passing, 1 environment-skipped).
 
+- **v6.4.5 — audit-driven fixes** (2026-11-10; v6.4.4 skipped by maintainer decision). Two inverse doc-code inconsistencies (v6.4.3 fixed "claimed but not done"; this one fixes "done but not tracked"): `connectors.py` outgoing HTTP User-Agent was hardcoded `MindForge-Connector/5.8.9` — lying about the version to every target site since the 5.8.9 era (`event_bus.py` fixed the same disease in v5.6.8; this one slipped through). Now dynamic from the single version truth. Website "core modules" count was stale (17 in prose, 15 in stat card, 31 measured) — both fixed to the measured 31; MCP tool count 87 verified exact, untouched. Audit archive (not a defect): WAL auto-checkpoint verified healthy under daemon-like load — 4 rounds × 400 mixed ops, WAL converged at ~4.1MB (default 1000-page threshold), TRUNCATE resets to zero. 5 new guards in `tests/test_v645_fixes.py`.
 - **v6.4.3 — documentation-code consistency fix** (2026-11-10). Pre-release audit found that v6.4.2's claimed first cut — WAL + `synchronous=NORMAL` — **never landed in code**: `_get_conn()` set only `journal_mode=WAL`, leaving `synchronous` at SQLite's default FULL. The 2.1× search gain was real, but carried entirely by the other four cuts — real numbers, misattributed cause. This release adds `PRAGMA synchronous=NORMAL` on the WAL branch (per-connection, cross-thread; network-FS DELETE fallback stays FULL by design). Same-machine A/B on SSD shows no statistically significant latency delta (search p50 1.8 → 1.8ms — fsync is ~0.1ms-scale here); the benefit targets slow disks and IO-saturated containers, and more importantly makes the documented power-loss semantics (un-checkpointed access counts / search audits may be lost; compliance audits still commit immediately) actually hold. 4 new guard tests in `tests/test_v643_fixes.py`.
 - **v6.4.2 — tens-of-thousands-chars latency: another 2×** (2026-11-09). Same-machine A/B benchmark (400 memories / ~47k chars, 3 runs each): **search p50 6.3→3.0ms (2.1×), p95 11.7→4.2ms (2.8×)**; 24k-char library p50 2.5ms; fast machine state 1.8ms. Five surgical cuts: WAL + `synchronous=NORMAL` (commits skip per-write fsync), enum-downgrade memo, `row.keys()` set reuse, first-visit access-count batching merged into one `flush_access()` transaction per search, and search-audit INSERT folded into the same commit. The v5.6.3 throttle contract and v5.5.4 `recently_accessed` semantics are pinned by 23 contract tests — all green. Compliance-grade audits still commit immediately. *(Note: the `synchronous=NORMAL` cut landed in v6.4.3 — see above.)*
 - **v6.4.1 — million-character millisecond search** (2026-11-09). Scale benchmark (8,000 memories / ~990k chars) exposed a fuzzy-fallback long tail: search p95 881ms. Root causes: SequenceMatcher wasted on mathematically-impossible matches (ratio = 2M/(m+n), M ≤ m, so n ≥ 4m can never pass 0.4) + a ~50μs/entry Python full-scan tax. Fixed with a math-capped prune + SQLite-level candidate pre-filtering: **search p95 881→30.7ms (28×)**, add p50 2.6ms flat at 10k-scale. New `scripts/bench_scale.py` + CI scale guard (3000 memories, millisecond contract) + 4 behavior-level regression tests pin the semantics.
@@ -137,7 +138,7 @@ v6.1.3 – v6.4.3 shipped in ten days (2026-11-01 → 11-10), guarded by **1,228
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│           MindForge v6.4.3            │
+│           MindForge v6.4.5            │
 │  Cognitive Layer  Personality · KnowledgeGraph       │
 │                   MemoryEvolution · FederatedMemory  │
 ├──────────────────────────────────────────────────────┤

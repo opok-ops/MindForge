@@ -6,11 +6,11 @@
 
 MindForge 为 AI Agent 提供持久、结构化的长期记忆：四层记忆生命周期、知识图谱、混合检索、端到端加密，以及 MCP / CLI / REST 统一接口。所有数据运行并存储在本机。
 
-> **开发历程** — 一个人，七个多月，从 v1.0（2026 年 3 月）到 v6.4.3：没有团队，没有融资，1227 项测试通过（1228 项中 1 项随环境跳过）。[读完整故事 →](https://opok-ops.github.io/MindForge/#developer)
+> **开发历程** — 一个人，七个多月，从 v1.0（2026 年 3 月）到 v6.4.5：没有团队，没有融资，1232 项测试通过（1233 项中 1 项随环境跳过）。[读完整故事 →](https://opok-ops.github.io/MindForge/#developer)
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-6.4.3-green.svg)](https://github.com/opok-ops/MindForge/releases)
+[![Version](https://img.shields.io/badge/version-6.4.5-green.svg)](https://github.com/opok-ops/MindForge/releases)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
 [![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
@@ -66,8 +66,9 @@ MindForge stats
 
 ## 最新动态
 
-v6.1.3 – v6.4.3 连发（2026-11-01 → 11-10），由 **1228 项测试**（1227 通过 + 1 环境性跳过）护航。
+v6.1.3 – v6.4.5 连发（2026-11-01 → 11-10，同日双发两版），由 **1233 项测试**（1232 通过 + 1 环境性跳过）护航。
 
+- **v6.4.5 — 审计驱动修复**（2026-11-10；6.4.4 经维护者决策跳过）。两类「文档-代码反向不一致」——v6.4.3 修的是「宣称了没做」，本版修的是「做了没跟上」：`connectors.py` 对外请求 UA 硬编码 `MindForge-Connector/5.8.9`，5.8.9 时代起一直向目标站点谎报版本（`event_bus.py` v5.6.8 修过同款病，此处漏网）——改为动态引用版本唯一真值。官网「核心模块」数过时（正文 17 / 统计卡 15 / 实测 31）——统一修正为实测 31；MCP 工具数 87 实测精确，不动。审计存档（非缺陷）：WAL auto-checkpoint 在 daemon 级负载下验证健康——四轮 × 400 次混合操作 WAL 稳定收敛 ~4.1MB（默认 1000 页阈值）无无限膨胀，TRUNCATE 归零。新增 5 项守卫（`tests/test_v645_fixes.py`）。
 - **v6.4.3 — 文档-代码一致性修复**（2026-11-10）。发版前全仓审计发现：v6.4.2 宣称的五刀第一刀「WAL + `synchronous=NORMAL`」**从未落地**——`_get_conn()` 只设了 `journal_mode=WAL`（v5.5.7 起即有），`synchronous` 维持 SQLite 默认 FULL。实测 2.1× 的检索收益**真实、但由其余四刀独立扛下**——数字真实、归因失真。本版补齐：WAL 分支加 `PRAGMA synchronous=NORMAL`（per-connection、跨线程生效；网络 FS 降级 DELETE 分支维持 FULL 从严）。SSD 同机 A/B（400 条 / 4.7 万字，各 3 轮中位）：search p50 1.8→1.8ms——**无统计显著差异**（fsync 本机 ~0.1ms 量级），收益面在慢盘 / 高 IO 容器；更核心的是兑现语义：v6.4.2 文档声明的掉电窗口（未 checkpoint 的访问计数 / search 审计可能丢、进程崩溃不丢事务、合规审计仍即时落盘）自此真实成立。新增 4 项守卫测试（`tests/test_v643_fixes.py`）。
 - **v6.4.2 — 万字级延迟再压 2 倍**（2026-11-09）。同机 A/B 实测（400 条 / 4.7 万字，各 3 轮取中位）：**search p50 6.3→3.0ms（2.1×）、p95 11.7→4.2ms（2.8×）**；2.4 万字库 p50 2.5ms，快态 1.8ms；add 全程无退化。五刀：WAL + `synchronous=NORMAL`（commit 免逐次 fsync）、枚举降级 memo、行反序列化列集合复用、首访访问计数挂账 + search 尾单事务批量落库、search 审计 INSERT 合并进同一 commit。v5.6.3 节流契约与 v5.5.4 recently_accessed 语义由 23 项契约测试钉住全绿；合规类审计仍即时落盘。*（勘误：其中 synchronous=NORMAL 一刀实际在 v6.4.3 落地，见上条。）*
 - **v6.4.1 — 百万字毫秒级检索**（2026-11-09）。规模化基准（8000 条 / 98.7 万字）揪出 fuzzy 兜底长尾（search p95 881ms）——SequenceMatcher 数学剪枝 + SQLite 层候选集预筛，**p95 881→30.7ms（28×）**，add p50 2.6ms 万条不退化。`scripts/bench_scale.py` + CI 规模守卫。

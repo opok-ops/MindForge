@@ -89,10 +89,12 @@ class TestSynchronousNormalGuard(_WALCase):
 
 
 class TestVersionBump(unittest.TestCase):
-    """版本钉值：忘记 bump 时在此显形（与 v568/v575/v612 守卫同一约定）。"""
+    """版本钉值：忘记 bump 时在此显形（与 v568/v575/v612 守卫同一约定）。
+    v6.4.5 教训：每版 fixes 文件的版本断言在后续发版都要一并 bump——
+    钉点集合随版本数递增，发版链清单必须扫全部 test_v*fixes.py。"""
 
-    def test_version_is_643(self):
-        self.assertEqual(__version__, "6.4.3")
+    def test_version_is_current(self):
+        self.assertEqual(__version__, "6.4.5")
 
 
 if __name__ == "__main__":

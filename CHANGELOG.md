@@ -3,6 +3,30 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.4.5] - 2026-11-10
+
+审计驱动修复版（同日第二发；版本号 6.4.4 经维护者决策跳过，无对应
+发布）。发版前全仓审计两类「文档-代码反向不一致」——v6.4.3 修的是
+「宣称了没做」，本版修的是「做了没跟上」：
+
+- **User-Agent 版本谎报（P1）**：`connectors.py` 对外 HTTP 请求的
+  UA 硬编码 `MindForge-Connector/5.8.9`——5.8.9 时代写死后 20+
+  个版本未跟上，一直在向目标站点谎报版本。`event_bus.py` 曾在
+  v5.6.8 修过同款病（当时硬编码 5.4.9），此处漏网。修复：动态
+  引用 `mindforge/core/version.py` 唯一真值（与 event_bus / CLI
+  URL Importer 同款已验证模式）。
+- **官网「核心模块」数过时（P2）**：正文 17 / 统计卡 15 互相矛盾，
+  实测 `mindforge/modules/` 为 31 个模块文件。两处统一修正为 31；
+  MCP 工具数 87 经 import 实测精确无误，不动。
+- **审计存档（非缺陷）**：WAL auto-checkpoint 行为验证——四轮 ×
+  400 次混合操作（add + search），WAL 稳定收敛于 ~4.1MB（默认
+  1000 页阈值）无无限膨胀；主动 `wal_checkpoint(TRUNCATE)` 归零。
+  v6.4.3 的 synchronous=NORMAL 在 daemon 长连接场景健康。
+- **守卫**：`tests/test_v645_fixes.py` 5 项——UA 动态形态 + 全包
+  运行时标识扫描（防再硬编码）、官网模块数 = modules/ 实测钉值、
+  官网 MCP 工具数 = TOOL_SCHEMAS 实测、版本钉值。
+  全量 **1233** 项通过（1232 passed + 1 环境性 skipped）。
+
 ## [6.4.3] - 2026-11-10
 
 文档-代码一致性修复版：v6.4.2 宣称的「WAL + synchronous=NORMAL」

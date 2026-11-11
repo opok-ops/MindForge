@@ -6,11 +6,11 @@
 
 MindForge gives AI agents a persistent, structured long-term memory: a four-tier lifecycle model, knowledge graphs, hybrid retrieval, end-to-end encryption, and MCP / CLI / REST interfaces. All data stays on your machine.
 
-> **The story** — one developer, seven months, from v1.0 (March 2026) to v6.4.5: no team, no funding, 1,243 passing tests. [Read the journey →](https://opok-ops.github.io/MindForge/#developer)
+> **The story** — one developer, seven months, from v1.0 (March 2026) to v6.4.8: no team, no funding, 1,252 passing tests. [Read the journey →](https://opok-ops.github.io/MindForge/#developer)
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-6.4.6-green.svg)](https://github.com/opok-ops/MindForge/releases)
+[![Version](https://img.shields.io/badge/version-6.4.8-green.svg)](https://github.com/opok-ops/MindForge/releases)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
 [![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
@@ -65,22 +65,25 @@ MindForge stats
 ```
 
 
-## Scale & Quality Benchmarks (v6.4.6, measured)
+## Scale & Quality Benchmarks (v6.4.8, measured)
 
-| Scale | add throughput | search p50 (rare token) | search p50 (realistic mixed) | db size |
-|---|---|---|---|---|
-| 200 entries (baseline) | — | 1.8 ms | — | <1 MB |
-| 10,000 | 1,080/s | ~9.5 ms | ~16 ms | 10 MB |
-| 100,000 | ~558/s | 7.4 ms | 143 ms | 98 MB |
+| Scale | add throughput | search p50 (rare token) | search p50 (realistic mixed) | search p50 (pathological all-common) | db size |
+|---|---|---|---|---|---|
+| 200 entries (baseline) | — | 1.8 ms | — | — | <1 MB |
+| 10,000 | 1,080/s | ~9.5 ms | ~16 ms | — | 10 MB |
+| 100,000 | ~582/s | 6.8 ms | 135 ms | 122 ms (−44%) | 98 MB |
 
+- Pathological queries (all-common words, synthetic template data): engine-level steady-state **4.0ms at 30k** (was 3825ms, −99.9%) — inverted-index fallback is now shortest-chain-first with a hard traversal budget; the remaining 100k cost is FTS5 high-frequency-phrase scoring (v6.5 target, honestly documented).
+- **Index-blindness fix (v6.4.8)**: TF-IDF vocabulary was locked to the first 5 documents since v6.4.6 — incremental adds indexed as empty vectors (TF-IDF effectively half-dead; previous numbers carried by FTS5/fuzzy). Fixed with incremental vocabulary growth; all pipeline numbers above are now *true full-pipeline* measurements.
 - Retrieval quality (fixed-seed, `benchmarks/quality_bench.py`, 2k entries): needle Recall@1 = 1.0, MRR = 1.0, topic Recall@1 = 1.0, noise false-recall = 0.
-- Known characteristic: all-common-word queries on synthetic template data fall back to O(N) scan (documented, not a defect); realistic queries hit the pruned inverted index.
 - Full LLM-judged benchmarks (LoCoMo / LongMemEval) — interface ready, not yet run (requires external LLM API key).
 - TF-IDF degraded mode process memory at 100k: ~700 MB. Index LRU cap: 100,000 docs (MINDFORGE_INDEX_MAX_DOCS).
 
 ## What's New
 
-v6.1.3 – v6.4.5 shipped in ten days (2026-11-01 → 11-10; two same-day releases), guarded by **1,244 tests** (1,243 passing, 1 environment-skipped).
+v6.1.3 – v6.4.8 shipped in ten days (2026-11-01 → 11-11; three releases in the last two days), guarded by **1,253 tests** (1,252 passing, 1 environment-skipped).
+
+- **v6.4.8 — pathological query path & index-blindness fix: O(N) fallback eliminated, TF-IDF actually indexing** (2026-11-11). Two deeper findings beyond the v6.4.6 stress test: (1) the all-common-word fallback traversed *all* inverted chains at full length (O(N×dims), 209ms p50 at 100k), and the 0.5×N max_df threshold still let half-corpus chains into the active set; (2) **the TF-IDF vocabulary had been locked to the first 5 documents** — every incremental add after that indexed as an empty vector (the TF-IDF path was effectively half-dead since v6.4.6; published numbers were carried by FTS5/fuzzy). Fix, six cuts: max_df tightened 0.5×N→**0.05×N**; fallback semantics → **shortest-chain-first** (≤3 dims, per-chain cap 5,000, islice); fuzzy candidate budget (SQL cap 2,000 with exact-substring-first ordering); fuzzy gating (runs only on zero TF-IDF hits — the true typo-correction scenario; encrypted mode unaffected); `incremental_fit()` vocabulary growth for adds after fit (old vectors not recomputed — new tokens contribute zero on old docs mathematically); empty-query fallback-signal reset. 30k repro: pathological steady-state 3825→**4.0ms** (−99.9%), mixed pipeline 1607→1.2ms, fuzzy single-path −93%. 100k re-bench: pathological −44%, all numbers now true full-pipeline. Remaining bottleneck honestly documented: FTS5 high-frequency-phrase scoring (v6.5). New observable `_last_traversed` + deterministic budget contracts. 9 new guards.
 
 - **v6.4.6 — scale validation & retrieval benchmarks** (2026-11-10). First 100,000-entry stress test: add throughput ~600/s (linear), ~98MB db, memory peak ~700MB (TF-IDF degraded mode), search p50 7.4ms (rare token, −92% vs pre-fix) / 143ms (realistic mixed); pathological all-common query 421→218ms (−48%). Fixed a real bottleneck found by the stress test: Chinese long-query p50 was 421ms — profile showed low-IDF common words degenerating the inverted index into full-corpus scans. Fix: two-tier pruning (relative-eps + standard IR max_df stop-wording for df > 0.5×N) + heapq.nlargest; pathological all-common-word queries (synthetic-template data only) honestly documented as known O(N) characteristic, realistic queries verified unaffected (8k A/B, 30k side-by-side: 43ms mixed vs 86ms pathological). Shipped reproducible benchmarks (`benchmarks/scale_bench.py`, `benchmarks/quality_bench.py`): needle Recall@1 = 1.0 / MRR = 1.0, zero noise false-recall. Full LLM-judged benchmarks (LoCoMo/LongMemEval) deferred — needs external LLM API key. 7 new guards.
 - **v6.4.5 — audit-driven fixes** (2026-11-10; v6.4.4 skipped by maintainer decision). Two inverse doc-code inconsistencies (v6.4.3 fixed "claimed but not done"; this one fixes "done but not tracked"): `connectors.py` outgoing HTTP User-Agent was hardcoded `MindForge-Connector/5.8.9` — lying about the version to every target site since the 5.8.9 era (`event_bus.py` fixed the same disease in v5.6.8; this one slipped through). Now dynamic from the single version truth. Website "core modules" count was stale (17 in prose, 15 in stat card, 31 measured) — both fixed to the measured 31; MCP tool count 87 verified exact, untouched. Audit archive (not a defect): WAL auto-checkpoint verified healthy under daemon-like load — 4 rounds × 400 mixed ops, WAL converged at ~4.1MB (default 1000-page threshold), TRUNCATE resets to zero. 5 new guards in `tests/test_v645_fixes.py`.
@@ -153,7 +156,7 @@ v6.1.3 – v6.4.5 shipped in ten days (2026-11-01 → 11-10; two same-day releas
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│           MindForge v6.4.6            │
+│           MindForge v6.4.8            │
 │  Cognitive Layer  Personality · KnowledgeGraph       │
 │                   MemoryEvolution · FederatedMemory  │
 ├──────────────────────────────────────────────────────┤

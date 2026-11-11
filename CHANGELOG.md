@@ -3,6 +3,64 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.4.8] - 2026-11-11
+
+病态查询毫秒级攻坚版（v6.4.6 如实记录的「已知 O(N) 特性」本版消灭），
+并揪出一个比性能更严重的**祖传索引失明 bug**。五刀 + 一个深坑修复：
+
+- **刀 1（TF-IDF max_df 收紧 + 回退最短链优先）**：全库词查询触发
+  v6.4.6 回退分支 `list(q.items())` 遍历全部倒排链 = O(N×查询维)，
+  100k 实测 p50 209ms；且 0.5×N 的 max_df 阈值仍放半库词链
+  （数万条目）进 active（mixed 查询 134ms 的第一构成）。修复：
+  ① max_df 0.5×N → **0.05×N**（常见词点积贡献近似常数，top-K
+  排序由区分维承载——100k 库 active 链长上界 5k）；② 回退语义从
+  「全维度」改为「**最短链优先**」（按链长升序取 ≤3 维 = 查询中
+  区分度最高的信号）；③ 单链遍历截断 5000 条（islice 免建副本）。
+- **刀 2（fuzzy 候选集预算 + 区分度优先排序）**：fuzzy 的候选 SQL
+  第 4 路 `LENGTH(content) < 4×len(query)` 对 16 字级中文查询失效
+  ——短条目库全体进候选（30k 复现语料候选=全库，逐条反序列化+
+  SequenceMatcher 实测 1642ms）。修复：候选加 `ORDER BY (content
+  LIKE ?) DESC, rowid LIMIT 2000` 预算——精确子串命中（最强 fuzzy
+  信号，打错字场景同路保真）排最前，短文本兜底路按 rowid 截断。
+- **刀 3（fuzzy 触发门控收紧）**：触发条件从「TF-IDF 召回不足
+  （positive < max_results）」收紧为「**TF-IDF 零有效命中**」。
+  语义依据：fuzzy 的设计价值是拼写纠错兜底；TF-IDF 已有有效命中时
+  fuzzy 补充的是 min_relevance 压线的词重叠条目——宁可少而准。
+  病态回退（新信号 `index.last_fallback`）时同样跳过（全库词查询
+  对 fuzzy 边际价值为零）。encrypted 模式不受影响（仍全跑供加密
+  兜底复用）。空查询（query_norm=0）显式复位 fallback 信号，
+  防止继承上一查询的 True 误杀拼写兜底场景。
+- **深坑修复（增量文档 TF-IDF 失索引，比性能问题更严重）**：
+  `index_memory` 的「前 5 条文档即 fit」把词表锁死在前 5 条的
+  token——此后所有增量 add 的 transform 全部 vocab miss → **空
+  向量入索引（文档对 TF-IDF 路不可见）**。影响面：v6.4.6 起所有
+  100k 压测的 TF-IDF 路实际半瘫痪（延迟数字由 FTS5/fuzzy 扛着，
+  rare_en 6.6ms 实为 FTS5 延迟）。修复：新增
+  `TFIDFVectorizer.incremental_fit()`（单文档增量词表扩展：新
+  token 补 vocab + df/idf 增量；旧文档向量不回算——新词在旧文档
+  tf=0 无分量贡献，旧词 IDF 漂移为可接受近似），fit 后的增量 add
+  先扩词表再 transform。LRU 三结构一致契约（v5.6.5 P1 #5）保持。
+- **实测（30k 病态语料，修复前 → 后）**：病态查询稳态 p50
+  3825→**4.0ms**（-99.9%）；mixed（稀有锚+常见词）全管线
+  1607→**1.2ms**（-99.9%）；fuzzy 单路 1642→112ms（-93%）。
+- **100k 复测（全管线真数字）**：病态 218→**122ms**（-44%）、
+  rare 6.8ms / combined 17.2ms 持平、add 582/s。**诚实口径**：
+  mixed 134.9ms 与 v6.4.6 的 143ms 表面持平，但含金量不同——v6.4.6
+  的数字是 TF-IDF 索引失明（前 5 条 fit 深坑）时 FTS5/fuzzy 半管线的
+  结果，v6.4.8 是 TF-IDF 真干活的全管线数字。剩余大头是 **FTS5 高频
+  短语的全库行 bm25 评分**（30k 分路实测：FTS5 37.3ms vs tfidf 0.0ms
+  vs fuzzy skip 后 full 37.6ms）——v6.5 刀位（ORDER BY rank top-k
+  优化 / 查询侧短语预算）。
+- **语义变化（诚实记录）**：全库词查询在 `mf.search` 层从「凑数
+  返回 10 条」（旧行为由 fuzzy 词重叠兜底给分）变为「返回 0 条
+  （相关度不足 min_relevance）」——数学上诚实（0.16 分=无区分度），
+  IndexEngine 层回退契约仍保证非空 top-K。行为差异已由守卫钉住。
+- **守卫**：`tests/test_v648_fixes.py` 9 项——遍历预算确定性契约
+  （回退 ≤3×5000、active ≤0.05×N，不依赖 CI 机器速度）、回退
+  最短链语义（独有信号置顶）、全库词非空、fuzzy 门控行为契约
+  （有命中不跑/零命中必跑）、fallback 信号门面透传、版本钉值。
+  全量 **1253** 项通过（1252 passed + 1 环境性 skipped）。
+
 ## [6.4.6] - 2026-11-10
 
 规模验证版（三短板攻坚：基准分数 / 规模验证 / 规模证据入文档）：

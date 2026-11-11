@@ -9,6 +9,7 @@ import os
 import re
 import sqlite3
 from collections import Counter, defaultdict
+from itertools import islice
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
 
@@ -28,6 +29,7 @@ class TFIDFVectorizer:
     def __init__(self):
         self.vocab: Dict[str, int] = {}
         self.idf: Dict[str, float] = {}
+        self._df: Dict[str, int] = {}  # v6.4.8: 增量 fit 的精确 df 延续
         self.doc_count: int = 0
 
     def _tokenize(self, text: str) -> List[str]:
@@ -59,6 +61,33 @@ class TFIDFVectorizer:
 
         for word, idx in self.vocab.items():
             self.idf[word] = math.log((self.doc_count + 1) / (df[word] + 1)) + 1
+        # v6.4.8: df 表留存，供 incremental_fit 延续精确计数
+        self._df = dict(df)
+
+    def incremental_fit(self, text: str) -> None:
+        """v6.4.8 新增：单文档增量词表扩展。
+
+        修复「fit 后新增文档失索引」：新 token 按当前 doc_count+1 估
+        IDF 补进词表；已知 token 的 df 计数 +1（IDF 漂移不回算旧向量，
+        见 index_memory 注释）。维度号从当前词表长度起追加，与既有
+        向量维度兼容（旧文档在新词上恒为零分量）。
+        """
+        if not self._df:
+            # 未 fit 过（不应发生——调用方保证 fitted），防御性直通
+            return
+        self.doc_count += 1
+        next_idx = len(self.vocab)
+        for token in set(self._tokenize(text)):
+            if token in self.vocab:
+                self._df[token] = self._df.get(token, 0) + 1
+                self.idf[token] = math.log(
+                    (self.doc_count + 1) / (self._df[token] + 1)) + 1
+            else:
+                self._df[token] = 1
+                self.vocab[token] = next_idx
+                next_idx += 1
+                self.idf[token] = math.log(
+                    (self.doc_count + 1) / 2) + 1
 
     def transform(self, text: str) -> Dict[int, float]:
         tokens = self._tokenize(text)
@@ -108,6 +137,10 @@ class VectorIndex:
         self.metadata: Dict[str, Dict] = {}
         self._norms: Dict[str, float] = {}  # 预计算 L2 范数缓存
         self._postings: Dict[int, Dict[str, float]] = {}  # 倒排链
+        # v6.4.8: 上次 search 实际遍历的倒排链条目数（性能契约可观测）
+        self._last_traversed = 0
+        # v6.4.8: 上次 search 是否走了病态回退（全库词查询信号）
+        self.last_fallback = False
 
     @staticmethod
     def _as_sparse(vector) -> Dict[int, float]:
@@ -150,31 +183,75 @@ class VectorIndex:
         q = self._as_sparse(query_vector)
         query_norm = math.sqrt(sum(v * v for v in q.values()))
         if query_norm == 0:
+            # v6.4.8: 空查询（无 token/全 vocab miss）≠ 全库词回退。
+            # 显式复位 last_fallback，防止继承上一查询的 True 导致
+            # query.py 误跳过 fuzzy 拼写兜底（空查询正是 fuzzy 的
+            # 设计场景：用户词打错 → 全 miss → fuzzy 纠错召回）。
+            self.last_fallback = False
+            self._last_traversed = 0
             return [(doc_id, 0.0) for doc_id in list(self.vectors.keys())[:top_k]]
 
         # v6.4.6 perf: 低区分度查询维剪枝。100k 规模压测发现中文长查询
         # p50 421ms，profile 定位到常见词（如「条目/陈述性/记忆」）的倒排
-        # 链全量遍历。两层剪枝：eps 相对阈值 + max_df 停用词（df > 0.5×N
-        # 的维是平滑 IDF 下 qval≈tf×1 的全库词——遍历整条链却无区分度，
-        # 所有文档点积同加近似常数，top-K 排序不变；30k profile 实证
-        # eps 剪不掉全库词，必须按链长剪）。
+        # 链全量遍历。两层剪枝：eps 相对阈值 + max_df 停用词。
+        # v6.4.8 perf: max_df 从 0.5×N 收紧到 0.05×N。0.5 时半库词链
+        # （数十万级遍历）仍进 active，100k 实测 mixed_realistic p50
+        # 134ms。常见词的点积贡献近似常数（30k profile 实证 eps 剪不掉
+        # 全库词，v6.4.6 注释已论证 top-K 排序不变），链长超库容 5% 的
+        # 维一律剪——100k 库下 active 链长上界 5k，遍历毫秒级。
         _EPS_REL = 0.02
-        _half = 0.5 * len(self.vectors)
+        _max_df_len = 0.05 * len(self.vectors)
         active = [(idx, qval) for idx, qval in q.items()
                   if qval > _EPS_REL * query_norm
-                  and len(self._postings.get(idx, ())) <= _half]
+                  and len(self._postings.get(idx, ())) <= _max_df_len]
+        self._last_traversed = 0
+        # v6.4.8: 病态回退信号——查询全部维度超 max_df（全库词）时
+        # 置位，供上层 QueryEngine 跳过 fuzzy 兜底路（全库词查询对
+        # fuzzy 的边际价值为零，详见 query.py 路 2 注释）。
+        self.last_fallback = False
         if not active:
-            # 全部维度被剪（极端退化查询）：退回原语义，保证不空召回
-            active = list(q.items())
+            self.last_fallback = True
+            # v6.4.8 perf: 病态回退（全维被剪）不再遍历全部倒排链。
+            # 旧回退 list(q.items()) = O(N×查询维)，100k 全库词查询
+            # p50 209ms 的根因。全库词贡献是常数，top-K 只由相对区分
+            # 度决定，因此回退语义改为「最短链优先」：
+            #   1) 按链长升序取最短 _FALLBACK_DIMS 维（q 中区分度最高
+            #      的信号，哪怕也被 max_df 剪掉）
+            #   2) 单链遍历截断到 _TRAVERSE_CAP 项——全平分数下截断
+            #      不改 top-K 语义，优先守住延迟上界
+            _FALLBACK_DIMS = 3
+            _TRAVERSE_CAP = 5000
+            ranked = sorted(
+                q.items(),
+                key=lambda kv: len(self._postings.get(kv[0], ())))
+            active = ranked[:_FALLBACK_DIMS]
+            # islice 免建截断副本（dict(list(x)[:cap]) 的 15k 次 hash
+            # 插入在实测里占 ~3ms，30k 病态复现 14→11ms）
+            dots: Dict[str, float] = {}
+            for idx, qval in active:
+                chain = self._postings.get(idx, {})
+                pairs = (chain.items() if len(chain) <= _TRAVERSE_CAP
+                         else islice(chain.items(), _TRAVERSE_CAP))
+                for doc_id, dval in pairs:
+                    dots[doc_id] = dots.get(doc_id, 0.0) + qval * dval
+                    self._last_traversed += 1
+            return self._topk_from_dots(dots, query_norm, top_k)
 
         # 倒排链累加点积：只访问与查询共享非零维度的候选文档
+        # （active 链长上界 _max_df_len，遍历量与库容解耦）
         dots: Dict[str, float] = {}
         for idx, qval in active:
             for doc_id, dval in self._postings.get(idx, {}).items():
                 dots[doc_id] = dots.get(doc_id, 0.0) + qval * dval
+                self._last_traversed += 1
 
         # v6.4.6 perf: heapq.nlargest 替代全量 sort——候选集大时
         # O(n·log k) 优于 O(n·log n)，且免建全量列表排序的中间开销。
+        return self._topk_from_dots(dots, query_norm, top_k)
+
+    def _topk_from_dots(self, dots: Dict[str, float], query_norm: float,
+                        top_k: int) -> List[Tuple[str, float]]:
+        """点积累积结果归一化 + top-K 选取（v6.4.8 抽出，回退/正常路径共用）"""
         return heapq.nlargest(
             top_k,
             ((doc_id, dot / (query_norm * self._norms[doc_id]))
@@ -212,6 +289,8 @@ class IndexEngine:
         self.db_path = db_path
         self.vectorizer = TFIDFVectorizer()
         self.vector_index = VectorIndex()
+        # v6.4.8: 病态回退信号门面透传（见 search()）
+        self.last_fallback = False
         self._fitted = False
         self._hydrated = False
         self._doc_texts: Dict[str, str] = {}
@@ -269,12 +348,21 @@ class IndexEngine:
         """索引记忆"""
         self._doc_texts[doc_id] = text
 
+        # v5.6.5 P1 #5 的渐进触发点保留（LRU 守卫契约：add 即索引，
+        # _doc_texts/vectors/postings 三结构同步有界）。
+        # v6.4.8 fix（祖传深坑）：旧逻辑这里 fit 一次后，后续增量 add 的
+        # transform 全部 vocab miss → 空向量入索引（文档「失索引」）——
+        # 词表锁死在前 5 条文档的 token，100k 压测的 TF-IDF 路实际长期
+        # 半瘫痪（延迟数字由 FTS5/fuzzy 扛）。修复：fit 后的增量 add 先
+        # 走 incremental_fit 扩词表（新 token 补 vocab + df/idf 增量，
+        # 旧文档向量不回算——新词在旧文档 tf=0 无贡献，旧词 IDF 漂移为
+        # 可接受近似），再 transform 入索引。
         if not self._fitted and len(self._doc_texts) >= 5:
             self._fit_vectorizer()
+        elif self._fitted:
+            self.vectorizer.incremental_fit(text)
 
         if self._fitted:
-            # v5.6.3 性能修复：直接存稀疏向量（{dim: weight}），不再展开为
-            # 词表长度的稠密 list
             vector_dict = self.vectorizer.transform(text)
             self.vector_index.add(doc_id, vector_dict, metadata)
 
@@ -292,11 +380,17 @@ class IndexEngine:
             self._fit_vectorizer()
 
         if not self._fitted:
+            # v6.4.8: 降级路径同样透传病态回退信号（保持门面契约一致）
+            self.last_fallback = False
             return self._keyword_search(query, top_k)
 
         # v5.6.3 性能修复：查询向量同样保持稀疏，走倒排链检索
         query_vec_dict = self.vectorizer.transform(query)
-        return self.vector_index.search(query_vec_dict, top_k)
+        results = self.vector_index.search(query_vec_dict, top_k)
+        # v6.4.8: 把 VectorIndex 的病态回退信号透传到门面层
+        # （query.py 据此跳过 fuzzy 兜底路）
+        self.last_fallback = self.vector_index.last_fallback
+        return results
 
     def _keyword_search(self, query: str, top_k: int) -> List[Tuple[str, float]]:
         """关键词搜索（降级方案）"""

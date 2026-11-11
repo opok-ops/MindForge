@@ -9127,6 +9127,25 @@ class StorageEngine:
                     params_or.append(f"%{_ch}%")
         cand_query = base_query + " AND (" + " OR ".join(conds) + ")"
 
+        # v6.4.8 perf: 候选集预算上限 + 区分度优先排序。
+        # 病理：短条目库（content < 4×len(query) 全体进候选）+ 16 字级
+        # 中文长查询 → 候选≈全库，30k 实测 3 万条逐条反序列化+SequenceMatcher
+        # = 1642ms（100k 语料条目 50-70 字时约半库过长度阈值，候选 ~5 万
+        # = 212ms 白税）。预算语义（与 TF-IDF max_df 0.05×N 同一哲学）：
+        #   - 正常查询（含区分词）LIKE 命中 + 短文本全体仍远小于预算，
+        #     结果零变化；
+        #   - 候选超预算只发生在「查询对全库无区分度」的病态场景——此时
+        #     fuzzy 全体候选分数趋同，截断不改 top-K 语义（保延迟优先）。
+        # 排序：content LIKE %q%（精确子串命中，最强 fuzzy 信号——打错字
+        # 场景「fact-7770」vs「fact-777」也走这条路先保住）排最前，其余
+        # 按 rowid（插入序）。截断发生在「短文本兜底路」而不是真命中。
+        # encrypted 兜底路径同享此预算（候选爆炸对加密库同样不可接受）。
+        _FUZZY_CAND_CAP = 2000
+        cand_query += (
+            " ORDER BY (CASE WHEN content LIKE ? THEN 0 ELSE 1 END), rowid"
+            f" LIMIT {_FUZZY_CAND_CAP}")
+        params_or.append(f"%{query_lower}%")
+
         def _entry_iter():
             for _r in conn.execute(cand_query, params + params_or):
                 yield self._row_to_entry(_r)

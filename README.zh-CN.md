@@ -6,11 +6,11 @@
 
 MindForge 为 AI Agent 提供持久、结构化的长期记忆：四层记忆生命周期、知识图谱、混合检索、端到端加密，以及 MCP / CLI / REST 统一接口。所有数据运行并存储在本机。
 
-> **开发历程** — 一个人，七个多月，从 v1.0（2026 年 3 月）到 v6.4.5：没有团队，没有融资，1243 项测试通过（1244 项中 1 项随环境跳过）。[读完整故事 →](https://opok-ops.github.io/MindForge/#developer)
+> **开发历程** — 一个人，七个多月，从 v1.0（2026 年 3 月）到 v6.4.8：没有团队，没有融资，1252 项测试通过（1253 项中 1 项随环境跳过）。[读完整故事 →](https://opok-ops.github.io/MindForge/#developer)
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-6.4.6-green.svg)](https://github.com/opok-ops/MindForge/releases)
+[![Version](https://img.shields.io/badge/version-6.4.8-green.svg)](https://github.com/opok-ops/MindForge/releases)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
 [![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
@@ -23,16 +23,17 @@ MindForge 为 AI Agent 提供持久、结构化的长期记忆：四层记忆生
 ---
 
 
-## 规模与质量实测（v6.4.6）
+## 规模与质量实测（v6.4.8）
 
-| 规模 | add 吞吐 | search p50（稀有词锚） | search p50（真实感混合） | 库体积 |
-|---|---|---|---|---|
-| 200 条（基线） | — | 1.8 ms | — | <1 MB |
-| 1 万条 | 1,080/s | ~9.5 ms | ~16 ms | 10 MB |
-| 10 万条 | ~558/s | 7.4 ms | 143 ms | 98 MB |
+| 规模 | add 吞吐 | search p50（稀有词锚） | search p50（真实感混合） | search p50（病态全库词） | 库体积 |
+|---|---|---|---|---|---|
+| 200 条（基线） | — | 1.8 ms | — | — | <1 MB |
+| 1 万条 | 1,080/s | ~9.5 ms | ~16 ms | — | 10 MB |
+| 10 万条 | ~582/s | 6.8 ms | 135 ms | 122 ms（−44%） | 98 MB |
 
+- 病态查询（全库词/合成模板数据）：引擎层稳态 **30k 实测 4.0ms**（修复前 3825ms，−99.9%）——倒排回退改「最短链优先」+硬遍历预算；100k 剩余成本为 FTS5 高频短语评分（v6.5 刀位，如实记录）。
+- **索引失明修复（v6.4.8）**：TF-IDF 词表自 v6.4.6 起被锁死在前 5 条文档——此后所有增量 add 以空向量入索引（TF-IDF 路实际半瘫痪，既往数字由 FTS5/fuzzy 扛）。本版修复为增量词表生长，上表全部数字自此为**真·全管线实测**。
 - 检索质量（固定种子，`benchmarks/quality_bench.py`，2k 条）：needle Recall@1 = 1.0、MRR = 1.0、topic Recall@1 = 1.0、干扰查询零误召回。
-- 已知特性：合成模板数据的全库词查询回退 O(N) 扫描（如实记录非缺陷）；真实查询走剪枝倒排。
 - 完整 LLM 判官基准（LoCoMo/LongMemEval）接口已备未跑（需外部 LLM API key）。
 - TF-IDF 降级模式 100k 进程内存 ~700MB；索引 LRU 上限 100,000 文档（MINDFORGE_INDEX_MAX_DOCS）。
 
@@ -80,7 +81,9 @@ MindForge stats
 
 ## 最新动态
 
-v6.1.3 – v6.4.5 连发（2026-11-01 → 11-10，同日双发两版），由 **1244 项测试**（1243 通过 + 1 环境性跳过）护航。
+v6.1.3 – v6.4.8 连发（2026-11-01 → 11-11，两日内三发），由 **1253 项测试**（1252 通过 + 1 环境性跳过）护航。
+
+- **v6.4.8 — 病态查询 O(N) 消灭 + 索引失明深坑修复**（2026-11-11）。比 v6.4.6 压测挖到更深的两层：① 全库词查询触发回退分支遍历**全部**倒排链（O(N×查询维)——100k 实测 p50 209ms），且 0.5×N 阈值仍放半库词链进 active；② **TF-IDF 词表自 v6.4.6 起锁死在前 5 条文档**——此后所有增量 add 以空向量入索引（TF-IDF 路实际半瘫痪，既往延迟数字由 FTS5/fuzzy 扛着）。六刀修复：max_df 0.5×N→**0.05×N**；回退改「**最短链优先**」（≤3 维+单链截断 5000，islice）；fuzzy 候选 SQL 预算 2000 + 精确子串命中优先排序；fuzzy 门控（仅 TF-IDF 零命中时兜底——真正的拼写纠错场景；加密模式不受影响）；`incremental_fit()` 增量词表生长（旧向量不回算——新词在旧文档 tf=0 无分量贡献，数学安全）；空查询回退信号复位。30k 复现：病态稳态 3825→**4.0ms**（−99.9%）、混合管线 1607→1.2ms、fuzzy 单路 −93%。100k 复测：病态 −44%，全部数字自此为真·全管线实测。剩余瓶颈如实记录：FTS5 高频短语评分（v6.5 刀位）。新增可观测量 `_last_traversed` + 确定性预算契约。新增 9 项守卫（`tests/test_v648_fixes.py`）。
 
 - **v6.4.6 — 规模验证与检索基准**（2026-11-10）。首次 100,000 条压测：add 吞吐 ~600 条/s（线性）、db ~98MB、TF-IDF 降级模式内存峰值 ~700MB、查询 p50 7.4ms（稀有词锚，较修复前 −92%）/ 143ms（真实感混合）；病态全库词查询 421→218ms（−48%）。压测发现真瓶颈并修复：中文长查询 p50 曾 421ms——profile 定位低 IDF 常见词的倒排链全量遍历退化，修复为两层剪枝（eps 相对阈值 + 标准 IR max_df 停用词）+ heapq.nlargest；合成模板数据的全库词病态查询如实记录为已知 O(N) 特性（非缺陷），真实查询实测不受影响（30k 对照：混合 43ms vs 病态 86ms）。可复现基准入仓（`benchmarks/scale_bench.py`、`quality_bench.py`）：needle Recall@1 = 1.0 / MRR = 1.0、干扰零误召回。完整 LLM 判官基准（LoCoMo/LongMemEval）已留接口未跑（需外部 LLM API key，下版议题）。新增 7 项守卫。
 - **v6.4.5 — 审计驱动修复**（2026-11-10；6.4.4 经维护者决策跳过）。两类「文档-代码反向不一致」——v6.4.3 修的是「宣称了没做」，本版修的是「做了没跟上」：`connectors.py` 对外请求 UA 硬编码 `MindForge-Connector/5.8.9`，5.8.9 时代起一直向目标站点谎报版本（`event_bus.py` v5.6.8 修过同款病，此处漏网）——改为动态引用版本唯一真值。官网「核心模块」数过时（正文 17 / 统计卡 15 / 实测 31）——统一修正为实测 31；MCP 工具数 87 实测精确，不动。审计存档（非缺陷）：WAL auto-checkpoint 在 daemon 级负载下验证健康——四轮 × 400 次混合操作 WAL 稳定收敛 ~4.1MB（默认 1000 页阈值）无无限膨胀，TRUNCATE 归零。新增 5 项守卫（`tests/test_v645_fixes.py`）。

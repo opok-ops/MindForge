@@ -200,7 +200,12 @@ class VectorIndex:
         # 全库词，v6.4.6 注释已论证 top-K 排序不变），链长超库容 5% 的
         # 维一律剪——100k 库下 active 链长上界 5k，遍历毫秒级。
         _EPS_REL = 0.02
-        _max_df_len = 0.05 * len(self.vectors)
+        # v6.4.9: 剪枝带低频地板——max(5%×N, 5)。链长 ≤5 是绝对低频
+        # 维（噪声地板），任何库容下不剪：3 条级的 e2e 小库若按
+        # 0.05×N（=0.15）剪，全部词链被剪光触发 fallback → fuzzy/FTS5
+        # 兜底全跳 → adaptive-search 恒空（CI e2e 抓的回归）。100 条
+        # 契约库的 10% 链（长 10）仍被正常剪，预算语义不变。
+        _max_df_len = max(0.05 * len(self.vectors), 5)
         active = [(idx, qval) for idx, qval in q.items()
                   if qval > _EPS_REL * query_norm
                   and len(self._postings.get(idx, ())) <= _max_df_len]

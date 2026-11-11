@@ -6,11 +6,11 @@
 
 MindForge gives AI agents a persistent, structured long-term memory: a four-tier lifecycle model, knowledge graphs, hybrid retrieval, end-to-end encryption, and MCP / CLI / REST interfaces. All data stays on your machine.
 
-> **The story** — one developer, seven months, from v1.0 (March 2026) to v6.4.8: no team, no funding, 1,252 passing tests. [Read the journey →](https://opok-ops.github.io/MindForge/#developer)
+> **The story** — one developer, seven months, from v1.0 (March 2026) to v6.4.9: no team, no funding, 1,257 passing tests. [Read the journey →](https://opok-ops.github.io/MindForge/#developer)
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-6.4.8-green.svg)](https://github.com/opok-ops/MindForge/releases)
+[![Version](https://img.shields.io/badge/version-6.4.9-green.svg)](https://github.com/opok-ops/MindForge/releases)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
 [![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
@@ -65,15 +65,15 @@ MindForge stats
 ```
 
 
-## Scale & Quality Benchmarks (v6.4.8, measured)
+## Scale & Quality Benchmarks (v6.4.9, measured)
 
 | Scale | add throughput | search p50 (rare token) | search p50 (realistic mixed) | search p50 (pathological all-common) | db size |
 |---|---|---|---|---|---|
 | 200 entries (baseline) | — | 1.8 ms | — | — | <1 MB |
 | 10,000 | 1,080/s | ~9.5 ms | ~16 ms | — | 10 MB |
-| 100,000 | ~582/s | 6.8 ms | 135 ms | 122 ms (−44%) | 98 MB |
+| 100,000 (~10M chars) | ~546/s | 6.8 ms | 3.0 ms | 0.4 ms | 98 MB |
 
-- Pathological queries (all-common words, synthetic template data): engine-level steady-state **4.0ms at 30k** (was 3825ms, −99.9%) — inverted-index fallback is now shortest-chain-first with a hard traversal budget; the remaining 100k cost is FTS5 high-frequency-phrase scoring (v6.5 target, honestly documented).
+- **Ten-million-character library, millisecond-class across all query types (v6.4.9)**: pathological 218→**0.4ms** (−99.8%), mixed 143→**3.0ms** (−98%), rare 6.8ms, combined 17.8ms (100k full-pipeline, clean environment). The last bottleneck — FTS5 high-frequency-phrase bm25 scoring — is now pruned query-side via trigram-df pre-check (df upper bound = min trigram df, pruned at 5% corpus size, symmetric to the TF-IDF max_df design; df served from an in-process cache — fts5vocab is a streaming virtual table, per-term probes scan it fully).
 - **Index-blindness fix (v6.4.8)**: TF-IDF vocabulary was locked to the first 5 documents since v6.4.6 — incremental adds indexed as empty vectors (TF-IDF effectively half-dead; previous numbers carried by FTS5/fuzzy). Fixed with incremental vocabulary growth; all pipeline numbers above are now *true full-pipeline* measurements.
 - Retrieval quality (fixed-seed, `benchmarks/quality_bench.py`, 2k entries): needle Recall@1 = 1.0, MRR = 1.0, topic Recall@1 = 1.0, noise false-recall = 0.
 - Full LLM-judged benchmarks (LoCoMo / LongMemEval) — interface ready, not yet run (requires external LLM API key).
@@ -81,7 +81,9 @@ MindForge stats
 
 ## What's New
 
-v6.1.3 – v6.4.8 shipped in ten days (2026-11-01 → 11-11; three releases in the last two days), guarded by **1,253 tests** (1,252 passing, 1 environment-skipped).
+v6.1.3 – v6.4.9 shipped in ten days (2026-11-01 → 11-11; four releases in the last two days), guarded by **1,258 tests** (1,257 passing, 1 environment-skipped).
+
+- **v6.4.9 — ten-million-char library at millisecond latency: FTS5 high-frequency-phrase scoring pruned** (2026-11-11). The last honest bottleneck from v6.4.8's ledger. Root cause (30k per-path timing): under the trigram tokenizer, corpus-wide phrases (template data's "陈述性记忆") match every row — bm25 full-match scoring cost 50.5ms/query, the dominant remainder of 100k mixed latency. Fix, query-side df pre-pruning symmetric to TF-IDF max_df: a phrase's df upper bound = min df of its trigrams (phrase matches ⊆ every trigram's row set); prune at 5% of corpus size; keep the lowest-ub phrase if all pruned. df is served from an in-process cache keyed by `max(rowid)` (add/update invalidate; hard-delete leaves df slightly stale = prunes more conservatively) — **two real pitfalls found en route: fts5vocab is a *streaming virtual table* — per-term probes AND `IN` batches trigger full scans (combined regressed 17→45ms before the cache)**. Plus: FTS5 path skipped on pathological fallback (no discriminating signal). Clean-environment 100k re-bench: pathological 122→**0.4ms** (−99.7%), mixed 134.9→**3.0ms** (−98%), all query types millisecond-class at ~10M chars. AI-flavored comment cleanup (essay-style docstrings → engineer-speak, info preserved). 5 new guards.
 
 - **v6.4.8 — pathological query path & index-blindness fix: O(N) fallback eliminated, TF-IDF actually indexing** (2026-11-11). Two deeper findings beyond the v6.4.6 stress test: (1) the all-common-word fallback traversed *all* inverted chains at full length (O(N×dims), 209ms p50 at 100k), and the 0.5×N max_df threshold still let half-corpus chains into the active set; (2) **the TF-IDF vocabulary had been locked to the first 5 documents** — every incremental add after that indexed as an empty vector (the TF-IDF path was effectively half-dead since v6.4.6; published numbers were carried by FTS5/fuzzy). Fix, six cuts: max_df tightened 0.5×N→**0.05×N**; fallback semantics → **shortest-chain-first** (≤3 dims, per-chain cap 5,000, islice); fuzzy candidate budget (SQL cap 2,000 with exact-substring-first ordering); fuzzy gating (runs only on zero TF-IDF hits — the true typo-correction scenario; encrypted mode unaffected); `incremental_fit()` vocabulary growth for adds after fit (old vectors not recomputed — new tokens contribute zero on old docs mathematically); empty-query fallback-signal reset. 30k repro: pathological steady-state 3825→**4.0ms** (−99.9%), mixed pipeline 1607→1.2ms, fuzzy single-path −93%. 100k re-bench: pathological −44%, all numbers now true full-pipeline. Remaining bottleneck honestly documented: FTS5 high-frequency-phrase scoring (v6.5). New observable `_last_traversed` + deterministic budget contracts. 9 new guards.
 
@@ -156,7 +158,7 @@ v6.1.3 – v6.4.8 shipped in ten days (2026-11-01 → 11-11; three releases in t
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│           MindForge v6.4.8            │
+│           MindForge v6.4.9            │
 │  Cognitive Layer  Personality · KnowledgeGraph       │
 │                   MemoryEvolution · FederatedMemory  │
 ├──────────────────────────────────────────────────────┤

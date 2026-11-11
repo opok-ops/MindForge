@@ -6,11 +6,11 @@
 
 MindForge 为 AI Agent 提供持久、结构化的长期记忆：四层记忆生命周期、知识图谱、混合检索、端到端加密，以及 MCP / CLI / REST 统一接口。所有数据运行并存储在本机。
 
-> **开发历程** — 一个人，七个多月，从 v1.0（2026 年 3 月）到 v6.4.8：没有团队，没有融资，1252 项测试通过（1253 项中 1 项随环境跳过）。[读完整故事 →](https://opok-ops.github.io/MindForge/#developer)
+> **开发历程** — 一个人，七个多月，从 v1.0（2026 年 3 月）到 v6.4.9：没有团队，没有融资，1257 项测试通过（1258 项中 1 项随环境跳过）。[读完整故事 →](https://opok-ops.github.io/MindForge/#developer)
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-6.4.8-green.svg)](https://github.com/opok-ops/MindForge/releases)
+[![Version](https://img.shields.io/badge/version-6.4.9-green.svg)](https://github.com/opok-ops/MindForge/releases)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
 [![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
@@ -23,15 +23,15 @@ MindForge 为 AI Agent 提供持久、结构化的长期记忆：四层记忆生
 ---
 
 
-## 规模与质量实测（v6.4.8）
+## 规模与质量实测（v6.4.9）
 
 | 规模 | add 吞吐 | search p50（稀有词锚） | search p50（真实感混合） | search p50（病态全库词） | 库体积 |
 |---|---|---|---|---|---|
 | 200 条（基线） | — | 1.8 ms | — | — | <1 MB |
 | 1 万条 | 1,080/s | ~9.5 ms | ~16 ms | — | 10 MB |
-| 10 万条 | ~582/s | 6.8 ms | 135 ms | 122 ms（−44%） | 98 MB |
+| 10 万条（约 1 千万字） | ~546/s | 6.8 ms | 3.0 ms | 0.4 ms | 98 MB |
 
-- 病态查询（全库词/合成模板数据）：引擎层稳态 **30k 实测 4.0ms**（修复前 3825ms，−99.9%）——倒排回退改「最短链优先」+硬遍历预算；100k 剩余成本为 FTS5 高频短语评分（v6.5 刀位，如实记录）。
+- **千万字库全查询类型毫秒级（v6.4.9）**：病态 218→**0.4ms**（−99.8%）、混合 143→**3.0ms**（−98%）、稀有词 6.8ms、组合查询 17.8ms（100k 全管线、干净环境实测）。最后一块瓶颈——FTS5 高频短语 bm25 评分——经查询侧 trigram df 预查剪枝（短语 df 上界 = min trigram df，超库容 5% 剔除，与 TF-IDF max_df 对称设计；df 走进程内缓存——**坑：fts5vocab 是流式虚拟表，逐 term 点查/IN 批查都触发全表扫，combined 曾 17→45ms 回退**）。
 - **索引失明修复（v6.4.8）**：TF-IDF 词表自 v6.4.6 起被锁死在前 5 条文档——此后所有增量 add 以空向量入索引（TF-IDF 路实际半瘫痪，既往数字由 FTS5/fuzzy 扛）。本版修复为增量词表生长，上表全部数字自此为**真·全管线实测**。
 - 检索质量（固定种子，`benchmarks/quality_bench.py`，2k 条）：needle Recall@1 = 1.0、MRR = 1.0、topic Recall@1 = 1.0、干扰查询零误召回。
 - 完整 LLM 判官基准（LoCoMo/LongMemEval）接口已备未跑（需外部 LLM API key）。
@@ -81,7 +81,9 @@ MindForge stats
 
 ## 最新动态
 
-v6.1.3 – v6.4.8 连发（2026-11-01 → 11-11，两日内三发），由 **1253 项测试**（1252 通过 + 1 环境性跳过）护航。
+v6.1.3 – v6.4.9 连发（2026-11-01 → 11-11，两日内四发），由 **1258 项测试**（1257 通过 + 1 环境性跳过）护航。
+
+- **v6.4.9 — 千万字毫秒级：FTS5 高频短语评分剪枝**（2026-11-11）。收割 v6.4.8 账本上如实记录的最后一块瓶颈。根因（30k 分路计时）：trigram 分词下全库高频短语（模板语料的「陈述性记忆」）匹配全部行——bm25 全匹配行评分 50.5ms/查询，是 100k 混合查询延迟的主要剩余构成。修复：查询侧 df 预剪枝（与 TF-IDF max_df 对称）——短语 df 上界 = min(其全部 trigram df)（短语匹配行 ⊆ 每个 trigram 行集交集），超库容 5% 剔除；全被剔除时保留上界最小的一个。df 由进程内缓存供给（max(rowid) 失效标记，覆盖 add/update；硬删使 df 偏大=剪枝更保守）——**两个真坑：fts5vocab 是流式虚拟表，逐 term 点查与 IN 批查都触发全表扫（combined 曾 17→45ms 回退，缓存后 17.8ms）**。另：病态回退时跳过 FTS5 路（无区分度信号）。干净环境 100k 复测：病态 122→**0.4ms**（−99.7%）、混合 134.9→**3.0ms**（−98%），千万字库全查询类型毫秒级。AI 味注释治理（论文化 docstring 压回工程师人话）。新增 5 项守卫。
 
 - **v6.4.8 — 病态查询 O(N) 消灭 + 索引失明深坑修复**（2026-11-11）。比 v6.4.6 压测挖到更深的两层：① 全库词查询触发回退分支遍历**全部**倒排链（O(N×查询维)——100k 实测 p50 209ms），且 0.5×N 阈值仍放半库词链进 active；② **TF-IDF 词表自 v6.4.6 起锁死在前 5 条文档**——此后所有增量 add 以空向量入索引（TF-IDF 路实际半瘫痪，既往延迟数字由 FTS5/fuzzy 扛着）。六刀修复：max_df 0.5×N→**0.05×N**；回退改「**最短链优先**」（≤3 维+单链截断 5000，islice）；fuzzy 候选 SQL 预算 2000 + 精确子串命中优先排序；fuzzy 门控（仅 TF-IDF 零命中时兜底——真正的拼写纠错场景；加密模式不受影响）；`incremental_fit()` 增量词表生长（旧向量不回算——新词在旧文档 tf=0 无分量贡献，数学安全）；空查询回退信号复位。30k 复现：病态稳态 3825→**4.0ms**（−99.9%）、混合管线 1607→1.2ms、fuzzy 单路 −93%。100k 复测：病态 −44%，全部数字自此为真·全管线实测。剩余瓶颈如实记录：FTS5 高频短语评分（v6.5 刀位）。新增可观测量 `_last_traversed` + 确定性预算契约。新增 9 项守卫（`tests/test_v648_fixes.py`）。
 

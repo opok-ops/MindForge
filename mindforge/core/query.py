@@ -257,27 +257,15 @@ class QueryEngine:
                     _bd(doc_id)["winner"] = "tfidf"
                     _bd(doc_id)["final"] = s
 
-        # 路 2：Fuzzy（TF-IDF 召回不足时补充；v5.7.1：加密模式下总是跑，
-        # 供加密兜底复用结果，避免二次全表扫描）
-        # v6.4.8 perf/语义: 触发条件收紧为「TF-IDF 零命中」：
-        #   1) 病态回退（index.last_fallback，全库词查询）→ 跳过。fuzzy
-        #      的设计价值是「拼写纠错/近似词」兜底，全库词查询里不存在
-        #      「没被 TF-IDF 命中的稀有词」，fuzzy 只会给出与全库同分数
-        #      的噪声结果（边际价值为零）；
-        #   2) TF-IDF 已有命中（含低分——cosine 归一化下模板语料的命中
-        #      常在 0.2-0.3 边缘，但词命中本身已证明「查询词在库」）→
-        #      跳过。fuzzy 兜底的真场景是「查询词全不在库」（打错字），
-        #      此时 TF-IDF 必然空结果。mixed 实测（「稀有锚+常见词」）：
-        #      TF-IDF 15 命中 + FTS5 30 命中已足够填 top-K，fuzzy 跑
-        #      cap-2000 候选纯属白税（30k 实测 140ms/查询）。
-        #   3) 性能——fuzzy 候选集对无区分度/长查询会放大成数万条
-        #      （短条目库 LENGTH<4×len(q) 全体进候选），见 storage.py
-        #      v6.4.8 候选预算注释。encrypted 模式不受此影响（仍全跑
-        #      供加密兜底复用）。
+        # 路 2：Fuzzy（拼写纠错兜底；v5.7.1：加密模式下总是跑供加密
+        # 兜底复用，避免二次全表扫描）
+        # v6.4.8: 触发收紧为「TF-IDF 零有效命中」。fuzzy 的价值在
+        # 「查询词全不在库」（打错字场景），此时 TF-IDF 必空。有命中
+        # （含低分）时 fuzzy 只补凑数条目还白扫候选集（30k 实测
+        # 140ms/查询）。全库词回退（tfidf_fallback）同理跳过。
+        # 注意按非零分判定：空查询走零分 top-K 兼容分支，
+        # tfidf_results 恒非空，不看分会死锁拼写兜底。
         tfidf_fallback = getattr(self.index, "last_fallback", False)
-        # v6.4.8: 「有效命中」= TF-IDF 存在非零分结果。空查询（全 miss/
-        # 零范数）走文档序 0 分 top-K 兼容分支，tfidf_results 恒非空但
-        # 全零分——必须按分数判定，否则 fuzzy 拼写兜底被死锁。
         tfidf_effective = any(s > 0.0 for _, s in tfidf_results)
         fuzzy_hits = []
         if (self.storage.encrypted
@@ -296,27 +284,29 @@ class QueryEngine:
                         _bd(entry.id)["final"] = s
 
         # 路 3：FTS5 全文检索
-        # v6.4.8 perf note: 尝试过「TF-IDF 有命中时跳过 FTS5」的门控，
-        # 被混合质量基线测试拦下（hybrid 0.875 < single 0.915，FTS5 的
-        # 补充分对融合质量有真实贡献）。正确方向是 FTS5 内部的
-        # ORDER BY rank top-k 优化（见 indexer.fts_search）。
+        # v6.4.9: 全库词回退时跳过（FTS5 对高频短语的 bm25 全匹配行
+        # 评分是病态查询的主要剩余成本，且无区分度信号）。正常查询
+        # 走 fts_search 的 df 剪枝。
         fts5_used = False
-        # v5.6.2 安全修复：初始化默认值，防止异常路径下 UnboundLocalError
+        # v5.6.2: 防异常路径下 UnboundLocalError
         strategy_used = "tfidf+fuzzy"
         try:
-            conn = self.storage._get_conn()
-            fts_results = self.index.fts_search(conn, query, top_k=max_results * 3)
-            for doc_id, s in fts_results:
-                if explain:
-                    _bd(doc_id)["fts5"] = max(s, _bd(doc_id)["fts5"])
-                if s >= score_map.get(doc_id, 0.0):
-                    score_map[doc_id] = s
+            if not tfidf_fallback:
+                conn = self.storage._get_conn()
+                fts_results = self.index.fts_search(conn, query, top_k=max_results * 3)
+                for doc_id, s in fts_results:
                     if explain:
-                        _bd(doc_id)["winner"] = "fts5"
-                        _bd(doc_id)["final"] = s
-            if fts_results:
-                fts5_used = True
-                strategy_used = "tfidf+fuzzy+fts5"
+                        _bd(doc_id)["fts5"] = max(s, _bd(doc_id)["fts5"])
+                    if s >= score_map.get(doc_id, 0.0):
+                        score_map[doc_id] = s
+                        if explain:
+                            _bd(doc_id)["winner"] = "fts5"
+                            _bd(doc_id)["final"] = s
+                if fts_results:
+                    fts5_used = True
+                    strategy_used = "tfidf+fuzzy+fts5"
+                else:
+                    strategy_used = "tfidf+fuzzy"
             else:
                 strategy_used = "tfidf+fuzzy"
         except Exception:

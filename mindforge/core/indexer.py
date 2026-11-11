@@ -205,20 +205,15 @@ class VectorIndex:
                   if qval > _EPS_REL * query_norm
                   and len(self._postings.get(idx, ())) <= _max_df_len]
         self._last_traversed = 0
-        # v6.4.8: 病态回退信号——查询全部维度超 max_df（全库词）时
-        # 置位，供上层 QueryEngine 跳过 fuzzy 兜底路（全库词查询对
-        # fuzzy 的边际价值为零，详见 query.py 路 2 注释）。
+        # v6.4.8: 全库词回退信号（供 query.py 跳过 fuzzy/FTS5 兜底）
         self.last_fallback = False
         if not active:
             self.last_fallback = True
-            # v6.4.8 perf: 病态回退（全维被剪）不再遍历全部倒排链。
-            # 旧回退 list(q.items()) = O(N×查询维)，100k 全库词查询
-            # p50 209ms 的根因。全库词贡献是常数，top-K 只由相对区分
-            # 度决定，因此回退语义改为「最短链优先」：
-            #   1) 按链长升序取最短 _FALLBACK_DIMS 维（q 中区分度最高
-            #      的信号，哪怕也被 max_df 剪掉）
-            #   2) 单链遍历截断到 _TRAVERSE_CAP 项——全平分数下截断
-            #      不改 top-K 语义，优先守住延迟上界
+            # v6.4.8: 回退不再遍历全部倒排链（旧 O(N×dims) 是 100k
+            # 全库词查询 209ms 的根因）。全库词点积贡献是常数，top-K
+            # 只由相对区分度决定：取最短 _FALLBACK_DIMS 维（区分度最高
+            # 的信号），单链截断 _TRAVERSE_CAP 项（平分数下截断不改
+            # top-K 语义）。
             _FALLBACK_DIMS = 3
             _TRAVERSE_CAP = 5000
             ranked = sorted(
@@ -291,6 +286,9 @@ class IndexEngine:
         self.vector_index = VectorIndex()
         # v6.4.8: 病态回退信号门面透传（见 search()）
         self.last_fallback = False
+        # v6.4.9: FTS5 trigram df 进程内缓存（见 _prune_fts_query）
+        self._fts_vocab_cache: Optional[Dict[str, int]] = None
+        self._fts_vocab_rowid: int = -1
         self._fitted = False
         self._hydrated = False
         self._doc_texts: Dict[str, str] = {}
@@ -348,15 +346,10 @@ class IndexEngine:
         """索引记忆"""
         self._doc_texts[doc_id] = text
 
-        # v5.6.5 P1 #5 的渐进触发点保留（LRU 守卫契约：add 即索引，
-        # _doc_texts/vectors/postings 三结构同步有界）。
-        # v6.4.8 fix（祖传深坑）：旧逻辑这里 fit 一次后，后续增量 add 的
-        # transform 全部 vocab miss → 空向量入索引（文档「失索引」）——
-        # 词表锁死在前 5 条文档的 token，100k 压测的 TF-IDF 路实际长期
-        # 半瘫痪（延迟数字由 FTS5/fuzzy 扛）。修复：fit 后的增量 add 先
-        # 走 incremental_fit 扩词表（新 token 补 vocab + df/idf 增量，
-        # 旧文档向量不回算——新词在旧文档 tf=0 无贡献，旧词 IDF 漂移为
-        # 可接受近似），再 transform 入索引。
+        # v5.6.5 P1 #5: 渐进 fit 触发点（LRU 守卫契约：add 即索引）。
+        # v6.4.8 fix: fit 后的增量 add 先 incremental_fit 扩词表再
+        # transform——旧逻辑词表锁死在前 5 条文档，此后增量 add 的
+        # transform 全 vocab miss（空向量入索引，TF-IDF 路半瘫痪）。
         if not self._fitted and len(self._doc_texts) >= 5:
             self._fit_vectorizer()
         elif self._fitted:
@@ -366,7 +359,7 @@ class IndexEngine:
             vector_dict = self.vectorizer.transform(text)
             self.vector_index.add(doc_id, vector_dict, metadata)
 
-        # v5.6.5 P1 #5：写入后做 LRU 淘汰（覆盖写不增加条目数，故在 add 之后）
+        # v5.6.5 P1 #5: 写入后 LRU 淘汰
         self._evict_if_needed()
 
     def remove_memory(self, doc_id: str):
@@ -446,9 +439,16 @@ class IndexEngine:
 
     def fts_search(self, conn: sqlite3.Connection, query: str,
                    top_k: int = 10) -> List[Tuple[str, float]]:
-        """FTS5 全文搜索（v5.4.7 修复：特殊字符转义）"""
+        """FTS5 全文搜索（v5.4.7 修复：特殊字符转义）
+
+        v6.4.9: 多词查询先经 _prune_fts_query 剔除高频短语——
+        trigram 索引下全库短语的 bm25 评分是 100k 延迟的大头。
+        """
         try:
             escaped = self._escape_fts5_query(query)
+            if not escaped:
+                return []
+            escaped = self._prune_fts_query(conn, query, escaped)
             if not escaped:
                 return []
             rows = conn.execute("""
@@ -474,3 +474,62 @@ class IndexEngine:
             return results
         except sqlite3.OperationalError:
             return []
+
+    # v6.4.9: 高频短语剪枝比例（与 TF-IDF max_df 0.05 对齐）
+    _FTS_MAX_DF_RATIO = 0.05
+
+    def _prune_fts_query(self, conn: sqlite3.Connection, query: str,
+                         escaped: str) -> str:
+        """剔除 MATCH 里必然无区分度的高频短语。
+
+        短语 df 上界 = min(该词全部 trigram 的 df)（短语匹配行 ⊆
+        每个 trigram 行集的交集）。上界超库容 5% 的词剔除；全被剔除
+        时留上界最小的那个，防空 MATCH。
+        df 来自 fts5vocab 的进程内缓存（首查全表读一次，此后 O(1)
+        点查；以 memories.max_rowid 为失效标记，覆盖 add/update；
+        硬删导致的 df 缓存偏大只会让剪枝偏保守，5% 阈值级近似）。
+        """
+        tokens = [t for t in query.split() if t]
+        if len(tokens) <= 1:
+            return escaped
+        try:
+            row = conn.execute(
+                "SELECT max(rowid) FROM memories").fetchone()
+            total = (row[0] or 0) if row else 0
+            if total < 200:
+                return escaped  # 小库 df 语义不稳
+            if (self._fts_vocab_cache is None
+                    or total != self._fts_vocab_rowid):
+                # v6.4.9: vocab 是流式虚拟表，逐 term 点查/IN 批查
+                # 都触发全表扫（combined 100k 45ms 回退的根因）——
+                # 全表读一次进 dict，之后纯内存点查。
+                conn.execute(
+                    "CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts_v "
+                    "USING fts5vocab('memory_fts', 'row')")
+                self._fts_vocab_cache = dict(
+                    conn.execute("SELECT term, doc FROM memory_fts_v"))
+                self._fts_vocab_rowid = total
+            df_map = self._fts_vocab_cache
+            budget = self._FTS_MAX_DF_RATIO * total
+            kept = []
+            best, best_ub = None, None
+            for tok in tokens:
+                if len(tok) < 3:
+                    ub = 0  # trigram 查不了短词，保留
+                else:
+                    ub = min(df_map.get(tok[i:i + 3], 0)
+                             for i in range(len(tok) - 2))
+                if ub <= budget:
+                    kept.append(tok)
+                if best_ub is None or ub < best_ub:
+                    best, best_ub = tok, ub
+            if not kept:
+                kept = [best] if best else []
+                return " OR ".join(
+                    '"' + t.replace('"', '""') + '"' for t in kept)
+            if len(kept) == len(tokens):
+                return escaped
+            return " OR ".join(
+                '"' + t.replace('"', '""') + '"' for t in kept)
+        except sqlite3.Error:
+            return escaped

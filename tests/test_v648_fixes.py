@@ -22,7 +22,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from mindforge.core.version import __version__
+from mindforge.core.version import __version__, VERSION_INFO
 from mindforge.core.indexer import VectorIndex
 
 
@@ -181,8 +181,10 @@ class TestFuzzyGateAndFallbackSignal(unittest.TestCase):
 class TestVersionBump(unittest.TestCase):
     """版本钉值（v6.4.5 教训：每版 fixes 断言随发版一并 bump）。"""
 
-    def test_version_is_648(self):
-        self.assertEqual(__version__, "6.4.8")
+    def test_version_is_648_plus(self):
+        # v6.4.9 发版时 bump：本文件守卫 v6.4.8 引入的行为，
+        # 版本断言随最新发版跟进
+        self.assertGreaterEqual(VERSION_INFO, (6, 4, 8))
 
 
 if __name__ == "__main__":

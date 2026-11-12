@@ -3,6 +3,20 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.5.0] - 2026-11-12
+
+本地 ONNX 向量引擎 + LoCoMo 基准落版。向量检索从「接口就绪、引擎缺位」进入「本地零依赖可用」，语义召回路（第四路）正式常驻检索融合：
+
+- **FastEmbedBackend（embedding.py）**：本地 ONNX 推理（fastembed + onnxruntime，零 torch 依赖），默认 BAAI/bge-small-en-v1.5（384 维，~33MB，经 HF_ENDPOINT 镜像下载）。查询向量 LRU 缓存（1024 条）：命中 0.019ms，冷编码 ~12ms/句。与 sentence_transformers/openai/ollama/http 后端平级注册（MINDFORGE_EMBEDDING_BACKEND=fastembed）。
+- **numpy 批量向量扫描**：cosine_similarity_batch 矩阵乘快路径（修复一个真实缩放 bug：查询向量预归一化后又除 qn，分数被放大 ‖q‖ 倍——现与纯 Python 路径一致性 7e-08，已加守卫测试）；deserialize 换 array.array C 级解包；StorageEngine._score_vector_chunk 增加 raw-blob 零拷贝路径（frombuffer 直接成 (N,dim) 矩阵）。LoCoMo conv-26 实测：向量扫描 p50 46ms → 23.6ms（−49%）。
+- **LoCoMo 基准套件（benchmarks/）**：locomo_deepseek_eval.py 支持 --embedding/--extract/--seats 实验矩阵（断点续跑）。四轮消融（conv-26，199 问/轮）：
+  - 词法基线 4.43/10 → +向量 4.88（adversarial +0.23、temporal +0.31，语义召回报酬确认）
+  - +LLM 抽取（419 轮 → 697 条原子事实）temporal 大胜（+1.30 分、正确率翻倍 15.4%→30.8%），但总分被融合挤兑吃掉
+  - 分席+时间锚负优化（temporal −2.30），保留 --seats 供复现
+  - 结论入库：single-hop/multi-hop 的失分在证据组装层，非召回层——v6.5 下半场 AdaptiveContextEngine 的靶子
+- 全量 10 会话词法基线（1986 问）落盘：4.40/10，判官分布双峰（936×1 分 + 479×10 分）证实「捞到证据即满分、捞不到即零分」。
+- 15 项新守卫测试（FastEmbedBackend 契约 / numpy 一致性 / blob 路径一致性）；全量 **1272** 项通过（1271 passed + 1 环境性 skipped）。
+
 ## [6.4.9] - 2026-11-11
 
 千万字毫秒级收尾版（v6.4.8 记录的 FTS5 剩余瓶颈本版收割）：

@@ -94,7 +94,7 @@ class TestVersionBump(unittest.TestCase):
     钉点集合随版本数递增，发版链清单必须扫全部 test_v*fixes.py。"""
 
     def test_version_is_current(self):
-        self.assertEqual(__version__, "6.4.9")
+        self.assertEqual(__version__, "6.5.0")
 
 
 if __name__ == "__main__":

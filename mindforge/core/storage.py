@@ -8851,8 +8851,42 @@ class StorageEngine:
         return scored[:top_k]
 
     def _score_vector_chunk(self, vec, chunk, engine, heap, pool):
-        """计算一个分块的余弦分并并入全局有界最小堆（v5.6.5 P2 #12）"""
+        """计算一个分块的余弦分并并入全局有界最小堆（v5.6.5 P2 #12）
+
+        v6.5.0：chunk 元素为 (memory_id, raw_blob) 时走 numpy 零拷贝
+        快路径——blob 拼接后 frombuffer 直接成 (N, dim) 矩阵，省去逐条
+        Python 列表反序列化与 list→ndarray 转换（数千条库下扫描快
+        一个数量级）。维度不齐或 numpy 不可用时回退原路径。
+        """
         import heapq
+        # v6.5.0 numpy 零拷贝快路径（raw blob 输入）
+        if chunk and isinstance(chunk[0][1], (bytes, bytearray, memoryview)):
+            try:
+                import numpy as np
+                dim = len(vec)
+                blobs = [b for _, b in chunk]
+                if dim > 0 and all(len(b) == dim * 4 for b in blobs):
+                    q = np.asarray(vec, dtype=np.float32)
+                    qn = float(np.linalg.norm(q))
+                    if qn > 0:
+                        mat = np.frombuffer(
+                            b"".join(blobs), dtype='<f4'
+                        ).reshape(len(blobs), dim)
+                        norms = np.linalg.norm(mat, axis=1)
+                        denom = norms * qn
+                        ok = denom > 0
+                        scores = np.zeros(len(blobs), dtype=np.float32)
+                        scores[ok] = (mat[ok] @ q) / denom[ok]
+                        for (mid, _), sc in zip(chunk, scores):
+                            sc = float(sc)
+                            if len(heap) < pool:
+                                heapq.heappush(heap, (sc, mid))
+                            elif sc > heap[0][0]:
+                                heapq.heapreplace(heap, (sc, mid))
+                        return
+            except ImportError:
+                pass
+        # 原路径：engine 批量 cos（或纯 Python 兜底）
         if engine is not None and engine.is_available:
             part = engine.cosine_similarity_batch(vec, chunk, top_k=len(chunk))
         else:
@@ -8916,10 +8950,11 @@ class StorageEngine:
         _dim_mismatch = 0
         for mem_id, blob in cur:
             if engine and engine.is_available:
-                dv = engine.deserialize(blob)
-                if dv and len(dv) == len(vec):
-                    chunk.append((mem_id, dv))
-                elif dv:
+                # v6.5.0：raw blob 直传，维度由字节数校验，
+                # _score_vector_chunk 内 numpy 零拷贝成矩阵
+                if blob and len(blob) // 4 == len(vec):
+                    chunk.append((mem_id, bytes(blob)))
+                elif blob:
                     _dim_mismatch += 1
             else:
                 # engine 不可用时，使用通用反序列化（float32 小端序）

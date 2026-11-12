@@ -8,11 +8,13 @@ MindForge 嵌入引擎
 - 自定义 HTTP 端点
 
 通过环境变量或构造参数配置后端：
-  MINDFORGE_EMBEDDING_BACKEND=sentence_transformers|openai|ollama|http
+  MINDFORGE_EMBEDDING_BACKEND=sentence_transformers|openai|ollama|http|fastembed
   OPENAI_API_KEY=sk-...
   MINDFORGE_EMBEDDING_MODEL=text-embedding-3-small
   MINDFORGE_EMBEDDING_API_URL=https://custom.endpoint/embed
   OLLAMA_HOST=http://localhost:11434
+  MINDFORGE_EMBEDDING_BACKEND=fastembed  # v6.5.0：本地 ONNX 轻量后端（零 torch 依赖）
+  HF_ENDPOINT=https://hf-mirror.com      # v6.5.0：HF 模型下载镜像（网络受限环境）
   MINDFORGE_EMBEDDING_BACKEND=fake        # v5.7.8：确定性伪向量（测试/评测基线，无需模型）
 
 
@@ -22,6 +24,7 @@ MindForge 嵌入引擎
 import struct
 import logging
 import os
+import sys
 import threading
 import json
 from typing import List, Optional, Tuple
@@ -501,6 +504,113 @@ class HTTPBackend(EmbeddingBackend):
         return all_results
 
 
+# ===== fastembed 本地 ONNX 后端（v6.5.0） =====
+
+class FastEmbedBackend(EmbeddingBackend):
+    """fastembed 本地 ONNX 推理后端（v6.5.0 新增）
+
+    零 torch 依赖：onnxruntime CPU 推理，适合无 GPU / pip 大件受限环境。
+    首次使用时从 HuggingFace 下载 ONNX 模型（~33MB），后续完全离线。
+
+    与 sentence_transformers 后端的差异：
+    - 依赖链轻：fastembed + onnxruntime + tokenizers（无 torch/numpy 大件）
+    - CPU 推理延迟低（单句毫秒级），适合级联检索的本地向量路
+    - 查询向量带 LRU 缓存（重复查询零推理成本）
+
+    模型下载网络受限时，设置 HF 镜像：
+      export HF_ENDPOINT=https://hf-mirror.com
+    （须在进程启动前设置；后端加载时也会尝试 setdefault 补救）
+
+    环境变量：
+      MINDFORGE_EMBEDDING_BACKEND=fastembed
+      MINDFORGE_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5   # 默认
+    """
+
+    DEFAULT_FASTEMBED_MODEL = "BAAI/bge-small-en-v1.5"
+    # 查询向量 LRU 缓存容量（评测/线上重复查询命中率可观）
+    _QUERY_CACHE_SIZE = 1024
+
+    def __init__(self, model_name: str = ""):
+        self._model_name = model_name or self.DEFAULT_FASTEMBED_MODEL
+        self._model = None
+        self._dimension = DEFAULT_DIMENSION  # bge-small 同为 384 维
+        self._load_attempted = False
+        self._available = False
+        # LRU 查询缓存：text -> vec（手写 OrderedDict LRU，避免可变返回值被污染）
+        from collections import OrderedDict
+        self._query_cache: "OrderedDict[str, List[float]]" = OrderedDict()
+
+    @property
+    def is_available(self) -> bool:
+        if not self._load_attempted:
+            self._try_load()
+        return self._available
+
+    @property
+    def dimension(self) -> int:
+        return self._dimension
+
+    @property
+    def model_name(self) -> str:
+        return self._model_name
+
+    def _try_load(self):
+        self._load_attempted = True
+        try:
+            # 网络受限环境：HF 镜像补救（若 huggingface_hub 未导入则生效）
+            os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
+            from fastembed import TextEmbedding
+            self._model = TextEmbedding(model_name=self._model_name)
+            test_vec = next(iter(self._model.embed(["test"])))
+            self._dimension = len(test_vec.tolist())
+            self._available = True
+            logger.info("FastEmbedBackend 加载成功: %s (dim=%d)",
+                        self._model_name, self._dimension)
+        except ImportError:
+            logger.warning(
+                "fastembed 未安装，向量检索不可用。"
+                "安装: pip install fastembed")
+            self._available = False
+        except Exception as e:
+            logger.warning("FastEmbedBackend 加载失败: %s", e)
+            self._available = False
+
+    def encode(self, text: str) -> Optional[List[float]]:
+        if not self.is_available or not text:
+            return None
+        # LRU 命中：直接返回缓存副本
+        cached = self._query_cache.get(text)
+        if cached is not None:
+            self._query_cache.move_to_end(text)
+            return list(cached)
+        try:
+            vec = next(iter(self._model.embed([text]))).tolist()
+            self._cache_put(text, vec)
+            return vec
+        except Exception as e:
+            logger.warning("FastEmbedBackend encode 失败: %s", e)
+            return None
+
+    def encode_batch(self, texts: List[str]) -> Optional[List[List[float]]]:
+        if not self.is_available or not texts:
+            return None
+        try:
+            results = [v.tolist() for v in self._model.embed(texts)]
+            for t, v in zip(texts, results):
+                self._cache_put(t, v)
+            return results
+        except Exception as e:
+            logger.warning("FastEmbedBackend encode_batch 失败: %s", e)
+            return None
+
+    def _cache_put(self, text: str, vec: List[float]):
+        """写入 LRU 缓存并淘汰最旧条目"""
+        self._query_cache[text] = list(vec)
+        self._query_cache.move_to_end(text)
+        while len(self._query_cache) > self._QUERY_CACHE_SIZE:
+            self._query_cache.popitem(last=False)
+
+
 # ===== 确定性伪向量后端（v5.7.8） =====
 
 class FakeBackend(EmbeddingBackend):
@@ -591,6 +701,7 @@ _BACKEND_REGISTRY = {
     "openai": OpenAIBackend,
     "ollama": OllamaBackend,
     "http": HTTPBackend,
+    "fastembed": FastEmbedBackend,  # v6.5.0：本地 ONNX 轻量后端
     "fake": FakeBackend,  # v5.7.8：确定性测试/评测后端
 }
 
@@ -627,6 +738,10 @@ def create_backend(backend_name: str = "", model_name: str = "",
         return cls(model_name=model, **kwargs)
     elif backend_name == "http":
         return cls(model_name=model_name or "custom", **kwargs)
+    elif backend_name == "fastembed":
+        # v6.5.0：默认 BAAI/bge-small-en-v1.5（384 维，~33MB ONNX）
+        model = model_name or FastEmbedBackend.DEFAULT_FASTEMBED_MODEL
+        return cls(model_name=model, **kwargs)
     elif backend_name == "fake":
         seed = int(kwargs.pop("seed", 42))
         dim = int(kwargs.pop("dimension", DEFAULT_DIMENSION))
@@ -699,6 +814,9 @@ class EmbeddingEngine:
                     self._model_name = "text-embedding-3-small"
                 elif self._backend_name == "ollama":
                     self._model_name = "nomic-embed-text"
+                elif self._backend_name == "fastembed":
+                    # v6.5.0：本地 ONNX 轻量后端默认模型
+                    self._model_name = FastEmbedBackend.DEFAULT_FASTEMBED_MODEL
                 else:
                     self._model_name = DEFAULT_MODEL
             self._dimension = DEFAULT_DIMENSION
@@ -789,11 +907,19 @@ class EmbeddingEngine:
 
     @staticmethod
     def deserialize(blob: bytes) -> List[float]:
-        """从 bytes 反序列化向量"""
+        """从 bytes 反序列化向量
+
+        v6.5.0：array.array 快路径（C 级解包，比 struct.unpack 快数倍，
+        零依赖；返回 float 列表保持接口不变）
+        """
         if not blob:
             return []
-        count = len(blob) // 4
-        return list(struct.unpack(f'<{count}f', blob))
+        from array import array
+        a = array('f')
+        a.frombytes(blob[:len(blob) // 4 * 4])
+        if sys.byteorder == 'big':
+            a.byteswap()
+        return a.tolist()
 
     @staticmethod
     def cosine_similarity(v1: List[float], v2: List[float]) -> float:
@@ -827,6 +953,10 @@ class EmbeddingEngine:
     ) -> List[Tuple[str, float]]:
         """批量计算余弦相似度并返回 top_k 结果
 
+        v6.5.0：numpy 批量快路径（矩阵乘一次算全批），大规模库
+        （数千~十万条）下比逐条循环快一个数量级；numpy 不可用时
+        回退纯 Python 实现。
+
         Args:
             query_vec: 查询向量
             candidates: [(memory_id, embedding_vec), ...]
@@ -837,10 +967,33 @@ class EmbeddingEngine:
         """
         if not query_vec or not candidates:
             return []
+        dim = len(query_vec)
+        # v6.5.0：过滤维度不匹配项（与纯 Python 路径行为一致）
+        valid = [(mid, vec) for mid, vec in candidates
+                 if vec and len(vec) == dim]
+        if not valid:
+            return []
+        try:
+            import numpy as np
+            q = np.asarray(query_vec, dtype=np.float32)
+            qn = float(np.linalg.norm(q))
+            if qn == 0:
+                return []
+            # 候选矩阵 (N, dim)：向量为行
+            mat = np.asarray([vec for _, vec in valid], dtype=np.float32)
+            norms = np.linalg.norm(mat, axis=1)
+            # cos = (mat @ q_raw) / (||row|| * ||q||)
+            denom = norms * qn
+            ok = denom > 0
+            scores = np.zeros(len(valid), dtype=np.float32)
+            scores[ok] = (mat[ok] @ q) / denom[ok]
+            order = np.argsort(-scores)[:top_k]
+            return [(valid[i][0], float(scores[i])) for i in order]
+        except ImportError:
+            pass
+        # 纯 Python 兜底（numpy 不可用）
         scored = []
-        for mem_id, vec in candidates:
-            if not vec or len(vec) != len(query_vec):
-                continue
+        for mem_id, vec in valid:
             score = EmbeddingEngine.cosine_similarity(query_vec, vec)
             scored.append((mem_id, score))
         scored.sort(key=lambda x: x[1], reverse=True)

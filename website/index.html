@@ -39,7 +39,7 @@
   "softwareVersion": "6.5.0",
   "toolCount": 87,
   "moduleCount": 15,
-  "testCount": 1272,
+  "testCount": 1273,
   "url": "https://opok-ops.github.io/MindForge/",
   "codeRepository": "https://github.com/opok-ops/MindForge",
   "license": "https://github.com/opok-ops/MindForge/blob/master/LICENSE",
@@ -272,7 +272,7 @@
         <div class="stat glass"><div class="stat-num">4</div><div class="stat-lbl">记忆层级</div></div>
         <div class="stat glass"><div class="stat-num">17</div><div class="stat-lbl">功能模块</div></div>
         <div class="stat glass"><div class="stat-num">87</div><div class="stat-lbl">MCP 工具</div></div>
-        <div class="stat glass"><div class="stat-num">1272</div><div class="stat-lbl">测试用例</div></div>
+        <div class="stat glass"><div class="stat-num">1273</div><div class="stat-lbl">测试用例</div></div>
         <div class="stat glass"><div class="stat-num">100%</div><div class="stat-lbl">本地加密</div></div>
       </div>
     </div>
@@ -512,10 +512,10 @@
         </div>
       </div>
 
-      <p style="color:var(--text-dim);line-height:1.8;margin-bottom:22px">从第一行代码到现在 v6.5.0，没有团队，没有融资，就一个人、一台电脑，一个版本一个版本往上堆。1272 个测试用例全部通过（1271 通过 + 1 环境性跳过），87 个 MCP 工具，31 个核心模块，GitHub Actions CI 全绿。学历不能定义一个人的上限，但代码可以证明一个人的态度。</p>
+      <p style="color:var(--text-dim);line-height:1.8;margin-bottom:22px">从第一行代码到现在 v6.5.0，没有团队，没有融资，就一个人、一台电脑，一个版本一个版本往上堆。1273 个测试用例全部通过（1272 通过 + 1 环境性跳过），87 个 MCP 工具，31 个核心模块，GitHub Actions CI 全绿。学历不能定义一个人的上限，但代码可以证明一个人的态度。</p>
 
       <div class="about-stats">
-        <div class="about-stat"><b>1272</b><span>测试用例全绿</span></div>
+        <div class="about-stat"><b>1273</b><span>测试用例全绿</span></div>
         <div class="about-stat"><b>87</b><span>MCP 工具</span></div>
         <div class="about-stat"><b>31</b><span>核心模块</span></div>
         <div class="about-stat"><b>100%</b><span>本地加密 · 不上云</span></div>
@@ -971,7 +971,7 @@
             <li><b>向量引擎</b>：FastEmbedBackend（fastembed + onnxruntime，零 torch 依赖），BGE-small 384 维经 HF 镜像加载；查询 LRU 缓存命中 0.019ms、冷编码 ~12ms/句。</li>
             <li><b>扫描加速</b>：numpy 批量矩阵乘 + blob 零拷贝路径（修复查询向量双重归一化缩放 bug）；LoCoMo 实测向量检索 p50 46→23.6ms（−49%）。</li>
             <li><b>LoCoMo 四轮消融</b>：+向量 4.43→4.88；LLM 抽取使 temporal 正确率翻倍（15.4%→30.8%）；single/multi-hop 失分定位在证据组装层——AdaptiveContextEngine 的靶子。</li>
-            <li><b>质量</b>：15 项新守卫测试，全量回归 1,272 项通过。</li>
+            <li><b>质量</b>：15 项新守卫测试，全量回归 1,273 项通过（1272 passed + 1 环境性 skipped）。</li>
           </ul>
         </div>
       </article>

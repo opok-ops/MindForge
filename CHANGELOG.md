@@ -15,7 +15,7 @@ All notable changes to MindForge will be documented in this file.
   - 分席+时间锚负优化（temporal −2.30），保留 --seats 供复现
   - 结论入库：single-hop/multi-hop 的失分在证据组装层，非召回层——v6.5 下半场 AdaptiveContextEngine 的靶子
 - 全量 10 会话词法基线（1986 问）落盘：4.40/10，判官分布双峰（936×1 分 + 479×10 分）证实「捞到证据即满分、捞不到即零分」。
-- 15 项新守卫测试（FastEmbedBackend 契约 / numpy 一致性 / blob 路径一致性）；全量 **1272** 项通过（1271 passed + 1 环境性 skipped）。
+- 15 项新守卫测试（FastEmbedBackend 契约 / numpy 一致性 / blob 路径一致性）；全量 **1273** 项通过（1272 passed + 1 环境性 skipped）。
 
 ## [6.4.9] - 2026-11-11
 

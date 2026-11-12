@@ -6,7 +6,7 @@
 
 MindForge gives AI agents a persistent, structured long-term memory: a four-tier lifecycle model, knowledge graphs, hybrid retrieval, end-to-end encryption, and MCP / CLI / REST interfaces. All data stays on your machine.
 
-> **The story** — one developer, seven months, from v1.0 (March 2026) to v6.5.0: no team, no funding, 1,257 passing tests. [Read the journey →](https://opok-ops.github.io/MindForge/#developer)
+> **The story** — one developer, seven months, from v1.0 (March 2026) to v6.5.0: no team, no funding, 1,272 passing tests. [Read the journey →](https://opok-ops.github.io/MindForge/#developer)
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -81,7 +81,7 @@ MindForge stats
 
 ## What's New
 
-v6.1.3 – v6.4.9 shipped in ten days (2026-11-01 → 11-11; four releases in the last two days), guarded by **1,258 tests** (1,257 passing, 1 environment-skipped).
+v6.1.3 – v6.4.9 shipped in ten days (2026-11-01 → 11-11; four releases in the last two days), guarded by **1,273 tests** (1,272 passing, 1 environment-skipped).
 
 - **v6.4.9 — ten-million-char library at millisecond latency: FTS5 high-frequency-phrase scoring pruned** (2026-11-11). The last honest bottleneck from v6.4.8's ledger. Root cause (30k per-path timing): under the trigram tokenizer, corpus-wide phrases (template data's "陈述性记忆") match every row — bm25 full-match scoring cost 50.5ms/query, the dominant remainder of 100k mixed latency. Fix, query-side df pre-pruning symmetric to TF-IDF max_df: a phrase's df upper bound = min df of its trigrams (phrase matches ⊆ every trigram's row set); prune at 5% of corpus size; keep the lowest-ub phrase if all pruned. df is served from an in-process cache keyed by `max(rowid)` (add/update invalidate; hard-delete leaves df slightly stale = prunes more conservatively) — **two real pitfalls found en route: fts5vocab is a *streaming virtual table* — per-term probes AND `IN` batches trigger full scans (combined regressed 17→45ms before the cache)**. Plus: FTS5 path skipped on pathological fallback (no discriminating signal). Clean-environment 100k re-bench: pathological 122→**0.4ms** (−99.7%), mixed 134.9→**3.0ms** (−98%), all query types millisecond-class at ~10M chars. AI-flavored comment cleanup (essay-style docstrings → engineer-speak, info preserved). 5 new guards.
 

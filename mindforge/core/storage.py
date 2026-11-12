@@ -8886,6 +8886,18 @@ class StorageEngine:
                         return
             except ImportError:
                 pass
+            # v6.5.1 修复：无 numpy / 维度不齐时 blob 必须解码回 list 走
+            # 兜底打分——此前 bytes 直传 cosine_similarity_batch 会被
+            # 维度校验（len(blob)=4×dim ≠ dim）静默过滤成空结果，
+            # vector 路在无 numpy 环境（如 Python 3.10 CI）整体失效
+            dim = len(vec)
+            decoded = []
+            for mid, b in chunk:
+                dv = (engine.deserialize(bytes(b)) if engine is not None
+                      else self._deserialize_vector_fallback(bytes(b), dim))
+                if dv and len(dv) == dim:
+                    decoded.append((mid, dv))
+            chunk = decoded
         # 原路径：engine 批量 cos（或纯 Python 兜底）
         if engine is not None and engine.is_available:
             part = engine.cosine_similarity_batch(vec, chunk, top_k=len(chunk))

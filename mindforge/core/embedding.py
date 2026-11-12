@@ -992,6 +992,12 @@ class EmbeddingEngine:
         except ImportError:
             pass
         # 纯 Python 兜底（numpy 不可用）
+        # v6.5.1：与 numpy 路径行为对齐——零范数查询向量直接返回空，
+        # 不产出 0 分占位结果（无 numpy 环境如 Py3.10 CI 的正确性守卫）
+        import math as _math
+        qn = _math.sqrt(sum(x * x for x in query_vec))
+        if qn == 0:
+            return []
         scored = []
         for mem_id, vec in valid:
             score = EmbeddingEngine.cosine_similarity(query_vec, vec)

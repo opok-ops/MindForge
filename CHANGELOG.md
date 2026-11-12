@@ -3,6 +3,14 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.5.1] - 2026-11-12
+
+无 numpy 环境向量兜底修复（Python 3.10 支持矩阵内的正确性补丁）：
+
+- **根因**：CI 的 requirements-dev 以 `matplotlib; python_version >= "3.11"` 环境标记间接携带 numpy——3.11/3.12/3.13 矩阵有 numpy 走快路径，**Py3.10 无 numpy 走兜底**，暴露两个真 bug：① `_score_vector_chunk` 兜底分支把 raw blob（字节长度 4×dim）直传余弦批量打分，维度校验静默过滤全部候选——vector 路在无 numpy 环境整体返回空；② 纯 Python 余弦批对零范数查询向量返回 0 分占位结果，与 numpy 路径的空返回行为不一致。
+- **修复**：兜底分支先经 `engine.deserialize`/fallback 把 blob 解码回 list 再打分；纯 Python 路径零范数提前返回空。
+- **验证**：本地 numpy import 拦截（模拟 Py3.10 CI 条件）26 项向量测试全绿；CI 真实 3.10 job 全绿（8/8 checks）；有 numpy 快路径复验一致。全量 **1273** 项通过（1272 passed + 1 环境性 skipped）。
+
 ## [6.5.0] - 2026-11-12
 
 本地 ONNX 向量引擎 + LoCoMo 基准落版。向量检索从「接口就绪、引擎缺位」进入「本地零依赖可用」，语义召回路（第四路）正式常驻检索融合：

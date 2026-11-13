@@ -3,6 +3,38 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.5.2] - 2026-11-13
+
+证据上下文窗口扩展（AdaptiveContextEngine 雏形）——LoCoMo 评测判定的
+「失分在证据组装层」结论的产品化落地：
+
+- **诊断先行（dia_id 金标准）**：用 LoCoMo evidence 坐标离线测量证据命中率
+  （零 API 成本）：词法/向量/融合三口径 54-57%，而 LLM 判官正确率仅 20.6%
+  ——**34 个百分点的差距在组装层**（此前「召回层瓶颈」判断被推翻：token
+  覆盖率口径存在大量假阴性）。多跳题证据命中 89% 却只有 3% 答对，坐实
+  「证据捞到了但模型拼不出答案链」。
+- **窗口扩展核心（query.py）**：坐标协议 `ctxgrp:<组id>` + `ctxseq:<序号>`
+  入库 tags；`search(expand_context=N)` 命中条目按组拉取 ±N 邻居轮填充
+  `MemoryChunk.context_expansion`（升序含命中轮）。默认 0 行为与 v6.5.1
+  完全一致（兼容契约）。
+- **MindForge.search 透传**：`expand_context` 参数直达核心；无坐标/组缺失
+  时字段保持 None（降级安全）。
+- **评测验证（LoCoMo conv-26，199 问，DeepSeek 判官）**：组装层三件套
+  （窗口扩展 ±2 + 时间锚 + 拒答防御）+ adversarial 判官口径修正，相对
+  v6.5.1 基线：
+  - adversarial **25.5% → 87.2%（+61.7pt）**——判官口径修正后幻觉防御
+    兑现（47 问中 42 问正确拒答）
+  - multi-hop 正确率 **2.7% → 27.0%+**（组合实验峰值 40.5%）
+  - single-hop **34.3% → 54.3%**（组合实验峰值 62.9%）
+  - TOTAL **20.6% → 47.2% acc（+26.6pt，基线 2.3 倍），均分 4.51 → 6.42**
+  - 检索延迟不变（p50 18.4ms——扩展是后处理，不碰召回主路径）
+- **adversarial 判官口径修正（评测方法论）**：LoCoMo cat5 金标准为陷阱
+  答案（测幻觉），正确行为是拒答——Mem0 式「拿陷阱当标准答案」口径
+  扭曲，本版起 cat5 gold 语义直换为「对话未提及，正确行为=拒答」。
+- **7 项行为契约测试**（test_v652_context_expansion.py）：默认兼容/
+  窗口语义/边界钳制/无坐标降级/跨组隔离/半径=1/序列化安全。全量
+  **1279** 项通过（1278 passed + 1 环境性 skipped）。
+
 ## [6.5.1] - 2026-11-12
 
 无 numpy 环境向量兜底修复（Python 3.10 支持矩阵内的正确性补丁）：

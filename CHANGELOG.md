@@ -33,7 +33,8 @@ All notable changes to MindForge will be documented in this file.
   扭曲，本版起 cat5 gold 语义直换为「对话未提及，正确行为=拒答」。
 - **7 项行为契约测试**（test_v652_context_expansion.py）：默认兼容/
   窗口语义/边界钳制/无坐标降级/跨组隔离/半径=1/序列化安全。全量
-  **1279** 项通过（1278 passed + 1 环境性 skipped）。
+  **1280** 项通过（1279 passed + 1 环境性 skipped）——website JSON-LD
+  同步。
 
 ## [6.5.1] - 2026-11-12
 

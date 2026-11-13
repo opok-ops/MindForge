@@ -101,7 +101,7 @@ class TestVersionBump(unittest.TestCase):
     """版本钉值：忘记 bump 时在此显形。"""
 
     def test_version_is_current(self):
-        self.assertEqual(__version__, "6.5.3")
+        self.assertEqual(__version__, "6.5.4")
 
 
 if __name__ == "__main__":

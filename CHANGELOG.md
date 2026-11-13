@@ -3,6 +3,34 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.5.4] - 2026-11-13
+
+多查询融合检索基座（search_multi）+ 多跳增强的两次负结果实证：
+
+- **MindForge.search_multi(queries, per_query, expand_context, ...)**：
+  中性多查询融合基座——各子查询独立检索（保留词法锚点），按
+  memory_id 去重合并，结果顺序=首次出现的查询序位。拆解策略由
+  调用方提供（LLM 或规则均可），核心层零模型调用。上限 8 条
+  子查询防御；空/None 输入降级安全。
+- **多跳增强实验（LoCoMo conv-26 cat2，37 问子集）**：
+  - LLM 拆解路径证伪：高峰期拆解质量不可控，子问题打散原问题
+    词汇锚点导致证据召回崩塌（均分 1.45 vs 基线 4.32）；
+  - 实体扩展路径证伪：本地实体子查询与原查询命中高度重叠，
+    无增益（3.14 vs 4.32）；
+  - 结论：多跳剩余提升需要真正的两跳链检索（命中证据 A 后
+    二次检索关联实体 B）——AdaptiveContextEngine 的 v6.6 主线，
+    eval 层 patch 无法替代架构层工作。
+- **时间线注入（eval 层，--timeline）**：完整 session 日期序列
+  注入生成上下文，temporal 推算参考系补全。
+- **8 项行为契约测试**（test_v654_search_multi.py）：去重合并/
+  查询序位/空输入/单查询等价/max_results 上限/strategy 标记/
+  expand_context 透传。
+
+### Tests
+
+- 新增 8 项（v654 契约）。全量 **1288** 项通过（1287 passed + 1
+  环境性 skipped）。
+
 ## [6.5.3] - 2026-11-13
 
 发版链收敛：版本 spots 一键同步（v6.5.2 三次推送返工的根因修复）：

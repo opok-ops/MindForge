@@ -1,0 +1,7 @@
+{"qid": "conv-26-q0", "cat": 2, "q": "When did Caroline go to the LGBTQ support group?", "gold": "7 May 2023", "pred": "not mentioned in the conversation", "judge": 1, "correct": false, "ctxwin": 2}
+{"qid": "conv-26-q1", "cat": 2, "q": "When did Melanie paint a sunrise?", "gold": 2022, "pred": "last year", "judge": 7, "correct": false, "ctxwin": 2}
+{"qid": "conv-26-q2", "cat": 3, "q": "What fields would Caroline be likely to pursue in her educaton?", "gold": "Psychology, counseling certification", "pred": "not mentioned in the conversation", "judge": 1, "correct": false, "ctxwin": 2}
+{"qid": "conv-26-q3", "cat": 1, "q": "What did Caroline research?", "gold": "Adoption agencies", "pred": "not mentioned in the conversation", "judge": 1, "correct": false, "ctxwin": 2}
+{"qid": "conv-26-q4", "cat": 1, "q": "What is Caroline's identity?", "gold": "Transgender woman", "pred": "transgender", "judge": 10, "correct": true, "ctxwin": 2}
+{"qid": "conv-26-q5", "cat": 2, "q": "When did Melanie run a charity race?", "gold": "The sunday before 25 May 2023", "pred": "not mentioned in the conversation", "judge": 1, "correct": false, "ctxwin": 2}
+{"qid": "conv-26-q6", "cat": 2, "q": "When is Melanie planning on going camping?", "gold": "June 2023", "pred": "not mentioned in the conversation", "judge": 1, "correct": false, "ctxwin": 2}

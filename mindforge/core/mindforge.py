@@ -888,6 +888,69 @@ class MindForge:
         result.total_found = len(result.chunks)
         return result
 
+    def search_multi(self, queries: Optional[List[str]],
+                     per_query: int = 3,
+                     max_results: int = 10,
+                     expand_context: int = 0,
+                     min_relevance: float = 0.3,
+                     categories: Optional[List[str]] = None,
+                     layers: Optional[List[str]] = None,
+                     agent_id: str = "",
+                     session_id: str = "",
+                     use_embedding: bool = True,
+                     explain: bool = False) -> "RecallResult":
+        """多查询融合检索（v6.5.4）
+
+        各子查询独立检索（保留每条查询的词法锚点），按 memory_id
+        去重合并，结果顺序 = 首次出现的查询序位（保查询优先级）。
+        用途：查询拆解 / 实体扩展 / 多视角召回等应用层策略的检索
+        融合基座——拆解策略本身由调用方提供（LLM 或规则），本层只
+        负责融合与去重，不引入任何模型调用。
+
+        v6.5.4 实验背景（LoCoMo conv-26 cat2 多跳，199 问中的 37 问）：
+        LLM 拆解与实体扩展两条 eval 层路径当日均证伪（高峰期拆解
+        质量不可控 / 实体子查询无增益），本 API 作为中性基座保留，
+        供后续 AdaptiveContextEngine 的两跳链检索使用。
+
+        副作用契约：每条子查询按普通 search 记审计与访问统计
+        （多查询=多次真实检索行为，如实记录）。
+        """
+        import time as _time
+        start = _time.perf_counter()
+        empty = self._query_result_empty() if hasattr(
+            self, "_query_result_empty") else None
+        if not queries:
+            from mindforge.core.query import RecallResult as _RR
+            return _RR(chunks=[], total_found=0,
+                       query_time_ms=0.0,
+                       strategy_used="multi:0queries",
+                       token_estimate=0)
+        merged = []
+        seen = set()
+        for i, q in enumerate(queries[:8]):  # 上限 8 条防御
+            if not q:
+                continue
+            res = self.search(
+                q, max_results=per_query,
+                min_relevance=min_relevance,
+                categories=categories, layers=layers,
+                agent_id=agent_id, session_id=session_id,
+                use_embedding=use_embedding, explain=explain,
+                expand_context=expand_context)
+            for ch in res.chunks:
+                if ch.memory_id not in seen:
+                    seen.add(ch.memory_id)
+                    merged.append(ch)
+        merged = merged[:max_results]
+        elapsed = (_time.perf_counter() - start) * 1000
+        from mindforge.core.query import RecallResult as _RR
+        return _RR(
+            chunks=merged,
+            total_found=len(merged),
+            query_time_ms=round(elapsed, 2),
+            strategy_used=f"multi:{len(queries)}queries",
+            token_estimate=sum(len(c.content) for c in merged) // 4)
+
     def rebuild_embeddings(self, batch_size: int = 100,
                            incremental: bool = True) -> dict:
         """重建/增量构建嵌入向量（v5.4.5 新增，v5.4.6 增量模式）

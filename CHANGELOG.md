@@ -3,6 +3,27 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.5.3] - 2026-11-13
+
+发版链收敛：版本 spots 一键同步（v6.5.2 三次推送返工的根因修复）：
+
+- **scripts/release.py**：`bump X.Y.Z` 一条命令完成 version.py 真值、
+  7 个测试钉文件（字符串 + 元组两形态）、官网 9 处版本位、README×2
+  badge/架构图/开发历程的**全 spots 自动替换**，并内置预检（docs
+  consistency guard + 版本钉测试组）。`spots` 子命令可随时审计分布，
+  `--dry` 先看后改。不自动 commit/push（安全边界：人审后手动）。
+- **背景**：v6.5.2 发版时版本钉散落 22 处（version.py 2 + 测试钉 10 +
+  官网 9 + README 5），手动同步漏掉 docs guard 一轮、CI 版本钉一轮，
+  连续两次返工。本版起发版流程收敛为：release.py bump → 手写
+  CHANGELOG → 预检全绿 → commit/tag/push。
+- **spots 审计快照（v6.5.3 bump 后）**：22 处版本位全部由脚本管理，
+  CHANGELOG 条目除外（内容无法自动化，脚本预检会拦）。
+
+### Tests
+
+- 无新增测试（发版工程版）。全量 **1280** 项通过（1279 passed + 1
+  环境性 skipped）——release.py 预检脚本自带 guard + 钉组双预检。
+
 ## [6.5.2] - 2026-11-13
 
 证据上下文窗口扩展（AdaptiveContextEngine 雏形）——LoCoMo 评测判定的

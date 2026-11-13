@@ -4,6 +4,7 @@ MindForge 查询引擎
 """
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any, Tuple
 from .storage import StorageEngine, MemoryEntry
@@ -62,6 +63,85 @@ class RecallResult:
     layers_used: List[str] = field(default_factory=list)
     # v5.7.0 P1：加密兜底启用时为 True，表示部分结果来自全量解密扫描
     approximate: bool = False
+
+
+# v6.5.5：相对时间词归一化表（窗口扩展时就地换算为绝对日期）。
+# 锚定来源：轮次 tags 携带 "ctxdate:YYYY-MM-DD"（可选协议位）。
+# 缺 ctxdate 时原样返回（降级安全）。纯规则零 LLM。
+_TEMPORAL_RULES = [
+    ("today", 0), ("tonight", 0), ("this morning", 0),
+    ("this afternoon", 0), ("this evening", 0), ("right now", 0),
+    ("yesterday", -1), ("yesterday morning", -1), ("last night", -1),
+    ("tomorrow", 1), ("tomorrow morning", 1),
+    ("last week", -7), ("next week", 7), ("last weekend", -7),
+    ("next weekend", 7), ("last month", -30), ("next month", 30),
+    ("last year", -365), ("next year", 365),
+]
+_N_REL = re.compile(
+    r"(\b\d+\s+(?:day|week|month|year)s?\s+ago\b"
+    r"|\bin\s+\d+\s+(?:day|week|month|year)s?\b"
+    r"|[两二三四五六七八九十0-9]+\s*(?:天|周|月|年)(?:之)?\s*[前后以])", re.IGNORECASE)
+_CN_NUM = {"两": 2, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6,
+           "七": 7, "八": 8, "九": 9, "十": 10}
+_REL_DUR = {"day": 1, "week": 7, "month": 30, "year": 365,
+            "天": 1, "周": 7, "月": 30, "年": 365}
+
+
+def _normalize_temporal(text: str, anchor: Optional[str]) -> str:
+    """把 text 中的相对时间词换算为 [绝对日期±N] 标注（v6.5.5）
+
+    anchor 为该轮所属日期（YYYY-MM-DD）；None 时原样返回。
+    """
+    if not anchor or not text:
+        return text
+    try:
+        from datetime import datetime, timedelta
+        base = datetime.strptime(anchor, "%Y-%m-%d")
+    except Exception:
+        return text
+
+    def fmt(d):
+        return d.strftime("%Y-%m-%d")
+
+    out = text
+    # 显式「N 天/周/月 前（后）」
+    def rel_repl(m):
+        s = m.group(0).lower()
+        import re as _r
+        cn = _r.search(r"([两二三四五六七八九十]+)", s)
+        if cn:
+            # 中文数字（十以内单字；十X=10+X、X十=X*10 简化处理）
+            t = cn.group(1)
+            if len(t) == 1:
+                n = _CN_NUM.get(t, 1)
+            else:
+                n = 10 + _CN_NUM.get(t[1], 0) if t[0] == "十" else _CN_NUM.get(t[0], 1) * 10 + _CN_NUM.get(t[1], 0)
+        else:
+            num = _r.search(r"(\d+)", s)
+            if not num:
+                return m.group(0)
+            n = int(num.group(1))
+        unit = None
+        for k in _REL_DUR:
+            if k in s:
+                unit = k
+                break
+        if unit is None:
+            return m.group(0)
+        delta = n * _REL_DUR[unit]
+        if "前" in s or "ago" in s:
+            d = base - timedelta(days=delta)
+        else:
+            d = base + timedelta(days=delta)
+        return f"[{fmt(d)}]"
+
+    out = _N_REL.sub(rel_repl, out)
+    # 固定短语表（倒序替换避免子串误伤：先长后短）
+    for phrase, delta_days in sorted(_TEMPORAL_RULES, key=lambda x: -len(x[0])):
+        pat = re.compile(r"\b" + re.escape(phrase) + r"\b", re.IGNORECASE)
+        d = base + timedelta(days=delta_days)
+        out = pat.sub(f"[{fmt(d)}]", out)
+    return out
 
 
 # v5.5.5 P1 新增：中文技术同义词词典（50+ 组）
@@ -524,11 +604,15 @@ class QueryEngine:
             approximate=approximate,
         )
 
+
     def _expand_chunk_context(self, chunks: List[MemoryChunk],
                               radius: int) -> None:
         """按 ctxgrp/ctxseq 坐标 tags 填充 context_expansion（v6.5.2）
 
-        坐标协议：入库 tags 携带 "ctxgrp:<组id>" 与 "ctxseq:<序号>"。
+        坐标协议：入库 tags 携带 "ctxgrp:<组id>" 与 "ctxseq:<序号>"；
+        v6.5.5 起可选 "ctxdate:YYYY-MM-DD"（轮次日期锚）——携带时邻居
+        文本中的相对时间词（yesterday/两周前…）就地归一化为绝对日期，
+        temporal 类问题的证据自包含时间戳。
         无坐标或组内邻居缺失时该 chunk 字段保持 None（降级安全）。
         窗口 = [seq-radius, seq+radius]（含命中轮），升序输出。
         """
@@ -565,7 +649,15 @@ class QueryEngine:
                 if e_seq is None:
                     continue
                 if abs(e_seq - seq) <= radius:
-                    neighbours.append((e_seq, e.content))
+                    # v6.5.5：邻居轮时间归一化（ctxdate 存在时）
+                    e_date = None
+                    for t in (e.tags or []):
+                        if t.startswith("ctxdate:"):
+                            e_date = t[8:]
+                            break
+                    content = (_normalize_temporal(e.content, e_date)
+                               if e_date else e.content)
+                    neighbours.append((e_seq, content))
             if neighbours:
                 neighbours.sort(key=lambda x: x[0])
                 chunk.context_expansion = neighbours

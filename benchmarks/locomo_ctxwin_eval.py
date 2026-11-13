@@ -132,10 +132,13 @@ def main():
                               t.get("text", ""), t.get("dia_id", "")))
 
         for (day, i, sp, tx, dia) in turns:
+            d = sess_dates.get(day, "")
             mf.add(f"{sp}: {tx}",
                    category="locomo_session",
                    tags=[f"day:{day}", f"conv:{cid}",
-                         f"ti:{i}", f"dia:{dia}"])
+                         f"ti:{i}", f"dia:{dia}",
+                         f"ctxgrp:{cid}-{day}", f"ctxseq:{i}"]
+                   + ([f"ctxdate:{d}"] if d else []))
 
         qas = [qa for qa in conv.get("qa", [])
                if str(qa.get("category")) in ("1", "2", "3", "4", "5")]
@@ -148,7 +151,8 @@ def main():
                 if qid in done:
                     continue
                 t0 = time.perf_counter()
-                hits = mf.search(qa["question"], max_results=args.k)
+                hits = mf.search(qa["question"], max_results=args.k,
+                                 expand_context=args.ctxwin)
                 lat.append((time.perf_counter() - t0) * 1000)
 
                 # ---- 组装层：窗口扩展 ----
@@ -160,20 +164,11 @@ def main():
                             if ":" in t}
                     day = tags.get("day", "")
                     ti = tags.get("ti", "")
-                    if day and ti.isdigit() and day in sess_turns:
-                        i = int(ti)
-                        st = sess_turns[day]
-                        lo = max(0, i - args.ctxwin)
-                        hi = min(len(st), i + args.ctxwin + 1)
-                        bkey = (day, lo, hi)
-                        if bkey in seen_blocks:
-                            continue
-                        seen_blocks.add(bkey)
+                    if h.context_expansion:
                         date = sess_dates.get(day, "")
                         block = [f"[{date}]"]
-                        for j in range(lo, hi):
-                            mark = " *" if j == i else ""
-                            block.append(f"{st[j][0]}:{mark} {st[j][1]}")
+                        for seq, text in h.context_expansion:
+                            block.append(text)
                         ctx_parts.append("\n".join(block))
                     else:
                         ctx_parts.append(f"- {h.content}")

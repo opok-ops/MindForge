@@ -85,7 +85,7 @@ class TestVersionBump(unittest.TestCase):
     """版本钉值（v6.4.5 教训：每版 fixes 断言随发版一并 bump）。"""
 
     def test_version_is_646(self):
-        self.assertEqual(__version__, "6.5.4")
+        self.assertEqual(__version__, "6.5.5")
 
 
 if __name__ == "__main__":

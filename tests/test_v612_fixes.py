@@ -662,8 +662,8 @@ class TestVersionConsistency(unittest.TestCase):
     def test_version_is_612(self):
         from mindforge.core.version import VERSION_INFO, __version__
         # v6.1.3：版本钉值随发版推进更新（历史方法名保留）
-        self.assertEqual(__version__, "6.5.4")
-        self.assertEqual(VERSION_INFO, (6, 5, 4))
+        self.assertEqual(__version__, "6.5.5")
+        self.assertEqual(VERSION_INFO, (6, 5, 5))
 
     def test_json_round_trip_safety_of_preview(self):
         """save_evolution 的预览序列化不得抛（不可 json 化的对象走 str 兜底）。"""

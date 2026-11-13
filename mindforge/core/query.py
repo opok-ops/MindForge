@@ -5,7 +5,7 @@ MindForge 查询引擎
 
 import logging
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from .storage import StorageEngine, MemoryEntry
 from .indexer import IndexEngine
 from .types import MemoryLayer
@@ -44,6 +44,11 @@ class MemoryChunk:
     #        "final": 0.42, "winner": "tfidf",
     #        "fusion": {"text":…, "vector":…, "fused":…}（仅融合时存在）}
     score_breakdown: Optional[Dict[str, Any]] = None
+    # v6.5.2：证据上下文窗口扩展（AdaptiveContextEngine 雏形）。
+    # search(expand_context=N>0) 且命中条目带坐标 tags
+    # （ctxgrp:<组id> + ctxseq:<序号>）时填充：[(seq, content),...]
+    # 升序含命中轮自身；其余恒为 None（序列化兼容）。
+    context_expansion: Optional[List[Tuple[int, str]]] = None
 
 
 @dataclass
@@ -191,6 +196,7 @@ class QueryEngine:
                session_id: str = "",
                use_embedding: bool = True,
                explain: bool = False,
+               expand_context: int = 0,
                *, _update_access: bool = True,
                _record_search: bool = True) -> RecallResult:
         """搜索记忆
@@ -496,6 +502,13 @@ class QueryEngine:
         except Exception:
             pass
 
+        # v6.5.2：证据上下文窗口扩展（AdaptiveContextEngine 雏形）。
+        # 命中 chunk 带 ctxgrp:/ctxseq: 坐标 tags 时，按组拉邻居轮填充
+        # context_expansion。expand_context=0（默认）零开销直通，行为与
+        # 旧版完全一致（1273 项既有测试契约不变）。
+        if expand_context and expand_context > 0:
+            self._expand_chunk_context(chunks, expand_context)
+
         elapsed = (time.time() - start) * 1000
         token_estimate = sum(len(c.content) for c in chunks) // 4
 
@@ -510,6 +523,52 @@ class QueryEngine:
             layers_used=used_layers,
             approximate=approximate,
         )
+
+    def _expand_chunk_context(self, chunks: List[MemoryChunk],
+                              radius: int) -> None:
+        """按 ctxgrp/ctxseq 坐标 tags 填充 context_expansion（v6.5.2）
+
+        坐标协议：入库 tags 携带 "ctxgrp:<组id>" 与 "ctxseq:<序号>"。
+        无坐标或组内邻居缺失时该 chunk 字段保持 None（降级安全）。
+        窗口 = [seq-radius, seq+radius]（含命中轮），升序输出。
+        """
+        import json as _json
+        for chunk in chunks:
+            if chunk.context_expansion is not None:
+                continue
+            grp = seq = None
+            for t in (chunk.tags or []):
+                if t.startswith("ctxgrp:"):
+                    grp = t[7:]
+                elif t.startswith("ctxseq:"):
+                    try:
+                        seq = int(t[7:])
+                    except ValueError:
+                        pass
+            if grp is None or seq is None:
+                continue
+            try:
+                group_entries = self.storage.search_by_tag(
+                    f"ctxgrp:{grp}", limit=4096)
+            except Exception:
+                continue
+            neighbours = []
+            for e in group_entries:
+                e_seq = None
+                for t in (e.tags or []):
+                    if t.startswith("ctxseq:"):
+                        try:
+                            e_seq = int(t[7:])
+                        except ValueError:
+                            pass
+                        break
+                if e_seq is None:
+                    continue
+                if abs(e_seq - seq) <= radius:
+                    neighbours.append((e_seq, e.content))
+            if neighbours:
+                neighbours.sort(key=lambda x: x[0])
+                chunk.context_expansion = neighbours
 
     def get_session_context(self,
                             session_id: str,

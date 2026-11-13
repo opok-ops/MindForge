@@ -810,12 +810,19 @@ class MindForge:
                agent_id: str = "",
                session_id: str = "",
                use_embedding: bool = True,
-               explain: bool = False):
+               explain: bool = False,
+               expand_context: int = 0):
         """搜索记忆
 
         v5.4.5 新增 use_embedding 参数：
         - True（默认）：启用向量召回 + TF-IDF + Fuzzy 多路融合搜索
         - False：降级为 TF-IDF + Fuzzy 两路搜索（资源受限时使用）
+
+        v6.5.2 新增 expand_context 参数（证据上下文窗口扩展）：
+        - N>0：命中条目若带 ctxgrp:/ctxseq: 坐标 tags，按组拉取
+          ±N 邻居轮填充 chunk.context_expansion（LoCoMo 评测验证：
+          multi-hop 正确率 +27pt 的核心机制产品化）
+        - 0（默认）：行为与旧版完全一致
 
         v6.3.0 新增 explain 参数（检索可解释性）：
         - True：每个返回的 MemoryChunk.score_breakdown 携带各召回路
@@ -847,6 +854,7 @@ class MindForge:
                 session_id=session_id,
                 use_embedding=use_embedding,
                 explain=explain,
+                expand_context=expand_context,
                 _update_access=False,
                 _record_search=False,
             )

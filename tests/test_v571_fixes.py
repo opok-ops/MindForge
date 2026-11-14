@@ -90,23 +90,36 @@ class TestFts5MultiWordOr(unittest.TestCase):
             IndexEngine._escape_fts5_query("加密搜索"), '"加密搜索"')
 
     def test_multi_word_english_or(self):
+        """v6.5.12 契约反转：多词 AND 共现（泛化洪水修复）"""
         self.assertEqual(
             IndexEngine._escape_fts5_query("search bug"),
-            '"search" OR "bug"')
+            '"search" AND "bug"')
 
     def test_three_words_or(self):
         self.assertEqual(
             IndexEngine._escape_fts5_query("foo bar baz"),
-            '"foo" OR "bar" OR "baz"')
+            '"foo" AND "bar" AND "baz"')
 
     def test_empty(self):
         self.assertEqual(IndexEngine._escape_fts5_query(""), "")
 
     def test_quote_escaped(self):
-        # "bar" → """bar"""（双引号翻倍），与 OR 拼接
+        # v6.5.12: 剥标点（引号剥离）+ AND 拼接
         self.assertEqual(
             IndexEngine._escape_fts5_query('foo "bar"'),
-            '"foo" OR """bar"""')
+            '"foo" AND "bar"')
+
+    def test_stopword_filtered(self):
+        """v6.5.12: 停用词不进 MATCH（泛化洪水源头）"""
+        self.assertEqual(
+            IndexEngine._escape_fts5_query("When did Melanie paint a sunrise?"),
+            '"Melanie" AND "paint" AND "sunrise"')
+
+    def test_all_stopwords_fallback(self):
+        """全停用词查询回退原词（避免空 MATCH）"""
+        self.assertEqual(
+            IndexEngine._escape_fts5_query("when did"),
+            '"when" AND "did"')
 
 
 class TestRateLimiterCleanup(unittest.TestCase):

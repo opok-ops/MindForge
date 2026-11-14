@@ -112,8 +112,11 @@ class TestFts5QueryEscaping(_V547Case):
         cases = [
             ("C++", '"C++"'),
             ("hello:world", '"hello:world"'),
-            ("(test)", '"(test)"'),
-            ("MySQL 复制", '"MySQL" OR "复制"'),
+            # v6.5.12: 括号属剥离标点——短语构造前剥掉（trigram
+            # 下标点不出 gram，短语内标点零匹配）
+            ("(test)", '"test"'),
+            # v6.5.12: AND 共现 + 停用词——MySQL/复制皆实词
+            ("MySQL 复制", '"MySQL" AND "复制"'),
         ]
         for raw, expect in cases:
             with self.subTest(query=raw):

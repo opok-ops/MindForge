@@ -435,12 +435,25 @@ class IndexEngine:
         if not q:
             return q
         tokens = [t for t in q.split() if t]
+        # v6.5.12: 停用词剔除——疑问词/虚词只贡献泛化命中
+        # v6.5.12: 短语构造前剥离尾标点——"sunrise?" 作为短语在
+        # trigram tokenizer 下零匹配（标点不出 gram），AND 整体空
+        content_tokens = []
+        for t in tokens:
+            clean = t.strip('?.!,;:()"')
+            if (clean.lower() not in IndexEngine._STOPWORDS
+                    and len(clean) > 1):
+                content_tokens.append(clean)
+        if not content_tokens:
+            content_tokens = tokens  # 全是停用词则回退原词（避免空查询）
         # 单 token（含中文无空格）保持原短语行为
-        if len(tokens) <= 1:
-            return '"' + q.replace('"', '""') + '"'
-        # 多 token：各自转义为短语后 OR 连接
-        escaped = ['"' + t.replace('"', '""') + '"' for t in tokens]
-        return " OR ".join(escaped)
+        if len(content_tokens) <= 1:
+            t = content_tokens[0]
+            return '"' + t.replace('"', '""') + '"'
+        # v6.5.12: AND 优先——要求实词共现；调用方 fts_search 在
+        # AND 空结果时自动降级 OR（两阶段，见 fts_search）
+        escaped = ['"' + t.replace('"', '""') + '"' for t in content_tokens]
+        return " AND ".join(escaped)
 
     def fts_search(self, conn: sqlite3.Connection, query: str,
                    top_k: int = 10) -> List[Tuple[str, float]]:
@@ -465,6 +478,19 @@ class IndexEngine:
                 ORDER BY score
                 LIMIT ?
             """, (escaped, top_k)).fetchall()
+            # v6.5.12: AND 两阶段——实词共现空结果时降级 OR（保留
+            # 任一词召回兜底）；降级前剔除停用词的 OR 也比旧版干净
+            if not rows and " AND " in escaped:
+                or_escaped = escaped.replace(" AND ", " OR ")
+                rows = conn.execute("""
+                    SELECT m.id, bm25(memory_fts) as score
+                    FROM memory_fts
+                    JOIN memories m ON memory_fts.rowid = m.rowid
+                    WHERE memory_fts MATCH ?
+                      AND m.category != 'trash'
+                    ORDER BY score
+                    LIMIT ?
+                """, (or_escaped, top_k)).fetchall()
             # v5.5.2 fix: clamp bm25 score to prevent math.exp overflow.
             # bm25 returns negative values (lower = more relevant); a large
             # positive value is anomalous but would cause OverflowError.
@@ -483,6 +509,31 @@ class IndexEngine:
     # v6.4.9: 高频短语剪枝比例（与 TF-IDF max_df 0.05 对齐）
     _FTS_MAX_DF_RATIO = 0.05
 
+    # v6.5.12: 检索停用词——疑问词/虚词在对话语料里 df 极高（LoCoMo
+    # 300 turn 里 "when"/"did" 各命中 100+ 行），OR 连接下以多词 tf
+    # 优势压过低频关键词命中（paint a sunrise 被 "When did Melanie"
+    # 泛化命中淹没的实证）。MATCH 构造前剔除。
+    _STOPWORDS = frozenset({
+        # 英文疑问/助动词/虚词
+        "when", "where", "what", "who", "whom", "whose", "why", "how",
+        "did", "does", "do", "is", "was", "were", "are", "be", "been",
+        "the", "a", "an", "of", "to", "in", "on", "at", "for", "with",
+        "and", "or", "but", "if", "that", "this", "these", "those",
+        "it", "its", "as", "by", "from", "has", "have", "had",
+        "will", "would", "can", "could", "should", "shall",
+        "i", "you", "he", "she", "we", "they", "me", "him", "her",
+        "us", "them", "my", "your", "his", "their", "our",
+        "not", "no", "yes", "so", "up", "out", "about", "into",
+        "over", "after", "again", "then", "once", "here", "there",
+        "all", "any", "both", "each", "few", "more", "most", "other",
+        "some", "such", "only", "own", "same", "than", "too", "very",
+        # 中文虚词/疑问
+        "的", "了", "吗", "呢", "是", "在", "我", "你", "他", "她",
+        "它", "们", "的", "和", "与", "或", "但", "就", "都", "很",
+        "什么", "怎么", "怎样", "哪里", "哪个", "谁", "为什么",
+        "什么", "时候", "多少",
+    })
+
     def _prune_fts_query(self, conn: sqlite3.Connection, query: str,
                          escaped: str) -> str:
         """剔除 MATCH 里必然无区分度的高频短语。
@@ -494,7 +545,11 @@ class IndexEngine:
         点查；以 memories.max_rowid 为失效标记，覆盖 add/update；
         硬删导致的 df 缓存偏大只会让剪枝偏保守，5% 阈值级近似）。
         """
-        tokens = [t for t in query.split() if t]
+        # v6.5.12: 从 escaped 解析短语（而非原始 query）——AND 语义下
+        # escaped 只含实词，prune 的 df 判断与重组都应基于同一词集
+        import re as _re2
+        tokens = _re2.findall(r'"([^"]+)"', escaped) or [
+            t for t in query.split() if t]
         if len(tokens) <= 1:
             return escaped
         try:
@@ -528,13 +583,16 @@ class IndexEngine:
                     kept.append(tok)
                 if best_ub is None or ub < best_ub:
                     best, best_ub = tok, ub
+            # v6.5.12: 重组保持输入连接词——AND 两阶段语义不能被
+            # prune 降级成 OR（否则泛化洪水回归）
+            joiner = " AND " if " AND " in escaped else " OR "
             if not kept:
                 kept = [best] if best else []
-                return " OR ".join(
+                return joiner.join(
                     '"' + t.replace('"', '""') + '"' for t in kept)
             if len(kept) == len(tokens):
                 return escaped
-            return " OR ".join(
+            return joiner.join(
                 '"' + t.replace('"', '""') + '"' for t in kept)
         except sqlite3.Error:
             return escaped

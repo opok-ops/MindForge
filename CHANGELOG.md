@@ -3,6 +3,30 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.5.12] - 2026-11-14
+
+FTS5 检索质量修复：停用词 + AND 共现两阶段（时间检索修复主役）。
+
+- **LoCoMo temporal 失分根因实锤**：「When did Melanie paint a
+  sunrise?」四路 top5 全是 0.96-0.97 泛化命中——`_escape_fts5_query`
+  OR 连接全部词，when/did/a 以多词 tf 优势压过 paint/sunrise 真证据
+  （painted turn 排 top10 开外 → 判官「not mentioned」）。AND 共现
+  + 停用词后 top1=真证据 1.0 分。
+- **三层修复**：① 检索停用词表（英文疑问词/虚词 ~70 条 + 中文，
+  MATCH 构造前剔除）；② **AND 优先两阶段**——实词共现空结果时
+  降级 OR 兜底；③ 短语构造前剥尾标点（`"sunrise?"` 在 trigram
+  tokenizer 下零匹配——标点不出 gram，AND 整体被拖空）。
+- **_prune_fts_query 保持连接词**：此前 df 剪枝重组一律 OR，把
+  AND 语义降级回洪水；现从 escaped 解析短语并保持 AND/OR。
+- **诚实边界**：LoCoMo 部分 temporal gold 在 observation/summary
+  层而非对话 turn（picnic 类）——检索侧无解，是数据特性不是缺陷。
+
+### Tests
+
+fts 敏感门禁 231 passed（six_path/graph/explain/645/562/577/635/
+temporal_norm/core/546）。全量 **1321** 项通过（1320 passed + 1 环境
+性跳过），2026-11-14 实测，CI 兜底。
+
 ## [6.5.11] - 2026-11-14
 
 六路融合分路施策：temporal 混排 + graph 尾部补位。

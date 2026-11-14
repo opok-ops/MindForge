@@ -2107,12 +2107,17 @@ class StorageEngine:
         conn = self._get_conn()
 
         def _meta(mid: str):
+            # v6.5.8：附带 created_at——Windows 15.6ms 计时精度下两条
+            # add 的 updated_at 落同一 tick，older 判定的 `<=` 平局裁决
+            # 永远指向扫描第一位（ORDER BY created_at DESC = 新的），
+            # keep_newer 实际杀新的。created_at 作为平局决胜键。
             row = conn.execute(
-                "SELECT updated_at, importance FROM memories WHERE id = ?",
+                "SELECT updated_at, importance, created_at FROM memories WHERE id = ?",
                 (mid,)).fetchone()
             if not row:
-                return (0.0, "MEDIUM")
-            return (float(row[0] or 0.0), row[1] or "MEDIUM")
+                return (0.0, "MEDIUM", 0.0)
+            return (float(row[0] or 0.0), row[1] or "MEDIUM",
+                    float(row[2] or 0.0))
 
         for c in conflicts:
             a_id, b_id = c["memory_a_id"], c["memory_b_id"]
@@ -2121,15 +2126,19 @@ class StorageEngine:
                 needs_review.append({**c, "status": "pending"})
                 continue
             if action == "keep_newer":
-                a_ts, _ = _meta(a_id)
-                b_ts, _ = _meta(b_id)
-                older = a_id if a_ts <= b_ts else b_id
+                a_ts, _, a_ct = _meta(a_id)
+                b_ts, _, b_ct = _meta(b_id)
+                if a_ts != b_ts:
+                    older = a_id if a_ts < b_ts else b_id
+                else:
+                    # updated_at 同 tick → created_at 决胜（老的创建早）
+                    older = a_id if a_ct <= b_ct else b_id
                 ok = self.expire_memory(older, actor="reconcile")
                 reconciled.append({**c, "action_taken": "expire",
                                    "expired_id": older if ok else None})
             elif action == "keep_higher_importance":
-                _, a_imp = _meta(a_id)
-                _, b_imp = _meta(b_id)
+                _, a_imp, _ct = _meta(a_id)
+                _, b_imp, _ct2 = _meta(b_id)
                 lower = a_id if imp_map.get(a_imp, 1) <= imp_map.get(b_imp, 1) else b_id
                 ok = self.expire_memory(lower, actor="reconcile")
                 reconciled.append({**c, "action_taken": "expire",

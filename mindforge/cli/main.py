@@ -3601,6 +3601,16 @@ def _json_out(data, indent=2):
 
 
 def main(argv=None):
+    # v6.5.8：Windows 控制台强制 UTF-8——中文 help/输出在 cp1252/cp936
+    # 控制台直接 UnicodeEncodeError（CI Windows 矩阵首跑抓到，
+    # 真 Windows 用户 --help 即崩）。Py3.7+ TextIOWrapper 支持
+    # reconfigure；已重定向的流（管道）无 encoding 属性时跳过。
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            if hasattr(_stream, "reconfigure"):
+                _stream.reconfigure(encoding="utf-8")
+        except (ValueError, AttributeError, OSError):
+            pass
     parser = argparse.ArgumentParser(
         prog="mindforge",
         description=f"MindForge v{__version__} - AI Agent 终身记忆系统",

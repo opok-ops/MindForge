@@ -3,6 +3,25 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.5.8] - 2026-11-14
+
+Windows 兼容补丁：CI Windows 3.12 试水矩阵（v6.5.6 加入）首跑
+暴露的 9 个 Windows-only 失败全部修复。
+
+- **8.3 短名误判修复**：路径安全校验此前把 `RUNNER~1` 类 8.3 短名
+  当绕过攻击拒绝——GitHub Actions Windows runner 的用户目录就是
+  `C:\Users\RUNNER~1`（文件系统现实非攻击），7 个备份/导入测试
+  全挂。现先 resolve 展开已存在前缀的短名为真实长名再校验，
+  攻击性短名语义保持。
+- **跨线程连接关闭**：threading.local 连接此前只关当前线程——
+  probe/请求线程死后连接悬挂，Windows 文件锁导致临时目录清理
+  WinError 32（Linux 无文件锁从未暴露）。_get_conn 注册全连接
+  表（弱引用），close() 遍历关闭。
+
+### Tests
+
+- Windows 3.12 CI 档全绿；全量 1319 项测试维持通过。
+
 ## [6.5.7] - 2026-11-14
 
 六路检索实装 + 全量写路径缓存修复。「六路混合检索」从诚实化表述

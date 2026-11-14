@@ -125,7 +125,16 @@ def _safe_path(path_str, must_exist=False, allow_symlinks=False,
     target = Path(path_str)
     if not target.is_absolute():
         target = Path.cwd() / target
-    for comp in target.parts:
+    # v6.5.7：先展开已存在前缀的 8.3 短名再校验——GitHub Actions
+    # Windows runner 的用户目录本身就是 C:\Users\RUNNER~1（8.3 短名
+    # 是文件系统现实，不是绕过攻击），原逻辑直接拒绝导致 7 个
+    # 备份/导入测试全挂。resolve(strict=False) 由 Windows API 展开
+    # 存在部分的短名为真实长名；不存在部分（新建文件）按原样校验。
+    try:
+        check_target = target.resolve(strict=False)
+    except (OSError, RuntimeError):
+        check_target = target
+    for comp in check_target.parts:
         if comp and _is_suspicious_windows_path(comp):
             raise ValueError(f"路径组件不安全: {comp}")
 
@@ -747,6 +756,17 @@ class StorageEngine:
         conn = getattr(self._conn_local, "conn", None)
         if conn is None:
             conn = sqlite3.connect(str(self.db_path), timeout=10.0)
+            # v6.5.7：注册到全连接表（弱引用，GC 后自动消失）——
+            # close() 时可关闭其他线程遗留连接。Windows 上未关的
+            # sqlite 连接会锁住文件（WinError 32），临时目录清理
+            # 直接炸；Linux 无文件锁所以此前从未暴露。
+            try:
+                import weakref as _weakref
+                if not hasattr(self, "_all_conns"):
+                    self._all_conns = _weakref.WeakSet()
+                self._all_conns.add(conn)
+            except Exception:
+                pass
             conn.row_factory = sqlite3.Row
             # v5.5.7 安全加固：网络文件系统不支持 WAL，检测后降级
             if _is_network_fs(self.db_path):
@@ -7611,7 +7631,12 @@ class StorageEngine:
                 raise SecurityError(f"高敏感操作审计失败，拒绝执行: {action}") from e
 
     def _close_conns(self):
-        """关闭当前线程持有的 SQLite 连接（v5.4.6 线程安全改造）"""
+        """关闭当前线程持有的 SQLite 连接（v5.4.6 线程安全改造）
+
+        v6.5.7：遍历全连接表关闭其他线程遗留连接（弱引用，已 GC 的
+        自动跳过）。此前只关当前线程——probe/请求线程死掉后连接
+        悬挂，Windows 文件锁导致 unlink 失败（WinError 32）。
+        """
         conn = getattr(self._conn_local, "conn", None)
         if conn is not None:
             try:
@@ -7619,6 +7644,17 @@ class StorageEngine:
             except sqlite3.Error:
                 pass
             self._conn_local.conn = None
+        for c in list(getattr(self, "_all_conns", ()) or ()):
+            if c is conn:
+                continue
+            try:
+                c.close()
+            except sqlite3.Error:
+                pass
+        try:
+            getattr(self, "_all_conns", None) and self._all_conns.clear()
+        except Exception:
+            pass
 
     def close_thread_conn(self) -> None:
         """关闭当前线程持有的 SQLite 连接（v5.7.1 新增）

@@ -757,37 +757,25 @@ class QueryEngine:
             return _entry_cache[mid]
 
         # ===== v6.5.7 第 5/6 路：temporal + graph 召回 =====
-        # 设计为「补盲区」语义：仅当记忆未被四路捞到（或四路分更低）时
-        # 生效（score_map 取 max），不重排既有高质量命中。
-        # 降级矩阵：加密库 temporal 跳过（密文不可 SQL 匹配）、KG 空
-        # graph 空转、无 time_anchor 时相对词降级仅绝对日期可用——
-        # 全部零异常退出，四路结果不受影响。
-        five_six_used = []
+        # v6.5.9 改「尾部补位」语义（LoCoMo 全量 1986 问校准）：
+        # 候选不再混入 score_map 主排序——graph 补盲分（0.55/0.45）
+        # 插进四路 0.6-0.8 的高分区间会占掉 top-k 名额，把四路正确
+        # 证据挤出（cat1 multi-hop 25.2%→10.3%，-14.9pt）。现改为：
+        # 四路结果不足 max_results 时才按分降序追加，绝不挤位。
+        # 降级矩阵不变：加密库 temporal 跳过、KG 空空转、无锚降级。
+        fill_candidates: Dict[str, Tuple[float, str]] = {}
         if not self.storage.encrypted and query:
             for mid, s, lbl in self._temporal_candidates(query, time_anchor):
                 if explain:
                     _bd(mid)["temporal"] = max(s, _bd(mid).get("temporal", 0.0))
-                if s >= score_map.get(mid, 0.0):
-                    is_new = mid not in score_map
-                    score_map[mid] = s
-                    if explain and is_new:
-                        _bd(mid)["winner"] = "temporal"
-                        _bd(mid)["final"] = s
+                if mid not in score_map and s >= fill_candidates.get(mid, (0.0, ""))[0]:
+                    fill_candidates[mid] = (s, "temporal")
         if query:
             for mid, s, lbl in self._graph_candidates(query):
                 if explain:
                     _bd(mid)["graph"] = max(s, _bd(mid).get("graph", 0.0))
-                if s >= score_map.get(mid, 0.0):
-                    is_new = mid not in score_map
-                    score_map[mid] = s
-                    if explain and is_new:
-                        _bd(mid)["winner"] = "graph"
-                        _bd(mid)["final"] = s
-        if explain and breakdown_map:
-            if any("temporal" in (v or {}) for v in breakdown_map.values()):
-                five_six_used.append("temporal")
-            if any("graph" in (v or {}) for v in breakdown_map.values()):
-                five_six_used.append("graph")
+                if mid not in score_map and s >= fill_candidates.get(mid, (0.0, ""))[0]:
+                    fill_candidates[mid] = (s, "graph")
 
         # 预过滤：按 categories/layers 筛选 score_map，避免非匹配记忆占据排序位
         if categories or layers:
@@ -805,8 +793,7 @@ class QueryEngine:
 
         # 合并排序
         raw_results = sorted(score_map.items(), key=lambda x: x[1], reverse=True)
-        if five_six_used:
-            strategy_used = strategy_used + "+" + "+".join(five_six_used)
+
 
         # ===== 第二阶段：构建结果 =====
         chunks = []
@@ -870,6 +857,48 @@ class QueryEngine:
 
             if len(chunks) >= max_results:
                 break
+
+                # ===== v6.5.9 第 5/6 路尾部补位 =====
+        # 四路结果不足 max_results 时，按分降序追加补盲候选（temporal
+        # 优先于 graph 同分）。绝不挤四路既有命中——LoCoMo 全量校准。
+        fill_used: set = set()
+        if fill_candidates and len(chunks) < max_results:
+            for mid, (s, src_path) in sorted(
+                    fill_candidates.items(), key=lambda kv: -kv[1][0]):
+                if len(chunks) >= max_results:
+                    break
+                entry = _cached_get(mid)
+                if not entry:
+                    continue
+                if categories and entry.category not in categories:
+                    continue
+                if layers and entry.layer not in layers:
+                    continue
+                content_text = entry.content
+                if entry.encrypted and not content_text:
+                    try:
+                        content_text = self.storage.decrypt_content(entry)
+                    except Exception:
+                        continue
+                if content_text in seen_contents:
+                    continue
+                seen_contents.add(content_text)
+                fill_used.add(src_path)
+                chunks.append(MemoryChunk(
+                    memory_id=entry.id,
+                    content=content_text,
+                    category=entry.category,
+                    relevance_score=s,
+                    layer=entry.layer,
+                    tags=entry.tags,
+                    metadata=entry.metadata,
+                    score_breakdown=breakdown_map.get(entry.id) if explain else None,
+                ))
+                if _update_access:
+                    self.storage._update_access(entry, agent_id, session_id)
+
+        if fill_used:
+            strategy_used = strategy_used + "+" + "+".join(sorted(fill_used))
 
         # v5.7.0 P2：记录搜索历史（审计写入失败不阻断主路径）
         if _record_search:

@@ -3,6 +3,26 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.5.10] - 2026-11-14
+
+六路补盲改「尾部补位」语义——修复 LoCoMo multi-hop -14.9pt 倒退。
+
+- **尾部补位（LoCoMo 全量校准的核心修复）**：graph/temporal 候选
+  不再混入 score_map 主排序——四路结果不足 max_results 时才按分
+  降序追加，绝不挤四路既有命中。v6.5.7 的混排实现把补盲分
+  （0.55/0.45）插进四路 0.6-0.8 高分区间占掉 top-k 名额，全量
+  cat1 multi-hop 25.2%→10.3%。conv0 复验预期 multi-hop 回 25%+
+  且 temporal/open-domain 增益保持。
+- **中文关系模式补「认识/结识」**：此前只有英文模式（is friends
+  with），「Bob 认识 Alice」不建关系 → 图路对中文对话空转。
+  实体抽取的关系动词兜底同步扩全模式。
+- 新增尾部补位契约 ×2（四路满时补盲零进入 / 四路不足时按分追加）；
+  两跳链召回断言改为候选层验证（不依赖结果混排细节）。
+
+### Tests
+
+全量 **1321** 项通过（1320 passed + 1 环境性跳过），2026-11-14 实测。
+
 ## [6.5.9] - 2026-11-14
 
 Windows 兼容收官 + LoCoMo 全量数据入档。v6.5.8 tag 因 PyPI 同版本

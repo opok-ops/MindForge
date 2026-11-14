@@ -77,6 +77,7 @@ RELATION_PATTERNS = [
     (r'\b([A-Z][a-z]+)\s+(?:met|saw|visited|called|emailed|texted)\s+([A-Z][A-Za-z ]{1,30})', "interacted_with"),
     (r'\b([A-Z][a-z]+)\s+(?:is\s+)?(?:married|engaged)\s+to\s+([A-Z][a-z]+)', "spouse_of"),
     (r'\b([A-Z][a-z]+)\s+(?:studied|study)\s+(?:at|in)\s+([A-Z][A-Za-z ]{1,30})', "studied_at"),
+    (r'([\u4e00-\u9fa5A-Za-z]{1,12})\s*(?:认识|结识)\s+([\u4e00-\u9fa5A-Za-z]{1,12})', "knows"),
     (r'(.+?)\s+(?:使用|利用|采用|运用)\s+(.+)', "uses"),
     (r'(.+?)\s+(?:是|属于|归类为)\s+(.+)', "is_a"),
     (r'(.+?)\s+(?:包含|包括|有)\s+(.+)', "contains"),
@@ -166,7 +167,7 @@ class KnowledgeGraph:
         # 单次出现的人名兜底：出现在关系动词模式中的大写词
         # （Melanie met Pamela——Pamela 仅出现一次也必须入图，
         # 否则关系链断裂、multi-hop 检索无路）
-        for pat, _rt in RELATION_PATTERNS[:6]:
+        for pat, _rt in RELATION_PATTERNS:
             for m in re.finditer(pat, text, re.IGNORECASE):
                 for g in m.groups():
                     if not g:

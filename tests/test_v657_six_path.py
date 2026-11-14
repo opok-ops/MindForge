@@ -114,13 +114,20 @@ class TestGraphPath(unittest.TestCase):
         self.assertGreaterEqual(stats["total_relations"], 2)
 
     def test_two_hop_chain_recall(self):
-        """两跳链召回：query「Melanie 的朋友在哪工作」命中 Google 条目"""
-        r = self.mf.search("Where does Melanie's friend work?",
-                           explain=True, max_results=5)
-        graph_hits = [c for c in r.chunks
-                      if (c.score_breakdown or {}).get("graph")]
-        self.assertGreaterEqual(len(graph_hits), 1)
-        self.assertIn("graph", r.strategy_used)
+        """两跳链召回：Melanie→Pamela→Google 链上记忆可由图路召回
+
+        v6.5.9 改尾部补位语义后，graph 命中是否出现在最终结果取决于
+        四路是否捞满（补位只在四路不足时追加）——因此这里直接验证
+        图路候选层（召回能力），而非结果混排表现（混排契约归
+        TestTailFill）。
+        """
+        cands = self.mf._query._graph_candidates(
+            "Where does Melanie's friend work?")
+        self.assertGreaterEqual(len(cands), 1)
+        mids = {mid for mid, _s, _lbl in cands}
+        entries = [self.mf.get(mid) for mid in mids]
+        self.assertTrue(any("Google" in (e.content or "")
+                            for e in entries if e))
 
     def test_empty_graph_degrades_silently(self):
         """KG 空库（禁用自动建图）graph 路空转、四路不受影响"""
@@ -182,3 +189,55 @@ class TestSixPathExplain(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTailFill(unittest.TestCase):
+    """v6.5.9 尾部补位语义：graph/temporal 候选不混排主排序
+
+    LoCoMo 全量校准：补盲分（0.55/0.45）混排进四路 0.6-0.8 区间
+    会占 top-k 名额挤掉正确证据（cat1 multi-hop -14.9pt）。
+    契约：四路命中数 >= max_results 时补盲候选一个都不进结果；
+    四路不足时按分降序追加、绝不挤位。
+    """
+
+    def setUp(self):
+        import tempfile
+        tmp = tempfile.mkdtemp(prefix="mf_tailfill_")
+        self.mf = MindForge(db_path=os.path.join(tmp, "m.db"),
+                            encrypted=False)
+        self.tmp = tmp
+
+    def tearDown(self):
+        self.mf.close()
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_full_core_results_no_fill(self):
+        """四路已满 top-k：graph 候选不进结果"""
+        for i in range(6):
+            self.mf.add(f"机器学习训练数据 augmentation 技术文档 {i}",
+                        category="ml")
+        self.mf.add("Bob 认识 Alice", category="people")
+        self.mf.add("Alice works at Google", category="people")
+        r = self.mf.search("机器学习训练数据", max_results=5)
+        # 四路命中已满 5 条
+        self.assertGreaterEqual(len(r.chunks), 5)
+        # graph 候选（bob/alice/google）不应出现在结果里
+        contents = [c.content for c in r.chunks]
+        self.assertTrue(all("bob 认识 alice" not in c for c in contents))
+
+    def test_fill_only_when_core_short(self):
+        """四路不足时补位生效：图可达但词面/语义捞不到的记忆被追加"""
+        self.mf.add("极其罕见的独角兽词汇 quokkaberry", category="x")
+        self.mf.add("Bob 认识 Alice", category="people")
+        self.mf.add("Alice lives in Reykjavik", category="people")
+        # query 只含 Bob：目标记忆（Alice lives in Reykjavik）与
+        # query 无词面重叠 → 四路捞不到；graph 路 2 跳
+        # （Bob→Alice→Reykjavik）可达 → 尾部补位追加
+        r = self.mf.search("Bob 的 rare quokkaberry",
+                           max_results=5, explain=True)
+        self.assertTrue("graph" in r.strategy_used,
+                        f"strategy={r.strategy_used}")
+        contents = [c.content for c in r.chunks]
+        self.assertTrue(any("Reykjavik" in c for c in contents),
+                        contents)

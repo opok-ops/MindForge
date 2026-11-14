@@ -6,11 +6,13 @@
 
 MindForge gives AI agents a persistent, structured long-term memory: a four-tier lifecycle model, knowledge graphs, hybrid retrieval, end-to-end encryption, and MCP / CLI / REST interfaces. All data stays on your machine.
 
-> **The story** — one developer, seven months, from v1.0 (March 2026) to v6.5.6: no team, no funding, 1,272 passing tests. [Read the journey →](https://opok-ops.github.io/MindForge/#developer)
+> **The story** — one developer, seven months, from v1.0 (March 2026) to v6.5.7: no team, no funding, 1,305 passing tests. [Read the journey →](https://opok-ops.github.io/MindForge/#developer)
+>
+> *Timeline note (v6.5.7):* "seven months" counts from project start (2026-03, pre-git prototyping era). Git history begins 2026-07-17 with the v5.7.x repository consolidation — earlier code lived outside this repo. The 416+ commits reflect consolidated history only.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-6.5.6-green.svg)](https://github.com/opok-ops/MindForge/releases)
+[![Version](https://img.shields.io/badge/version-6.5.7-green.svg)](https://github.com/opok-ops/MindForge/releases)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
 [![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
@@ -42,7 +44,7 @@ Install from source, then start writing and reading memories in minutes:
 git clone https://github.com/opok-ops/MindForge.git
 cd MindForge
 pip install -e .               # zero ML deps: 3-path retrieval (TF-IDF + FTS5 + fuzzy)
-pip install -e ".[embedding]"  # + vector path → full 4-way hybrid retrieval
+pip install -e ".[embedding]"  # + vector path → full 6-way hybrid retrieval
 ```
 
 > Without the `embedding` extra, MindForge runs in zero-dependency mode — fully functional, but paraphrased queries may go unrecalled (no semantic path). With it, a small sentence-transformers model downloads on first vector search.
@@ -76,15 +78,15 @@ MindForge stats
 - **Ten-million-character library, millisecond-class across all query types (v6.4.9)**: pathological 218→**0.4ms** (−99.8%), mixed 143→**3.0ms** (−98%), rare 6.8ms, combined 17.8ms (100k full-pipeline, clean environment). The last bottleneck — FTS5 high-frequency-phrase bm25 scoring — is now pruned query-side via trigram-df pre-check (df upper bound = min trigram df, pruned at 5% corpus size, symmetric to the TF-IDF max_df design; df served from an in-process cache — fts5vocab is a streaming virtual table, per-term probes scan it fully).
 - **Index-blindness fix (v6.4.8)**: TF-IDF vocabulary was locked to the first 5 documents since v6.4.6 — incremental adds indexed as empty vectors (TF-IDF effectively half-dead; previous numbers carried by FTS5/fuzzy). Fixed with incremental vocabulary growth; all pipeline numbers above are now *true full-pipeline* measurements.
 - Retrieval quality (fixed-seed, `benchmarks/quality_bench.py`, 2k entries): needle Recall@1 = 1.0, MRR = 1.0, topic Recall@1 = 1.0, noise false-recall = 0.
-- **LoCoMo full-suite, LLM-judged (v6.5.6, 2026-11-13)**: 1,986 questions across all 10 conversations — **51.5% accuracy (≥9/10 judge score)**, 2.13× over the 24.2% pre-assembly baseline; cross-validated by two independent judges (DeepSeek 51.5% / Kimi K3.1 52.72%, Δ1.2pt); excluding the adversarial "should-refuse" bucket, **43.05%** (663/1540). Per-bucket: adversarial 93.9%, single-hop 57.8%, multi-hop 25.2%, temporal 9.6%, open-domain 10.4% — temporal evidence recall and two-hop chain retrieval are the named v6.6 targets. Data: `benchmarks/results/`, judge pipeline in `benchmarks/`.
+- **LoCoMo full-suite, LLM-judged (v6.5.7, 2026-11-13)**: 1,986 questions across all 10 conversations — **51.5% accuracy (≥9/10 judge score)**, 2.13× over the 24.2% pre-assembly baseline; cross-validated by two independent judges (DeepSeek 51.5% / Kimi K3.1 52.72%, Δ1.2pt); excluding the adversarial "should-refuse" bucket, **43.05%** (663/1540). Per-bucket: adversarial 93.9%, single-hop 57.8%, multi-hop 25.2%, temporal 9.6%, open-domain 10.4% — temporal evidence recall and two-hop chain retrieval are the named v6.6 targets. Data: `benchmarks/results/`, judge pipeline in `benchmarks/`.
 - LongMemEval — interface ready, not yet run (requires external LLM API key).
 - TF-IDF degraded mode process memory at 100k: ~700 MB. Index LRU cap: 100,000 docs (MINDFORGE_INDEX_MAX_DOCS).
 
 ## What's New
 
-v6.1.3 – v6.5.6 shipped in two weeks (2026-11-01 → 11-14), guarded by **1,300+ tests**.
+v6.1.3 – v6.5.7 shipped in two weeks (2026-11-01 → 11-14), guarded by **1,300+ tests**.
 
-- **v6.5.6 — security fix pack from dual-judge external review** (2026-11-14). Qwen4-Max (Doubao) and Kimi K3.1 independently reviewed the codebase; their overlapping findings became this release. (1) **GDPR erasure completed**: `gdpr_erase_all` now cascades to 17 tables — added `knowledge_graph` entities, `memory_snapshots`, `memory_templates`, and the four drama_* creation-content tables that previously survived erasure (the "right to be forgotten" had a real gap). (2) **Legacy key-file verification fixed**: v5.5-era key files (no `verify_blob`) previously accepted *any* password during `rekey` — a wrong old password could rewrite the key file and orphan all data. Rekey now probe-decrypts a real ciphertext from the store; empty stores fall back to the old behavior. (3) **KDF cost floor**: `KDFParams.from_dict` rejects tampered parameters (PBKDF2 < 60k, scrypt N < 4096) that would downgrade brute-force cost — key files and ciphertext headers are attacker-visible input. (4) **Compression × encryption unblocked**: `compress_memories` previously raised `SecurityError` on encrypted stores, making the two flagship features mutually exclusive by default. Compression now hydrates its TF-IDF index via the same in-memory decryption path as `fuzzy_search` (`_plaintext_for_index`) — plaintext never touches disk or FTS5. (5) **Interface matrix completed**: REST gains `/api/gdpr/report`, `/api/gdpr/export`, `/api/gdpr/erase` (confirm=true required), `/api/compress`, `/api/compressions`; MCP gains `gdpr_report`, `gdpr_erase` (confirm required), `memory_compress` — 87→90 tools, all three interfaces now expose the full governance surface. (6) **Honesty fixes**: README previously claimed "six-way hybrid search"; the actual retrieval count is four (vector/FTS5/TF-IDF/fuzzy) — wording corrected, and the cross-encoder/heuristic distinction is now explicit. LoCoMo full-suite results (51.5%, dual-judge) added to the benchmarks section. 7+ new contract tests (`tests/test_v656_security.py`).
+- **v6.5.7 — security fix pack from dual-judge external review** (2026-11-14). Qwen4-Max (Doubao) and Kimi K3.1 independently reviewed the codebase; their overlapping findings became this release. (1) **GDPR erasure completed**: `gdpr_erase_all` now cascades to 17 tables — added `knowledge_graph` entities, `memory_snapshots`, `memory_templates`, and the four drama_* creation-content tables that previously survived erasure (the "right to be forgotten" had a real gap). (2) **Legacy key-file verification fixed**: v5.5-era key files (no `verify_blob`) previously accepted *any* password during `rekey` — a wrong old password could rewrite the key file and orphan all data. Rekey now probe-decrypts a real ciphertext from the store; empty stores fall back to the old behavior. (3) **KDF cost floor**: `KDFParams.from_dict` rejects tampered parameters (PBKDF2 < 60k, scrypt N < 4096) that would downgrade brute-force cost — key files and ciphertext headers are attacker-visible input. (4) **Compression × encryption unblocked**: `compress_memories` previously raised `SecurityError` on encrypted stores, making the two flagship features mutually exclusive by default. Compression now hydrates its TF-IDF index via the same in-memory decryption path as `fuzzy_search` (`_plaintext_for_index`) — plaintext never touches disk or FTS5. (5) **Interface matrix completed**: REST gains `/api/gdpr/report`, `/api/gdpr/export`, `/api/gdpr/erase` (confirm=true required), `/api/compress`, `/api/compressions`; MCP gains `gdpr_report`, `gdpr_erase` (confirm required), `memory_compress` — 87→90 tools, all three interfaces now expose the full governance surface. (6) **Honesty fixes**: README previously claimed "six-way hybrid search"; the actual retrieval count is four (vector/FTS5/TF-IDF/fuzzy) — wording corrected, and the cross-encoder/heuristic distinction is now explicit. LoCoMo full-suite results (51.5%, dual-judge) added to the benchmarks section. 7+ new contract tests (`tests/test_v656_security.py`).
 
 - **v6.4.9 — ten-million-char library at millisecond latency: FTS5 high-frequency-phrase scoring pruned** (2026-11-11). The last honest bottleneck from v6.4.8's ledger. Root cause (30k per-path timing): under the trigram tokenizer, corpus-wide phrases (template data's "陈述性记忆") match every row — bm25 full-match scoring cost 50.5ms/query, the dominant remainder of 100k mixed latency. Fix, query-side df pre-pruning symmetric to TF-IDF max_df: a phrase's df upper bound = min df of its trigrams (phrase matches ⊆ every trigram's row set); prune at 5% of corpus size; keep the lowest-ub phrase if all pruned. df is served from an in-process cache keyed by `max(rowid)` (add/update invalidate; hard-delete leaves df slightly stale = prunes more conservatively) — **two real pitfalls found en route: fts5vocab is a *streaming virtual table* — per-term probes AND `IN` batches trigger full scans (combined regressed 17→45ms before the cache)**. Plus: FTS5 path skipped on pathological fallback (no discriminating signal). Clean-environment 100k re-bench: pathological 122→**0.4ms** (−99.7%), mixed 134.9→**3.0ms** (−98%), all query types millisecond-class at ~10M chars. AI-flavored comment cleanup (essay-style docstrings → engineer-speak, info preserved). 5 new guards.
 
@@ -117,7 +119,7 @@ v6.1.3 – v6.5.6 shipped in two weeks (2026-11-01 → 11-14), guarded by **1,30
 
 **Retrieval**
 
-- **Four-way hybrid retrieval** — vector, FTS5, TF-IDF, and fuzzy recall fused into a single ranked result set (RRF fusion, per-path score breakdown via `search --explain`). Query expansion (ctxdate temporal normalization + context windowing) operates at the evidence-assembly layer; reranking uses hand-tuned heuristic features, not a neural cross-encoder. *(v6.5.6 wording fix: previously overstated as "six-way" — honest count is four retrieval paths.)*
+- **Six-way hybrid retrieval (real, as of v6.5.7)** — six recall paths fused into one ranked result set: vector, FTS5, TF-IDF, fuzzy (the four core paths, RRF-style max-fusion with per-path score breakdown via `search --explain`), **temporal anchoring** (query absolute dates / anchored relative phrases → windowed SQL recall; v6.5.7) and **knowledge-graph adjacency** (entity match → 2-hop relation walk → memory back-references; v6.5.7). Paths 5-6 run in "blind-spot fill" mode — they only add candidates the four core paths missed, never re-rank existing high-quality hits. Degradation is per-path and safe: encrypted stores skip temporal (ciphertext is not SQL-matchable), empty KG skips graph, missing time anchor degrades to absolute-date-only.
 - **Knowledge graph** — automatic entity and relation extraction, path finding, and associative recall.
 - **Weighted recall** — multi-factor scoring (coverage, importance, access frequency, time decay) instead of similarity alone.
 
@@ -161,7 +163,7 @@ v6.1.3 – v6.5.6 shipped in two weeks (2026-11-01 → 11-14), guarded by **1,30
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│           MindForge v6.5.6            │
+│           MindForge v6.5.7            │
 │  Cognitive Layer  Personality · KnowledgeGraph       │
 │                   MemoryEvolution · FederatedMemory  │
 ├──────────────────────────────────────────────────────┤

@@ -91,8 +91,11 @@ class MemoryConfig:
     default_importance: Importance = Importance.MEDIUM
     default_layer: MemoryLayer = MemoryLayer.SHORT_TERM
     auto_consolidate: bool = True
-    # v5.7.9：add/update 后自动抽取实体/关系入知识图谱（默认关闭，显式开启）
-    auto_extract_graph: bool = False
+    # v5.7.9：add/update 后自动抽取实体/关系入知识图谱
+    # v6.5.7 默认开启：图检索路（六路检索第 6 路）依赖 KG 数据，
+    # 图空则该路空转——默认建图使六路开箱即用。正则抽取每条
+    # 1-2ms 级，开销可忽略；显式置 False 可回到旧行为。
+    auto_extract_graph: bool = True
     consolidate_interval_hours: int = 24
     forget_curve_enabled: bool = True
     vector_dim: int = 384

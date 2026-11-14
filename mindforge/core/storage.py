@@ -730,6 +730,9 @@ class StorageEngine:
         # v5.6.3: get 访问计数进程内挂账，到间隔或 close 时批量落库
         self._access_pending: Dict[str, int] = {}
         self._access_last_flush: Dict[str, float] = {}
+        # v6.5.7：挂账条目最后访问时刻（flush 用各自时刻而非统一 now，
+        # 统一时刻会把多次访问压平，破坏 recently_accessed 排序）
+        self._access_last_ts: Dict[str, float] = {}
         self._access_last_prune: float = 0.0  # v5.6.5 P1 #4
         # v5.6.4: 挂账与刷盘的并发保护（flush 的 IO 部分在锁外执行）
         self._access_lock = threading.RLock()
@@ -1378,7 +1381,8 @@ class StorageEngine:
 
     def get_memory(self, memory_id: str,
                    actor: str = "", session_id: str = "",
-                   _batch_access: bool = False) -> Optional[MemoryEntry]:
+                   _batch_access: bool = False,
+                   _auto_expire: bool = True) -> Optional[MemoryEntry]:
         """获取记忆
 
         v5.5.2: 自动过期检查——若 expires_at > 0 且已过期，自动移入回收站并返回 None。
@@ -1420,7 +1424,7 @@ class StorageEngine:
 
         # v5.5.2: auto-expire check
         # v5.5.3 fix: 使用 UPDATE WHERE 防止并发竞态条件；静默失败避免重复写入
-        if entry.expires_at and entry.expires_at > 0 and entry.expires_at <= time.time():
+        if (_auto_expire and entry.expires_at and entry.expires_at > 0 and entry.expires_at <= time.time()):
             try:
                 now = time.time()
                 conn = self._get_conn()
@@ -2609,6 +2613,8 @@ class StorageEngine:
                 "UPDATE memories SET importance = ?, updated_at = ? WHERE id = ?",
                 (new_imp.value, now, entry_id)
             )
+            # v6.5.7：写路径缓存失效
+            self._memory_cache.clear()
             conn.commit()
             self._add_audit(
                 "update", entry_id, actor, session_id,
@@ -2686,6 +2692,8 @@ class StorageEngine:
                     )
                 except Exception:
                     logger.warning("FTS operation failed", exc_info=True)
+            # v6.5.7：写路径缓存失效
+            self._memory_cache.invalidate(entry_id)
             conn.commit()
             self._add_audit(
                 "update", entry_id, actor, session_id,
@@ -3167,6 +3175,10 @@ class StorageEngine:
                     (now, json.dumps(meta, ensure_ascii=False), row["id"])
                 )
 
+        # v6.5.7：写路径缓存失效
+        for _mid in category:
+            if isinstance(_mid, str) and _mid:
+                self._memory_cache.invalidate(_mid)
         conn.commit()
         # v5.5.5 fix: 审计日志记录真实隐私级别
         for row in rows:
@@ -3590,6 +3602,10 @@ class StorageEngine:
                 count += 1
 
             cursor.execute("COMMIT")
+            # v6.5.7：重加密是全局数据变换——清进程内条目缓存，
+            # 否则 _memory_cache 里的旧 ciphertext 会被后续检索读到，
+            # 用新引擎解旧密文 → 「解密失败已跳过」→ 检索 0 命中
+            self._memory_cache.clear()
             return count
 
         except Exception as e:
@@ -3983,6 +3999,8 @@ class StorageEngine:
             )
             upgraded_long += 1
 
+        # v6.5.7：写路径缓存失效
+        self._memory_cache.clear()
         conn.commit()
         result["upgraded_to_long"] = upgraded_short
         result["upgraded_to_permanent"] = upgraded_long
@@ -4030,6 +4048,8 @@ class StorageEngine:
                 {"from_agent": from_agent, "to_agent": to_agent}
             )
 
+        # v6.5.7：写路径缓存失效
+        self._memory_cache.clear()
         conn.commit()
         return {
             "from_agent": from_agent,
@@ -4108,6 +4128,8 @@ class StorageEngine:
             self._add_audit("agent_clean", row[0], actor, session_id,
                              row[2] if row[2] else "")
 
+        # v6.5.7：写路径缓存失效
+        self._memory_cache.clear()
         conn.commit()
         result["cleaned"] = total
         return result
@@ -4338,6 +4360,8 @@ class StorageEngine:
             for mid in selected_ids:
                 self._add_audit("agent_forget", mid, actor, session_id,
                                  privacy_map.get(mid, ""))
+            # v6.5.7：写路径缓存失效
+            self._memory_cache.clear()
             conn.commit()
 
         return {
@@ -4742,6 +4766,8 @@ class StorageEngine:
             migrated += 1
 
         if not dry_run and migrated > 0:
+            # v6.5.7：写路径缓存失效
+            self._memory_cache.clear()
             conn.commit()
 
         return {
@@ -6632,29 +6658,8 @@ class StorageEngine:
         total_access = 0
         creation_timestamps: List[float] = []
 
-        for r in rows:
-            layer = (r[5] or "SHORT_TERM").upper()
-            imp = (r[3] or "MEDIUM").upper()
-            cat = (r[3] or "general").lower()
-            priv = (r[7] if len(r) > 7 else "INTERNAL") or "INTERNAL"
-            priv = priv.upper()
-            layers[layer] = layers.get(layer, 0) + 1
-            importances[imp] = importances.get(imp, 0) + 1
-            categories[cat] = categories.get(cat, 0) + 1
-            privacies[priv] = privacies.get(priv, 0) + 1
-            # 访问计数
-            ac = r[6] if isinstance(r[6], int) else 0
-            total_access += ac
-            # 创建时间
-            created = r[5] if isinstance(r[5], (int, float)) else now
-            if isinstance(r[5], (int, float)) and r[5] > 1e9:
-                created = r[5]
-            else:
-                # 回退：按列索引判断 created_at
-                created = r[5] if isinstance(r[5], (int, float)) and r[5] > 1e8 else now
-            # created_at 索引修正：SELECT 中是第 6 列（index=5）？重新按顺序
-            # 顺序是: id[0],content[1],tags[2],category[3],importance[4],layer[5],created_at[6],access_count[7],privacy[8]
-            # 所以应该修正：
+        # v6.5.7：删除第一版列索引错误的死循环（r[7] 实为 access_count，
+        # .upper() 直接崩；统计结果本就被下方修正段完全覆盖）
 
         # 重新整理统计，修正列索引
         layers.clear()
@@ -7411,6 +7416,8 @@ class StorageEngine:
         with self._access_lock:
             self._access_pending[entry.id] = (
                 self._access_pending.get(entry.id, 0) + 1)
+            # v6.5.7：记录本次访问时刻
+            self._access_last_ts[entry.id] = now
             last = self._access_last_flush.get(entry.id, 0.0)
             if last == 0.0:
                 # v6.4.2 perf: 首访起表。批量检索上下文（_batch=True，如
@@ -7497,7 +7504,8 @@ class StorageEngine:
             pending = self._access_pending
             self._access_pending = {}
 
-        items = [(inc, now, mid) for mid, inc in pending.items()]
+        items = [(inc, self._access_last_ts.get(mid, now), mid)
+                 for mid, inc in pending.items()]
         conn = self._get_conn()
         try:
             if items:
@@ -7688,6 +7696,8 @@ class StorageEngine:
             except (sqlite3.OperationalError, sqlite3.IntegrityError):
                 logger.warning("FTS operation failed", exc_info=True)
 
+        # v6.5.7：写路径缓存失效
+        self._memory_cache.clear()
         conn.commit()
         return deleted_count
 
@@ -7979,6 +7989,8 @@ class StorageEngine:
                              (json.dumps(deduped, ensure_ascii=False), time.time(), row["id"]))
                 count += 1
 
+        # v6.5.7：写路径缓存失效
+        self._memory_cache.clear()
         conn.commit()
         return count
 
@@ -8027,6 +8039,8 @@ class StorageEngine:
             except sqlite3.OperationalError:
                 logger.warning("FTS operation failed", exc_info=True)
 
+        # v6.5.7：写路径缓存失效（rename 影响全部含该 tag 的记忆）
+        self._memory_cache.clear()
         conn.commit()
         return count
 
@@ -8614,6 +8628,8 @@ class StorageEngine:
                 conn.commit()
             except Exception as e:
                 logger.error("auto_archive 审计日志写入失败: %s", e)
+        # v6.5.7：写路径缓存失效
+        self._memory_cache.clear()
 
         return {"archived": archived_count, "failed": len(failed_ids),
                 "failed_ids": failed_ids, "layer": layer,
@@ -8690,6 +8706,11 @@ class StorageEngine:
                 continue
 
         conn.commit()
+
+        # v6.5.7：写路径缓存失效
+        for _mid in memory_ids:
+            if isinstance(_mid, str) and _mid:
+                self._memory_cache.invalidate(_mid)
 
         if archived_count > 0:
             try:
@@ -8793,6 +8814,10 @@ class StorageEngine:
 
         # 删除归档记录
         conn.execute("DELETE FROM archived_memories WHERE id = ?", (archive_id,))
+        # v6.5.7：写路径缓存失效
+        for _mid in archive_id:
+            if isinstance(_mid, str) and _mid:
+                self._memory_cache.invalidate(_mid)
         conn.commit()
 
         return {"restored": True, "memory_id": original_id}
@@ -9765,6 +9790,12 @@ class StorageEngine:
                     except Exception:
                         logger.warning("FTS operation failed", exc_info=True)
                 updated += 1
+        # v6.5.7：写路径缓存失效（此前漏 invalidate——DB 已更新但
+        # get_memory 读到进程内旧缓存，「写了没生效」假象，tag 批量
+        # 操作 19 项测试随之暴露）
+        for _mid in memory_ids:
+            if isinstance(_mid, str) and _mid:
+                self._memory_cache.invalidate(_mid)
         conn.commit()
         return updated
 
@@ -9826,6 +9857,9 @@ class StorageEngine:
                     except Exception:
                         logger.warning("FTS operation failed", exc_info=True)
                 updated += 1
+        for _mid in memory_ids:
+            if isinstance(_mid, str) and _mid:
+                self._memory_cache.invalidate(_mid)  # v6.5.7 缓存失效
         conn.commit()
         return updated
 
@@ -9925,6 +9959,8 @@ class StorageEngine:
             "UPDATE memories SET expires_at = ?, updated_at = ? WHERE id = ? AND category != 'trash'",
             (expires_at, now, memory_id)
         )
+        # v6.5.7：写路径缓存失效
+        self._memory_cache.invalidate(memory_id)
         conn.commit()
         if cursor.rowcount > 0:
             self._add_audit("update", memory_id, actor, session_id, privacy_val,
@@ -9984,6 +10020,9 @@ class StorageEngine:
                              row["privacy"] if row["privacy"] else "",
                              details={"reason": "ttl_purge", "expires_at": now})
             count += 1
+        # v6.5.7：写路径缓存失效
+        # v6.5.7：写路径缓存失效（批量清理，直接 clear）
+        self._memory_cache.clear()
         conn.commit()
         return count
 
@@ -10032,6 +10071,8 @@ class StorageEngine:
                              row["privacy"] if row["privacy"] else "",
                              details={"reason": "batch_by_category", "category": category, "permanent": permanent})
             count += 1
+        # v6.5.7：写路径缓存失效
+        self._memory_cache.clear()
         conn.commit()
         return count
 
@@ -10084,6 +10125,8 @@ class StorageEngine:
                              row["privacy"] if row["privacy"] else "",
                              details={"reason": "batch_by_tag", "tag": tag, "permanent": permanent})
             count += 1
+        # v6.5.7：写路径缓存失效
+        self._memory_cache.clear()
         conn.commit()
         return count
 
@@ -10509,6 +10552,8 @@ class StorageEngine:
                         )
 
         if not dry_run:
+            # v6.5.7：写路径缓存失效
+            self._memory_cache.clear()
             conn.commit()
 
         return {
@@ -10899,6 +10944,8 @@ class StorageEngine:
                              details={"action": "bulk_update", "changes": list(updates.keys())})
             count += 1
 
+        # v6.5.7：写路径缓存失效
+        self._memory_cache.clear()
         conn.commit()
         return count
 
@@ -11312,6 +11359,11 @@ class StorageEngine:
                 )
                 count += 1
 
+        # v6.5.7：写路径缓存失效（此前漏 invalidate，get_memory
+        # 回读到进程内旧缓存——「写了没生效」假象）
+        for _mid in entry_ids:
+            if isinstance(_mid, str) and _mid:
+                self._memory_cache.invalidate(_mid)
         conn.commit()
         return count
 
@@ -11378,6 +11430,10 @@ class StorageEngine:
                 )
                 count += 1
 
+        # v6.5.7：写路径缓存失效
+        for _mid in entry_ids:
+            if isinstance(_mid, str) and _mid:
+                self._memory_cache.invalidate(_mid)
         conn.commit()
         return count
 
@@ -11453,6 +11509,8 @@ class StorageEngine:
                 )
                 count += 1
 
+        # v6.5.7：写路径缓存失效（merge 影响全部含源 tag 的记忆）
+        self._memory_cache.clear()
         conn.commit()
         return count
 
@@ -12730,6 +12788,10 @@ class StorageEngine:
                 except sqlite3.OperationalError:
                     logger.warning("FTS insert failed in batch_update %s", mid, exc_info=True)
 
+        # v6.5.7：写路径缓存失效
+        for _mid in memory_ids:
+            if isinstance(_mid, str) and _mid:
+                self._memory_cache.invalidate(_mid)
         conn.commit()
         # v5.7.0 P2 安全加固：审计完整性——完整 ID 列表（截断到 100），
         # 超过上限时附 count + sha256，确保批量操作可追溯、不会被前 5 条掩盖。
@@ -13277,6 +13339,8 @@ class StorageEngine:
                     )
                 except Exception:
                     logger.warning("FTS operation failed", exc_info=True)
+            # v6.5.7：写路径缓存失效
+            self._memory_cache.invalidate(memory_id)
             conn.commit()
 
             return {
@@ -16692,6 +16756,8 @@ class StorageEngine:
                 })
 
         if not dry_run and reinforced > 0:
+            # v6.5.7：写路径缓存失效
+            self._memory_cache.clear()
             conn.commit()
 
         return {
@@ -17307,6 +17373,8 @@ class StorageEngine:
                     groups.append(group)
 
             if not dry_run and merged > 0:
+                # v6.5.7：写路径缓存失效
+                self._memory_cache.clear()
                 conn.commit()
                 for audit_args in pending_audits:
                     self._add_audit(*audit_args)
@@ -17530,6 +17598,8 @@ class StorageEngine:
                 })
 
             if not dry_run and (upgraded + downgraded) > 0:
+                # v6.5.7：写路径缓存失效
+                self._memory_cache.clear()
                 conn.commit()
                 for audit_args in pending_audits:
                     self._add_audit(*audit_args)
@@ -18717,6 +18787,8 @@ class StorageEngine:
                                      "kept_id": keep_id,
                                      "score_kept": max(score_a, score_b),
                                      "score_removed": min(score_a, score_b)})
+            # v6.5.7：写路径缓存失效
+            self._memory_cache.clear()
             conn.commit()
             return keep_id
 

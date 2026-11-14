@@ -149,8 +149,16 @@ def main():
                 if qid in done:
                     continue
                 t0 = time.perf_counter()
+                # v6.5.7：conv 最后会话日期作时间锚（第 5 路 temporal
+                # 召回——相对时间词「yesterday/last week」以此换算窗口）
+                _anchor = ""
+                if sess_dates:
+                    _vals = sorted(v for v in sess_dates.values() if v)
+                    if _vals:
+                        _anchor = _vals[-1][:10]
                 hits = mf.search(qa["question"], max_results=args.k,
-                                 expand_context=args.ctxwin)
+                                 expand_context=args.ctxwin,
+                                 time_anchor=_anchor or None)
                 lat.append((time.perf_counter() - t0) * 1000)
 
                 # ---- 组装层：v6.5.2 核心 API（expand_context）----

@@ -663,7 +663,10 @@ class MindForge:
         kg = self._knowledge_graph
         stats: Dict[str, Any] = {"entities_added": 0, "relations_added": 0, "memory_processed": 0}
         if memory_id:
-            entry = self._storage.get_memory(memory_id)
+            # v6.5.7：内部管线读取不触发 auto-expire——add 流程的自动
+            # 建图会立即 get_memory，若条目带过去 expires_at 会被提前
+            # 移入回收站（TTL 语义破坏：list_expired/purge_expired 全空）
+            entry = self._storage.get_memory(memory_id, _auto_expire=False)
             if entry is None:
                 raise ValueError(f"记忆不存在: {memory_id}")
             if str(getattr(entry, "privacy", "")) in ("PrivacyLevel.STRICT", "STRICT"):
@@ -831,7 +834,8 @@ class MindForge:
                session_id: str = "",
                use_embedding: bool = True,
                explain: bool = False,
-               expand_context: int = 0):
+               expand_context: int = 0,
+               time_anchor: Optional[str] = None):
         """搜索记忆
 
         v5.4.5 新增 use_embedding 参数：
@@ -843,6 +847,13 @@ class MindForge:
           ±N 邻居轮填充 chunk.context_expansion（LoCoMo 评测验证：
           multi-hop 正确率 +27pt 的核心机制产品化）
         - 0（默认）：行为与旧版完全一致
+
+        v6.5.7 新增 time_anchor 参数（六路检索的第 5 路时间锚）：
+        - ISO 日期（"2023-05-06"）：query 中的相对时间词（yesterday/
+          两周前）以此为锚换算绝对日期窗口，启用 temporal 召回路；
+          同时 query 中的绝对日期直接成窗
+        - None（默认）：仅 query 携带绝对日期时启用 temporal 路
+          （相对词无锚降级，v6.5.5 同款安全语义）
 
         v6.3.0 新增 explain 参数（检索可解释性）：
         - True：每个返回的 MemoryChunk.score_breakdown 携带各召回路
@@ -875,6 +886,7 @@ class MindForge:
                 use_embedding=use_embedding,
                 explain=explain,
                 expand_context=expand_context,
+                time_anchor=time_anchor,
                 _update_access=False,
                 _record_search=False,
             )

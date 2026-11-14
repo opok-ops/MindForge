@@ -9,6 +9,7 @@ import hashlib
 import hmac
 import json
 import base64
+import logging
 import threading  # v5.4.7 修复 H-4：全局引擎初始化线程安全
 from pathlib import Path
 from typing import Optional, Tuple, Callable
@@ -400,8 +401,13 @@ def _write_key_file(key_path: Path, salt: bytes, kdf_params: KDFParams,
                     ["icacls", str(key_path), "/inheritance:r", "/grant:r", f"{username}:F"],
                     capture_output=True, timeout=5, check=False
                 )
-        except Exception:
-            pass  # icacls 失败不阻断流程
+        except Exception as _acl_err:
+            # v6.5.6：ACL 失败不再静默（评审指出 Windows 密钥文件权限
+            # 失败无声 = 用户以为已加固实际继承默认 ACL）。仍不阻断
+            # 创建，但显式告警留痕。
+            logging.getLogger("core.encryption").warning(
+                "Windows 密钥文件 ACL 设置失败（%s）——文件权限为"
+                "继承默认值，建议手动 icacls 加固", _acl_err)
 
 
 def _verify_key_password(engine: EncryptionEngine, key_data: dict,

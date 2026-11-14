@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:
@@ -20,6 +20,12 @@ jobs:
         # 自 2026-10-19 起为 Ubuntu 26.04）不再提供 3.9，setup-python 必然失败。
         # 故自 v6.1.0 起最低支持 3.10，与 pyproject 的 requires-python 保持一致。
         python-version: ["3.10", "3.11", "3.12", "3.13"]
+        # v6.5.6：include Windows 3.12 试水档——此前 CI 全 ubuntu，
+        # Windows 特有缺陷（tearDown PermissionError 等 2 例）在
+        # ubuntu 上永不可见（外部评审实测发现的盲区）
+        include:
+          - python-version: "3.12"
+            os: windows-latest
 
     steps:
       - name: Checkout

@@ -4,6 +4,7 @@ MindForge 查询引擎
 """
 
 import logging
+import sqlite3
 import re
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any, Tuple
@@ -77,6 +78,18 @@ _TEMPORAL_RULES = [
     ("next weekend", 7), ("last month", -30), ("next month", 30),
     ("last year", -365), ("next year", 365),
 ]
+# v6.5.7：中文相对时间词（第 5 路查询解析用；与 _TEMPORAL_RULES
+# 英文表分开，避免 "上个月" 被 N-数量模式抢先误配）
+_CN_TEMPORAL_RULES = [
+    ("今天", 0), ("今晚", 0), ("今天早上", 0), ("今天下午", 0),
+    ("昨天", -1), ("昨晚", -1), ("前天", -2),
+    ("明天", 1), ("明晚", 1), ("后天", 2),
+    ("上周", -7), ("上星期", -7), ("下周", 7), ("下星期", 7),
+    ("上个月", -30), ("上个月份", -30), ("上月", -30),
+    ("下个月", 30), ("下月", 30),
+    ("去年", -365), ("明年", 365),
+]
+
 _N_REL = re.compile(
     r"(\b\d+\s+(?:day|week|month|year)s?\s+ago\b"
     r"|\bin\s+\d+\s+(?:day|week|month|year)s?\b"
@@ -85,6 +98,110 @@ _CN_NUM = {"两": 2, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6,
            "七": 7, "八": 8, "九": 9, "十": 10}
 _REL_DUR = {"day": 1, "week": 7, "month": 30, "year": 365,
             "天": 1, "周": 7, "月": 30, "年": 365}
+
+
+_ABS_DATE_PATTERNS = [
+    # ISO 日期 2023-05-06 / 2023-5-6
+    re.compile(r"\b(20\d{2})-(\d{1,2})-(\d{1,2})\b"),
+    # 中文 2023年5月6日 / 2023年5月
+    re.compile(r"(20\d{2})\s*年\s*(\d{1,2})\s*月(?:\s*(\d{1,2})\s*日)?"),
+    # M月D日 / M月（年份取锚年，无锚则跳过）
+    re.compile(r"(?<!\d)(\d{1,2})\s*月\s*(\d{1,2})\s*日(?![\d年])"),
+]
+
+
+def _parse_query_window(query: str,
+                        time_anchor: Optional[str] = None
+                        ) -> Optional[Tuple[str, str, str]]:
+    """v6.5.7 第 5 路：从 query 解析时间窗口（第 5 路召回的前置）。
+
+    Returns:
+        (start_iso, end_iso, label) —— ISO 日期闭区间；无法解析返回 None。
+        - query 携带绝对日期：直接成窗（单日窗口）
+        - query 携带相对时间词：需 time_anchor（ISO 日期）换算；
+          无锚时降级返回 None（v6.5.5 同款降级安全语义）
+        label 用于 explain（如 "yesterday@2023-05-06"）。
+    """
+    q = (query or "").strip()
+    if not q:
+        return None
+    today = None
+    if time_anchor:
+        try:
+            from datetime import date as _d
+            parts = str(time_anchor).strip().split("-")
+            today = _d(int(parts[0]), int(parts[1]), int(parts[2]))
+        except (ValueError, IndexError, TypeError):
+            today = None
+
+    # 1) 绝对日期优先
+    for pat in _ABS_DATE_PATTERNS:
+        m = pat.search(q)
+        if not m:
+            continue
+        try:
+            groups = m.groups()
+            if len(groups) == 3 and groups[0] and len(groups[0]) == 4:
+                y, mo, dy = int(groups[0]), int(groups[1]), int(groups[2])
+            elif len(groups) == 3 and groups[2] is None:
+                y, mo, dy = int(groups[0]), int(groups[1]), 1
+            else:
+                # M月D日：年份取锚
+                if today is None:
+                    continue
+                y, mo, dy = today.year, int(groups[0]), int(groups[1])
+            from datetime import date as _d
+            the_day = _d(y, mo, dy)
+        except (ValueError, TypeError):
+            continue
+        iso = the_day.isoformat()
+        return iso, iso, iso
+
+    # 2) 相对词 → 锚换算
+    if today is None:
+        return None
+    from datetime import timedelta as _td
+    ql = q.lower()
+    offset = None
+    # 中文相对词优先（"上个月"含"个月"会被 _N_REL 数量模式误吸，
+    # 必须先于英文表与数量模式匹配）
+    for phrase, off in _CN_TEMPORAL_RULES:
+        if phrase in q:
+            offset = off
+            label = phrase
+            break
+    if offset is None:
+        for phrase, off in _TEMPORAL_RULES:
+            if phrase in ql:
+                offset = off
+                label = phrase
+                break
+    if offset is None:
+        m = _N_REL.search(q)
+        if m:
+            token = m.group(1)
+            # 数字 + 单位 + 前/后
+            import re as _re2
+            num_m = _re2.search(r"(\d+|[两二三四五六七八九十]+)", token)
+            unit_m = _re2.search(r"(day|week|month|year|天|周|月|年)", token,
+                                 _re2.IGNORECASE)
+            if num_m and unit_m:
+                raw = num_m.group(1)
+                n = (_CN_NUM.get(raw) if raw in _CN_NUM
+                     else int(raw) if raw.isdigit() else None)
+                if n is not None:
+                    mult = _REL_DUR.get(unit_m.group(1).lower(), 1)
+                    offset = (-n if ("ago" in token or "前" in token)
+                              else n if ("in " in token or "后" in token
+                                         or "以" in token) else -n)
+                    label = token
+    if offset is None:
+        return None
+    # 相对词窗口 ±3 天容差：对话时间表达天然模糊（"上周"可能指
+    # 上周任何一天），单日窗口召回率过低（v6.5.7 199 问实测修正）
+    d_start = today + _td(days=offset - 3)
+    d_end = today + _td(days=offset + 3)
+    return d_start.isoformat(), d_end.isoformat(), f"{label}@{today.isoformat()}"
 
 
 def _normalize_temporal(text: str, anchor: Optional[str]) -> str:
@@ -266,6 +383,158 @@ class QueryEngine:
 
         return list(expanded_terms)
 
+    def _temporal_candidates(self, query: str,
+                             time_anchor: Optional[str],
+                             max_candidates: int = 30
+                             ) -> List[Tuple[str, float, str]]:
+        """v6.5.7 第 5 路：时间锚定召回。
+
+        动机（LoCoMo 全量数据）：temporal 桶 acc 9.6% 为最大失血桶——
+        问「上周做了什么」时相关记忆内容带绝对日期（2023-05-06），
+        query 的「上周」与内容日期在四路（词面/语义）上均不匹配，
+        证据根本进不了候选集。本路：
+        1. 解析 query 时间窗（_parse_query_window，绝对日期或锚定相对词）
+        2. 明文库 SQL 月粒度 LIKE 召回 content/tags 命中窗口日期的记忆
+        3. 窗口内日期精确命中加权 0.85，月粒度命中 0.65
+
+        加密库 content 为密文无法 SQL 匹配——自动跳过本路（warn 一次）。
+        Returns:
+            [(memory_id, score, label), ...]
+        """
+        win = _parse_query_window(query, time_anchor)
+        if not win:
+            return []
+        start_iso, end_iso, label = win
+        try:
+            from datetime import date as _d
+            d0, d1 = _d.fromisoformat(start_iso), _d.fromisoformat(end_iso)
+        except ValueError:
+            return []
+        # 生成窗口覆盖的年月 pattern（最多 3 个，防超宽窗口全表扫）
+        months = []
+        y, mo = d0.year, d0.month
+        while True:
+            months.append(f"{y:04d}-{mo:02d}")
+            if (y, mo) == (d1.year, d1.month) or len(months) >= 3:
+                break
+            mo += 1
+            if mo > 12:
+                y, mo = y + 1, 1
+        conn = self.storage._get_conn()
+        ids: Dict[str, float] = {}
+        try:
+            for ym in months:
+                pat = f"%{ym}-%"
+                rows = conn.execute(
+                    "SELECT id, content, tags FROM memories "
+                    "WHERE encrypted=0 AND category != 'trash' "
+                    "AND (content LIKE ? OR tags LIKE ?) LIMIT ?",
+                    (pat, pat, max_candidates)).fetchall()
+                for r in rows:
+                    score = 0.5   # 月粒度命中（v6.5.7 小样校准：补盲分
+                    # 必须低于四路典型命中 0.5-0.7，否则挤掉正确证据）
+                    text = (r[1] or "") + " " + (r[2] or "")
+                    # 窗口内日期精确命中 → 加权
+                    import re as _re3
+                    for dm in _re3.finditer(r"20\d{2}-\d{2}-\d{2}", text):
+                        try:
+                            dd = _d.fromisoformat(dm.group(0)[:10])
+                        except ValueError:
+                            continue
+                        if d0 <= dd <= d1:
+                            score = 0.6
+                            break
+                    if r[0] not in ids or score > ids[r[0]]:
+                        ids[r[0]] = score
+        except sqlite3.OperationalError as e:
+            logger.warning("temporal 路召回失败（降级跳过）: %s", e)
+            return []
+        return [(mid, s, label) for mid, s in ids.items()]
+
+    def _graph_candidates(self, query: str,
+                          max_entities: int = 8,
+                          max_hops: int = 2,
+                          ) -> List[Tuple[str, float, str]]:
+        """v6.5.7 第 6 路：知识图谱邻接召回（两跳内）。
+
+        动机（LoCoMo 全量数据）：multi-hop 桶 acc 25.2%——两跳问题
+        需要「A 关联 B、B 关联 C」的链式证据，词面/语义检索对间接
+        关联天然盲。本路：
+        1. query 与 KG 实体匹配（双向 LIKE，限 max_entities）
+        2. 沿 graph_relations 展开 1-2 跳邻接实体
+        3. 收集沿途 relation.memory_ids 指回的记忆作为候选
+        分数：1 跳 0.55、2 跳 0.45，× relation weight（cap 0.9）。
+        （v6.5.7 小样校准：0.8/0.5 会把四路正确证据挤出 top-k，
+        cat1 multi-hop 实测 -3.1pt——补盲分必须低于四路典型命中。）
+
+        KG 为空（未跑 graph_extract）时本路空转返回 []——零成本降级。
+        Returns:
+            [(memory_id, score, label), ...]
+        """
+        conn = self.storage._get_conn()
+        try:
+            ent_rows = conn.execute(
+                "SELECT id, entity FROM knowledge_graph LIMIT 500").fetchall()
+        except sqlite3.OperationalError as e:
+            logger.warning("graph 路召回失败（KG 表缺失，降级跳过）: %s", e)
+            return []
+        if not ent_rows:
+            return []
+
+        ql = (query or "").lower()
+        if not ql:
+            return []
+        # 双向包含匹配：query 含实体名 或 实体名含 query 词
+        # （实体名普遍较短，双向匹配召回率远高于单向）
+        matched = []
+        for eid, name in ent_rows:
+            nm = (name or "").strip().lower()
+            if not nm or len(nm) < 2:
+                continue
+            if nm in ql or ql in nm:
+                matched.append((eid, name))
+            if len(matched) >= max_entities:
+                break
+        if not matched:
+            return []
+
+        import json as _json
+        cand: Dict[str, float] = {}
+        start_ids = {eid for eid, _ in matched}
+        frontier = {eid: (0.55, 1) for eid in start_ids}
+        visited = set(start_ids)
+        collected_rel_ids: set = set()
+        for _hop in range(max_hops):
+            if not frontier:
+                break
+            placeholders = ",".join("?" * len(frontier))
+            rows = conn.execute(
+                f"SELECT from_entity, to_entity, weight, memory_ids "
+                f"FROM graph_relations "
+                f"WHERE from_entity IN ({placeholders}) "
+                f"OR to_entity IN ({placeholders})",
+                list(frontier.keys()) + list(frontier.keys())).fetchall()
+            nxt = {}
+            for fe, te, w, mids in rows:
+                score0, hop = frontier.get(fe) or frontier.get(te) or (0.45, 2)
+                other = te if fe in frontier else fe
+                rel_score = min(0.9, score0 * (w or 1.0))
+                if mids:
+                    try:
+                        for mid in _json.loads(mids):
+                            if mid:
+                                s = rel_score
+                                if mid not in cand or s > cand[mid]:
+                                    cand[mid] = s
+                    except (ValueError, TypeError):
+                        pass
+                if other not in visited:
+                    visited.add(other)
+                    nxt[other] = (min(0.9, score0 * 0.6), hop + 1)
+            frontier = nxt
+        label = ",".join(name for _, name in matched[:3])
+        return [(mid, s, f"kg:{label}") for mid, s in cand.items()]
+
     def search(self,
                query: str,
                max_results: int = 10,
@@ -277,6 +546,7 @@ class QueryEngine:
                use_embedding: bool = True,
                explain: bool = False,
                expand_context: int = 0,
+               time_anchor: Optional[str] = None,
                *, _update_access: bool = True,
                _record_search: bool = True) -> RecallResult:
         """搜索记忆
@@ -486,6 +756,39 @@ class QueryEngine:
                     mid, _batch_access=True)
             return _entry_cache[mid]
 
+        # ===== v6.5.7 第 5/6 路：temporal + graph 召回 =====
+        # 设计为「补盲区」语义：仅当记忆未被四路捞到（或四路分更低）时
+        # 生效（score_map 取 max），不重排既有高质量命中。
+        # 降级矩阵：加密库 temporal 跳过（密文不可 SQL 匹配）、KG 空
+        # graph 空转、无 time_anchor 时相对词降级仅绝对日期可用——
+        # 全部零异常退出，四路结果不受影响。
+        five_six_used = []
+        if not self.storage.encrypted and query:
+            for mid, s, lbl in self._temporal_candidates(query, time_anchor):
+                if explain:
+                    _bd(mid)["temporal"] = max(s, _bd(mid).get("temporal", 0.0))
+                if s >= score_map.get(mid, 0.0):
+                    is_new = mid not in score_map
+                    score_map[mid] = s
+                    if explain and is_new:
+                        _bd(mid)["winner"] = "temporal"
+                        _bd(mid)["final"] = s
+        if query:
+            for mid, s, lbl in self._graph_candidates(query):
+                if explain:
+                    _bd(mid)["graph"] = max(s, _bd(mid).get("graph", 0.0))
+                if s >= score_map.get(mid, 0.0):
+                    is_new = mid not in score_map
+                    score_map[mid] = s
+                    if explain and is_new:
+                        _bd(mid)["winner"] = "graph"
+                        _bd(mid)["final"] = s
+        if explain and breakdown_map:
+            if any("temporal" in (v or {}) for v in breakdown_map.values()):
+                five_six_used.append("temporal")
+            if any("graph" in (v or {}) for v in breakdown_map.values()):
+                five_six_used.append("graph")
+
         # 预过滤：按 categories/layers 筛选 score_map，避免非匹配记忆占据排序位
         if categories or layers:
             filtered_map = {}
@@ -502,6 +805,8 @@ class QueryEngine:
 
         # 合并排序
         raw_results = sorted(score_map.items(), key=lambda x: x[1], reverse=True)
+        if five_six_used:
+            strategy_used = strategy_used + "+" + "+".join(five_six_used)
 
         # ===== 第二阶段：构建结果 =====
         chunks = []

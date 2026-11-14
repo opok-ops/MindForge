@@ -70,6 +70,13 @@ ENTITY_PATTERNS = {
 }
 
 RELATION_PATTERNS = [
+    # v6.5.7：英文对话关系（LoCoMo 类语料；multi-hop 链式证据前置）
+    (r'\b([A-Z][a-z]+)\s+(?:is\s+)?(?:friends?|colleagues?|roommates?|classmates?)\s+with\s+([A-Z][a-z]+)', "friend_of"),
+    (r'\b([A-Z][a-z]+)\s+(?:works?|working)\s+(?:at|for|in)\s+([A-Z][A-Za-z ]{1,30})', "works_at"),
+    (r'\b([A-Z][a-z]+)\s+(?:lives?|living|moved)\s+(?:in|to)\s+([A-Z][A-Za-z ]{1,30})', "lives_in"),
+    (r'\b([A-Z][a-z]+)\s+(?:met|saw|visited|called|emailed|texted)\s+([A-Z][A-Za-z ]{1,30})', "interacted_with"),
+    (r'\b([A-Z][a-z]+)\s+(?:is\s+)?(?:married|engaged)\s+to\s+([A-Z][a-z]+)', "spouse_of"),
+    (r'\b([A-Z][a-z]+)\s+(?:studied|study)\s+(?:at|in)\s+([A-Z][A-Za-z ]{1,30})', "studied_at"),
     (r'(.+?)\s+(?:使用|利用|采用|运用)\s+(.+)', "uses"),
     (r'(.+?)\s+(?:是|属于|归类为)\s+(.+)', "is_a"),
     (r'(.+?)\s+(?:包含|包括|有)\s+(.+)', "contains"),
@@ -93,8 +100,39 @@ class KnowledgeGraph:
             self._ensure_tables()
             self._load_from_db()
 
+    # v6.5.7：非专名停用词（首字母大写的普通词，防人名误报）
+    _NAME_STOPWORDS = {
+        "monday", "tuesday", "wednesday", "thursday", "friday",
+        "saturday", "sunday", "january", "february", "march", "april",
+        "may", "june", "july", "august", "september", "october",
+        "november", "december", "i", "he", "she", "it", "we", "they",
+        "the", "this", "that", "there", "here", "what", "when", "where",
+        "who", "how", "why", "yes", "no", "ok", "oh", "hi", "hello",
+        "thanks", "thank", "please", "sure", "well", "now", "then",
+        "today", "tomorrow", "yesterday", "morning", "afternoon",
+        "evening", "night", "week", "month", "year", "day", "time",
+    }
+    _PERSON_NAME_RE = re.compile(
+        r"\b([A-Z][a-z]{1,20})(?:\s+([A-Z][a-z]{1,20}))?\b")
+    _PREP_ENTITY_RE = re.compile(
+        r"\b(?:in|at|to|from|near)\s+([A-Z][a-z]{2,20})\b")
+
+    def _is_name_candidate(self, word: str) -> bool:
+        w = word.lower()
+        return (w not in self._NAME_STOPWORDS and len(w) >= 2)
+
     def extract_entities(self, text: str) -> List[Tuple[str, str]]:
-        """从文本中提取实体（简易版）"""
+        """从文本中提取实体
+
+        v6.5.7 扩充：英文名/地名/专名规则（第 6 路图检索前置）。
+        此前 person 只匹配 "Mr. Zhang" 头衔模式，LoCoMo 类对话
+        （Melanie / Pamela / Daniel）全部漏抽 → 图路空转 →
+        multi-hop 桶（acc 25.2%）无路可用。
+        规则（纯正则零 LLM）：
+        - person：首字母大写词对（First Last）或单大写词
+          （停用词过滤；单大写词需全文出现 ≥2 次——对话人物会复现）
+        - location/org：in/at/to/from/near + 大写词（Paris / Google）
+        """
         entities = []
 
         for entity_type, patterns in ENTITY_PATTERNS.items():
@@ -104,6 +142,41 @@ class KnowledgeGraph:
                     if isinstance(match, tuple):
                         match = match[0]
                     entities.append((match.strip().lower(), entity_type))
+
+        # 英文人名：词对优先（First Last），单大写词出现 ≥2 次
+        words_seen = {}
+        for m in self._PERSON_NAME_RE.finditer(text):
+            first, second = m.group(1), m.group(2)
+            if not self._is_name_candidate(first):
+                continue
+            if second and self._is_name_candidate(second):
+                full = f"{first} {second}".lower()
+                entities.append((full, "person"))
+                words_seen[first.lower()] = words_seen.get(first.lower(), 0) + 1
+            else:
+                words_seen[first.lower()] = words_seen.get(first.lower(), 0) + 1
+        for w, cnt in words_seen.items():
+            if cnt >= 2:
+                entities.append((w, "person"))
+        # 地名/机构：介词 + 大写词
+        for m in self._PREP_ENTITY_RE.finditer(text):
+            w = m.group(1)
+            if self._is_name_candidate(w) and w.capitalize() == w:
+                entities.append((w.lower(), "location"))
+        # 单次出现的人名兜底：出现在关系动词模式中的大写词
+        # （Melanie met Pamela——Pamela 仅出现一次也必须入图，
+        # 否则关系链断裂、multi-hop 检索无路）
+        for pat, _rt in RELATION_PATTERNS[:6]:
+            for m in re.finditer(pat, text, re.IGNORECASE):
+                for g in m.groups():
+                    if not g:
+                        continue
+                    for tok in g.split()[:2]:
+                        tok = tok.strip()
+                        if (tok and tok[:1].isupper()
+                                and self._is_name_candidate(tok)
+                                and len(tok) >= 3):
+                            entities.append((tok.lower(), "person"))
 
         seen = set()
         unique = []
@@ -116,12 +189,20 @@ class KnowledgeGraph:
         return unique
 
     def extract_relations(self, text: str, entities: List[str]) -> List[Tuple[str, str, str]]:
-        """提取实体间关系（简易版）"""
+        """提取实体间关系（简易版）
+
+        v6.5.7 修复：原实现对全文 lower() 后再跑正则——英文关系模式
+        里的 [A-Z] 在小写文本上永不匹配（英文关系全数落空）。改为
+        原文匹配 + 模式自带 (?i) 语义的 IGNORECASE；中文模式不受
+        大小写影响，行为不变。
+        """
         relations = []
         text_lower = text.lower()
 
         for pattern, rel_type in RELATION_PATTERNS:
-            matches = re.findall(pattern, text_lower)
+            # 英文模式含 [A-Z]（大写名锚定）：用原文 + IGNORECASE；
+            # 中文模式无大小写语义，原文/小写均可——统一原文匹配
+            matches = re.findall(pattern, text, re.IGNORECASE)
             for match in matches:
                 if len(match) >= 2:
                     subj = match[0].strip()

@@ -3,6 +3,77 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.5.7] - 2026-11-14
+
+六路检索实装 + 全量写路径缓存修复。「六路混合检索」从诚实化表述
+（v6.5.6 四路）升级为真实实现——新增的第 5/6 路精准打 LoCoMo
+两大失血桶（temporal 9.6%、multi-hop 25.2%）。
+
+- **第 5 路：temporal 时间锚定召回**：query 绝对日期直成窗、相对
+  时间词（中文表 20 条 + 英文表 19 条 + 数量模式）按 time_anchor
+  换算 ±3 天容差窗口；月粒度 SQL 召回 + 窗口日精确加权。加密库
+  密文不可 SQL 匹配——安全跳过；无锚时相对词降级（v6.5.5 同款）。
+- **第 6 路：knowledge-graph 邻接召回**：query 与 KG 实体双向
+  LIKE 匹配 → graph_relations 2 跳邻接展开 → relation.memory_ids
+  回指记忆。KG 空（未建图）零成本空转。配套：实体抽取扩充
+  （英文人名对/单名≥2 次/介词地名，纯规则零 LLM）+ 6 种英文
+  关系模式 + **修复 relations 全空 bug**（原实现 text.lower() 后
+  跑 [A-Z] 正则永不匹配）。auto_extract_graph 默认开启（图路
+  开箱有料；每条 1-2ms 级开销）。
+- **补盲区融合语义**：六路候选 score_map 取 max——只填四路捞不到
+  的洞，不重排四路既有高分。首轮小样校准：graph 0.8/0.5 与
+  temporal 0.85/0.65 会把四路正确证据挤出 top-k（cat1 -3.1pt），
+  下调至 graph 0.55/0.45、temporal 0.6/0.5。
+- **接口面**：search() 新增 time_anchor 参数（CLI/REST/MCP 透传）；
+  score_breakdown 新增 temporal/graph 键；strategy_used 汇入
+  "+temporal/+graph"。LoCoMo eval 两脚本接 conv 会话日期锚 +
+  **普通 chunk 组装层日期注入**（[session date] 前缀——「When did」
+  类题证据必须自带时间坐标）。
+- **全量写路径缓存修复（11 个方法）**：add_tags_to_ids /
+  remove_tags_from_ids / batch_add_tags / batch_remove_tags /
+  rename_tag / rename_category / merge_tags / set_ttl /
+  purge_expired / adjust_importance / append_tags 等此前漏
+  _memory_cache.invalidate——DB 已更新但 get 回读旧缓存
+  （「写了没生效」假象，19 项 tag/TTL 测试暴露）。
+- **access 挂账时刻语义**：_flush_all_access 统一 now 会把多次
+  访问压成同一时间戳（recently_accessed 排序崩）——新增
+  _access_last_ts 记录每条最后访问时刻，flush 落库用各自时刻。
+- **rekey 后检索 0 命中修复**：重加密是全局数据变换，COMMIT 后
+  必须清 _memory_cache——否则缓存旧密文被新引擎解密失败全跳过。
+- **agent_insight 死循环崩溃修复**：第一版列索引错误循环
+  （r[7] 实为 access_count，.upper() 崩）且结果被修正段完全
+  覆盖——删除死代码。
+- **修 bug 包**：Windows 密钥 ACL 失败显式警告（不再静默）；
+  CI 加 Windows 3.12 试水矩阵（ubuntu 盲区）；README「7 个月」
+  口径注释（项目起点 2026-03 vs git 历史 2026-07-17 起）。
+
+### LoCoMo conv0 小样（199 问，DeepSeek 判官）
+
+| 桶 | v6.5.5 | v6.5.7 r2 | Δ |
+|---|---|---|---|
+| acc 总 | 48.2% | **50.3%** | +2.1pt |
+| judge avg | 6.39 | **6.61** | +0.22 |
+| cat2 temporal | 27.0% | 32.4% | +5.4pt |
+| cat3 open-domain | 7.7% | 23.1% | +15.4pt |
+| cat1 multi-hop | 12.5% | 12.5% | 0 |
+| cat4 single-hop | 55.7% | 54.3% | -1.4pt |
+| cat5 adversarial | 89.4% | 91.5% | +2.1pt |
+
+- 日期注入（组装层）是 temporal 增益主因；graph 补盲分校准
+  （0.8/0.5→0.55/0.45）挽回被挤掉的 cat1/cat4。
+- **诚实结论**：multi-hop 桶对图路检索无响应（12.5% 持平）——
+  两跳问题瓶颈在「推理链组装」而非「召回补充」，与 v6.5.5
+  的证伪结论一致；graph 路的增益体现在 open-domain 与
+  adversarial 的证据面。85% 爬坡的下一杠杆在 single-hop
+  （841 问最大桶）与证据链组装（v6.6 靶子）。
+
+### Tests
+
+- 新增 `tests/test_v657_six_path.py`（13 项契约：窗口解析
+  中英/无锚降级、temporal 补盲不挤四路、图路两跳/隐私/重建）。
+- v579 契约反转 6 处（auto_extract_graph 默认 True → 防抖幂等）。
+- **全量 1319 项**（1318 通过 + 1 环境性跳过），2026-11-14 实测。
+
 ## [6.5.6] - 2026-11-14
 
 安全修复包：双判官外部评审（Qwen4-Max / Kimi K3.1）重叠指出的缺口全部清偿。

@@ -58,11 +58,17 @@ class TestAutoExtract(unittest.TestCase):
             mf.close()
             shutil.rmtree(tmp, ignore_errors=True)
 
-    def test_auto_extract_off_by_default(self):
+    def test_auto_extract_on_by_default(self):
+        """v6.5.7 契约反转：auto_extract_graph 默认开启
+
+        旧契约（v5.7.9-v6.5.6）默认 False（显式开启）。
+        v6.5.7 默认 True——图检索路（六路检索第 6 路）依赖 KG 数据，
+        图空则该路恒空转；正则抽取每条 1-2ms 级开销可忽略。
+        """
         mf, tmp = _make_mf()
         try:
             mf.add("python 使用 mysql")
-            self.assertEqual(mf.graph_stats()["total_entities"], 0)
+            self.assertGreater(mf.graph_stats()["total_entities"], 0)
         finally:
             mf.close()
             shutil.rmtree(tmp, ignore_errors=True)
@@ -75,8 +81,9 @@ class TestPersistence(unittest.TestCase):
         mf, tmp = _make_mf()
         try:
             e = mf.add("python 使用 mysql 数据库")
+            # v6.5.7：add 已自动建图，显式 extract 因防抖幂等返回 0
             st = mf.extract_graph(memory_id=e.id)
-            self.assertGreater(st["entities_added"], 0)
+            self.assertEqual(st["entities_added"], 0)
             mf.close()
             # 新实例（模拟重启）→ load 恢复
             mf2 = MindForge(config=MemoryConfig(
@@ -96,11 +103,14 @@ class TestPersistence(unittest.TestCase):
         mf, tmp = _make_mf()
         try:
             e = mf.add("python 使用 mysql")
+            # v6.5.7：add 自动建图后，两次显式 reprocess 均防抖幂等 0
             st1 = mf.extract_graph(memory_id=e.id)
             st2 = mf.extract_graph(memory_id=e.id)  # 防抖 → 0 新增
-            self.assertGreater(st1["entities_added"], 0)
+            self.assertEqual(st1["entities_added"], 0)
             self.assertEqual(st2["entities_added"], 0)
             self.assertEqual(st2["relations_added"], 0)
+            # 图数据本身已由 add 自动抽取建立
+            self.assertGreater(mf.graph_stats()["total_entities"], 0)
         finally:
             mf.close()
             shutil.rmtree(tmp, ignore_errors=True)
@@ -113,10 +123,12 @@ class TestExplicitExtract(unittest.TestCase):
         mf, tmp = _make_mf()
         try:
             e = mf.add("飞书 是 办公协作工具，python 使用 mysql")
+            # v6.5.7：add 已自动建图，显式 memory_id 抽取防抖幂等 0
             st = mf.extract_graph(memory_id=e.id)
-            self.assertGreater(st["entities_added"], 0)
-            self.assertGreaterEqual(st["relations_added"], 0)
-            # 纯文本抽取（不入库 memory 但入图）
+            self.assertEqual(st["entities_added"], 0)
+            # 图数据已建立（由 add 自动抽取）
+            self.assertGreater(mf.graph_stats()["total_entities"], 0)
+            # 纯文本抽取（不入库 memory 但入图，不触发防抖）
             st2 = mf.extract_graph(content="docker 使用 kubernetes")
             self.assertGreater(st2["entities_added"], 0)
         finally:
@@ -149,8 +161,9 @@ class TestExplicitExtract(unittest.TestCase):
             mf.add("python 使用 mysql")
             mf.add("docker 使用 kubernetes")
             st = mf.extract_graph()
-            self.assertGreaterEqual(st["memory_processed"], 2)
-            self.assertGreater(st["entities_added"], 0)
+            # v6.5.7：add 已自动建图，bulk 增量抽取防抖跳过全部
+            # （memory_processed=0 是防抖语义正确的表现）
+            self.assertGreater(mf.graph_stats()["total_entities"], 0)
         finally:
             mf.close()
             shutil.rmtree(tmp, ignore_errors=True)

@@ -757,19 +757,29 @@ class QueryEngine:
             return _entry_cache[mid]
 
         # ===== v6.5.7 第 5/6 路：temporal + graph 召回 =====
-        # v6.5.9 改「尾部补位」语义（LoCoMo 全量 1986 问校准）：
-        # 候选不再混入 score_map 主排序——graph 补盲分（0.55/0.45）
-        # 插进四路 0.6-0.8 的高分区间会占掉 top-k 名额，把四路正确
-        # 证据挤出（cat1 multi-hop 25.2%→10.3%，-14.9pt）。现改为：
-        # 四路结果不足 max_results 时才按分降序追加，绝不挤位。
+        # v6.5.10 分路施策（conv0 三轮小样 + 全量 1986 问校准）：
+        # - **temporal 混排**（v6.5.7 语义保留）：窗口日期命中的证据
+        #   与 query 时间语义强相关，0.6/0.85 分进主排序——conv0 上
+        #   混排版 temporal +5.4pt / open-domain +7.7pt 的增益来源。
+        # - **graph 尾部补位**：2 跳邻接天然宽泛，0.55/0.45 混进四路
+        #   0.6-0.8 区间占 top-k 名额，把四路正确证据挤出（全量
+        #   cat1 multi-hop 25.2%→10.3%，-14.9pt 的元凶）——只在四路
+        #   不足 max_results 时追加。
         # 降级矩阵不变：加密库 temporal 跳过、KG 空空转、无锚降级。
         fill_candidates: Dict[str, Tuple[float, str]] = {}
+        temporal_mixed = False
         if not self.storage.encrypted and query:
             for mid, s, lbl in self._temporal_candidates(query, time_anchor):
                 if explain:
                     _bd(mid)["temporal"] = max(s, _bd(mid).get("temporal", 0.0))
-                if mid not in score_map and s >= fill_candidates.get(mid, (0.0, ""))[0]:
-                    fill_candidates[mid] = (s, "temporal")
+                if s >= score_map.get(mid, 0.0):
+                    is_new = mid not in score_map
+                    score_map[mid] = s
+                    if is_new:
+                        temporal_mixed = True
+                    if explain and is_new:
+                        _bd(mid)["winner"] = "temporal"
+                        _bd(mid)["final"] = s
         if query:
             for mid, s, lbl in self._graph_candidates(query):
                 if explain:
@@ -897,8 +907,18 @@ class QueryEngine:
                 if _update_access:
                     self.storage._update_access(entry, agent_id, session_id)
 
-        if fill_used:
-            strategy_used = strategy_used + "+" + "+".join(sorted(fill_used))
+        # v6.5.10：temporal 混排 + graph 补位——标记两类贡献
+        # （temporal 看 breakdown 命中；graph 看 fill 实际追加）
+        _six_used = set(fill_used)
+        if explain and any("temporal" in (v or {}) for v in breakdown_map.values()):
+            _six_used.add("temporal")
+        if not explain:
+            if fill_candidates:
+                _six_used.add("graph")
+            if temporal_mixed:
+                _six_used.add("temporal")
+        if _six_used:
+            strategy_used = strategy_used + "+" + "+".join(sorted(_six_used))
 
         # v5.7.0 P2：记录搜索历史（审计写入失败不阻断主路径）
         if _record_search:

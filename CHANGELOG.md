@@ -3,6 +3,25 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.5.11] - 2026-11-14
+
+六路融合分路施策：temporal 混排 + graph 尾部补位。
+
+- **conv0 三轮小样校准**（199 问 × v6.5.5 基线 / v6.5.7 混排 /
+  v6.5.10 补位）：混排 50.3%、补位 48.2%——**补位是负向修复**，
+  temporal/open-domain 增益（+5.4/+7.7pt）来自混排把带日期记忆
+  抬进主排序，尾部补位把它丢了。
+- **分路施策**：temporal 恢复混排（窗口日期命中与 query 时间语义
+  强相关，0.6/0.85 进主排序合理）；graph 保持尾部补位（2 跳邻接
+  天然宽泛，0.55/0.45 混排挤位是全量 multi-hop -14.9pt 元凶）。
+- strategy_used 标记补强：explain=False 路径按 temporal_mixed/
+  fill_candidates 粗判；explain 路径按 breakdown 命中。
+
+### Tests
+
+门禁子集 171 passed。全量 **1321** 项通过（1320 passed + 1 环境性
+跳过），2026-11-14 实测。
+
 ## [6.5.10] - 2026-11-14
 
 六路补盲改「尾部补位」语义——修复 LoCoMo multi-hop -14.9pt 倒退。

@@ -24,7 +24,7 @@ FTS5 检索质量修复：停用词 + AND 共现两阶段（时间检索修复�
 ### Tests
 
 fts 敏感门禁 231 passed（six_path/graph/explain/645/562/577/635/
-temporal_norm/core/546）。全量 **1321** 项通过（1320 passed + 1 环境
+temporal_norm/core/546）。全量 **1323** 项通过（1322 passed + 1 环境
 性跳过），2026-11-14 实测，CI 兜底。
 
 ## [6.5.11] - 2026-11-14

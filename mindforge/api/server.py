@@ -13,11 +13,12 @@ MindForge REST API Server
 读 100 req/60s/IP、写 30、批量导入 10（_check_rate_limit(write/heavy)）；
 认证：除 /api/health 与 / 外均需 _check_auth。
 
-**本表是摘选，不是权威清单。** 当前实现的分发点共 **60** 个
-（按方法：GET 37 / POST 21 / PUT 1 / DELETE 1，口径见
+**本表是摘选，不是权威清单。** 当前实现的分发点共 **65** 个
+（按方法：GET 39 / POST 24 / PUT 1 / DELETE 1，v6.5.6 起；口径见
 `scripts/check_docs_consistency.py` 第 [8] 组——它直接解析 `do_*` 方法体，
 数字漂移会被 CI 拦下）。此前这里写着「路由表」却只列了 24 条，
-读代码的人据此估算接口规模，会低估一半以上。
+读代码的人据此估算接口规模，会低估一半以上。v6.5.6 起 65 个
+（GDPR 报告/导出/擦除 + 压缩 2 条）。
 
   Method  Path                   说明                      分发位置
   ------  ----------------------  ------------------------  --------------
@@ -821,6 +822,12 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                     }
                 )
 
+            elif path == "/api/gdpr/report":
+                # v6.5.6：GDPR 合规报告（数据地图）
+                self._send_json(self.mindforge.gdpr_report())
+            elif path == "/api/compressions":
+                # v6.5.6：压缩簇列表
+                self._send_json({"clusters": self.mindforge.list_compressions()})
             elif path == "/api/valid-at":
                 # v5.7.6 新增：Bi-temporal as-of 查询（事实有效时间）
                 ts_raw = qs.get("ts", [None])[0]
@@ -1084,6 +1091,31 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                     entry.to_dict() if hasattr(entry, "to_dict") else vars(entry), 201
                 )
 
+            elif path == "/api/gdpr/export":
+                # v6.5.6：REST 对齐 CLI 的被遗忘权三件套（报告/导出/擦除）
+                data = self.mindforge.gdpr_export_all()
+                self._send_json({"count": len(data.get("memories", [])),
+                                 "exported_at": data.get("exported_at")})
+            elif path == "/api/gdpr/erase":
+                confirm = body.get("confirm", False)
+                if confirm is not True:
+                    self._send_json(
+                        {"error": "irreversible operation: pass confirm=true"},
+                        400)
+                    return
+                res = self.mindforge.gdpr_erase_all(
+                    backup=bool(body.get("backup", True)),
+                    actor=body.get("actor", "rest_gdpr_erase"))
+                self._send_json({"status": "erased", "deleted": res.get("deleted"),
+                                 "backup": res.get("backup")})
+            elif path == "/api/compress":
+                # v6.5.6：REST 对齐记忆压缩入口
+                res = self.mindforge.compress_memories(
+                    threshold=float(body.get("threshold", 0.75)),
+                    dry_run=bool(body.get("dry_run", False)),
+                    categories=body.get("categories"),
+                    min_cluster_size=int(body.get("min_cluster_size", 3)))
+                self._send_json(res)
             elif path == "/api/agent/forget":
                 mid = body.get("id", "")
                 if not isinstance(mid, str) or not mid:

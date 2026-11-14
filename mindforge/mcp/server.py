@@ -813,6 +813,37 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
         },
     },
     {
+        "name": "gdpr_report",
+        "description": "GDPR 合规报告：数据地图与各表行数统计（v6.5.6 对齐 CLI/REST）。",
+        "inputSchema": {"type": "object", "required": [], "properties": {}},
+    },
+    {
+        "name": "gdpr_erase",
+        "description": "行使被遗忘权：永久删除全部个人数据（含知识图谱实体/快照/剧作内容，不可逆）。必须显式传 confirm=true。",
+        "inputSchema": {
+            "type": "object",
+            "required": ["confirm"],
+            "properties": {
+                "confirm": {"type": "boolean",
+                            "description": "必须为 true 才执行（不可逆删除）"},
+                "backup": {"type": "boolean", "description": "删除前自动备份，默认 true"}
+            }
+        },
+    },
+    {
+        "name": "memory_compress",
+        "description": "记忆压缩：聚类相似记忆生成摘要（v6.5.6 起支持加密库，明文仅驻内存）。dry_run 只报告不写入。",
+        "inputSchema": {
+            "type": "object", "required": [],
+            "properties": {
+                "threshold": {"type": "number", "description": "相似度阈值 0-1，默认 0.75"},
+                "dry_run": {"type": "boolean", "description": "只报告将压缩的簇"},
+                "categories": {"type": "array", "items": {"type": "string"}},
+                "min_cluster_size": {"type": "integer", "description": "最小簇大小，默认 3"}
+            }
+        },
+    },
+    {
         "name": "skill_pack_export",
         "description": "功能 3：导出可分享技能包（v6.0.0）。",
         "inputSchema": {"type": "object", "required": [], "properties": {}},
@@ -1755,6 +1786,42 @@ def h_timeline_viz(mf, args):
         return {"ok": False, "error": _safe_error_msg(e)}
 
 
+def h_gdpr_report(mf, _args):
+    try:
+        return {"ok": True, **mf.gdpr_report()}
+    except Exception as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_gdpr_erase(mf, args):
+    if args.get("confirm") is not True:
+        return {"ok": False,
+                "error": "被遗忘权操作不可逆：必须显式传 confirm=true"}
+    try:
+        res = mf.gdpr_erase_all(
+            backup=bool(args.get("backup", True)),
+            actor="mcp_gdpr_erase")
+        return {"ok": True, "status": "erased", **res}
+    except Exception as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
+def h_memory_compress(mf, args):
+    try:
+        kwargs = {}
+        if "threshold" in args:
+            kwargs["threshold"] = float(args["threshold"])
+        if "dry_run" in args:
+            kwargs["dry_run"] = bool(args["dry_run"])
+        if "categories" in args:
+            kwargs["categories"] = args["categories"]
+        if "min_cluster_size" in args:
+            kwargs["min_cluster_size"] = int(args["min_cluster_size"])
+        return {"ok": True, **mf.compress_memories(**kwargs)}
+    except Exception as e:
+        return {"ok": False, "error": _safe_error_msg(e)}
+
+
 def h_skill_pack_export(mf, _args):
     try:
         return {"ok": True, **mf.skill_pack_export()}
@@ -2273,6 +2340,9 @@ HANDLERS: Dict[str, Any] = {
     # v6.0.0 功能 1-8
     "chat_import": h_chat_import,
     "timeline_viz": h_timeline_viz,
+    "gdpr_report": h_gdpr_report,
+    "gdpr_erase": h_gdpr_erase,
+    "memory_compress": h_memory_compress,
     "skill_pack_export": h_skill_pack_export,
     "skill_pack_import": h_skill_pack_import,
     "memory_evolve": h_memory_evolve,

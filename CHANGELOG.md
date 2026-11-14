@@ -3,6 +3,55 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.5.6] - 2026-11-14
+
+安全修复包：双判官外部评审（Qwen4-Max / Kimi K3.1）重叠指出的缺口全部清偿。
+
+- **GDPR 擦除补全（被遗忘权）**：`gdpr_erase_all` 级联表 10→17 张——
+  补 `knowledge_graph`（实体含从记忆抽取的个人数据）、`memory_snapshots`
+  （历史内容快照）、`memory_templates`、`drama_series/scenes/characters/
+  lines`（剧作创作内容）。此前实体表残留 = 「名义上已行使删除权、实际
+  数据仍残留」的合规缺口（两判官独立重叠指出）。
+- **legacy 密钥文件验证修复**：v5.5 时代密钥文件（无 verify_blob）此前
+  在 rekey 路径恒放行——错误旧密码可把密钥文件改写成新密码（数据仍可
+  用旧密钥解开，但新密钥从此对不上）。rekey 现在对 legacy 文件做
+  试探解密（取库内一条真实密文用旧密码引擎试解），空库无验证材料时
+  退回旧行为。
+- **KDF 成本下限（防降级攻击）**：`KDFParams.from_dict` 拒绝被篡改的
+  低成本参数（PBKDF2 < 60k、scrypt N < 4096）——密钥文件与密文头是
+  攻击者可见输入，参数被改小会使暴力破解成本骤降。真实历史数据全部
+  满足下限，兼容读取不受影响。
+- **压缩 × 加密解除互斥**：`compress_memories` 此前对加密库直接抛
+  SecurityError——两大卖点默认互斥（评审指出的产品级冲突）。现走
+  `fuzzy_search` 同款进程内解密路径（`_plaintext_for_index`）水合
+  TF-IDF 索引：明文只驻内存，不落盘、不进 FTS5，摘要写入自动加密。
+- **三接口对齐（治理面补齐）**：REST 新增 `/api/gdpr/report`、
+  `/api/gdpr/export`、`/api/gdpr/erase`（需 confirm=true）、
+  `/api/compress`、`/api/compressions`；MCP 新增 `gdpr_report`、
+  `gdpr_erase`（需 confirm）、`memory_compress`——工具数 87→90，
+  CLI / REST / MCP 三接口现均完整暴露 GDPR 与压缩治理能力。
+- **表述诚实化**：README 此前宣称「six-way hybrid search」，实际
+  召回路为四路（vector / FTS5 / TF-IDF / fuzzy）——修正为
+  "four-way hybrid retrieval" 并显式说明重排为手工启发特征而非
+  神经 cross-encoder、query expansion 属证据组装层。
+- **LoCoMo 全量成绩入档**：1,986 问全量 51.5%（≥9 分口径），
+  2.13× 于组装前基线 24.2%；双判官交叉验证（DeepSeek 51.5% /
+  Kimi K3.1 52.72%，差 1.2pt）；排除对抗拒答桶后 43.05%（663/1540）。
+  分桶：adversarial 93.9% / single-hop 57.8% / multi-hop 25.2% /
+  temporal 9.6% / open-domain 10.4%——temporal 证据召回与两跳链
+  检索为 v6.6 命名靶子。数据在 `benchmarks/results/`。
+
+### Tests
+
+- 新增 `tests/test_v656_security.py`（7 项契约：GDPR 级联两例 /
+  legacy rekey 拒错误密码 / KDF 下限三例 / 加密库压缩-解压链路）。
+- MCP 工具数守卫 87→90（v576 / v579 / v580 / v611 / v612 / v645 六处）。
+- REST 路由 docstring 口径 60→65（GET 39 / POST 24 / PUT 1 / DELETE 1），
+  `check_docs_consistency` 84 项断言全过。
+- 官网统计口径同步（测试数 / MCP 工具数 / 生态卡）。
+
+**全量 1306 项**（1305 通过 + 1 环境性跳过），2026-11-14 实测。
+
 ## [6.5.5] - 2026-11-13
 
 （preview）时间归一化窗口扩展（temporal 证据自包含时间戳）：

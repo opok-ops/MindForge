@@ -312,11 +312,11 @@ class TestEventBusWiring(unittest.TestCase):
 class TestToolCountConsistency(unittest.TestCase):
     """新增 follow_up_nag 后，工具数与三层注册必须自洽。"""
 
-    def test_tool_count_is_87(self):
+    def test_tool_count_is_90(self):
         from mindforge.mcp.server import TOOL_SCHEMAS, HANDLERS
 
         names = [s["name"] for s in TOOL_SCHEMAS]
-        self.assertEqual(len(names), 87)
+        self.assertEqual(len(names), 90)  # v6.5.6: +3
         self.assertEqual(len(set(names)), len(names), "工具名不得重复")
         self.assertEqual(set(names) - set(HANDLERS), set(), "有 schema 无 handler")
         self.assertEqual(set(HANDLERS) - set(names), set(), "有 handler 无 schema")
@@ -324,7 +324,7 @@ class TestToolCountConsistency(unittest.TestCase):
     def test_tools_list_endpoint_agrees(self):
         from mindforge.mcp.server import _handle_tools_list
 
-        self.assertEqual(len(_handle_tools_list({})["tools"]), 87)
+        self.assertEqual(len(_handle_tools_list({})["tools"]), 90)  # v6.5.6
 
     def test_nag_tool_schema_shape(self):
         from mindforge.mcp.server import TOOL_SCHEMAS

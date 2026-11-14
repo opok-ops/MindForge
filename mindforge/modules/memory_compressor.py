@@ -81,8 +81,19 @@ class MemoryCompressor:
             logger.warning("compressor 索引水合失败：list_memories 异常", exc_info=True)
             return 0
         count = 0
+        # v6.5.6：加密库兼容——content 取 _plaintext_for_index（进程内
+        # 解密，明文只驻内存不落盘/不进 FTS，与 fuzzy_search 同一安全
+        # 模型）。此前加密库入口直接 SecurityError，导致「记忆压缩」与
+        # 「静态加密」两大能力默认互斥（双判官评审指出的产品级冲突）。
+        # 仅加密库启用解密水合（storage.encrypted 明确为 True）；
+        # 明文库/测试桩不触碰该路径，保持原 content 直取语义
+        decrypt_inplace = (
+            getattr(self.storage, "_plaintext_for_index", None)
+            if getattr(self.storage, "encrypted", False) is True
+            else None
+        )
         for m in mems:
-            content = getattr(m, "content", None)
+            content = decrypt_inplace(m) if decrypt_inplace else getattr(m, "content", None)
             mid = getattr(m, "id", None) or getattr(m, "memory_id", None)
             if not content or not mid:
                 continue
@@ -197,6 +208,7 @@ class MemoryCompressor:
             threshold: 相似度阈值
             min_cluster_size: 最小簇大小
             max_cluster_size: 最大簇大小
+            v6.5.6：支持加密库（进程内解密聚类，明文不落盘）。
             dry_run: 为 True 时只返回将压缩的簇，不写入
             categories: 限定类别
 
@@ -207,13 +219,6 @@ class MemoryCompressor:
                 "skipped_strict": int,
             }
         """
-        # v6.3.5：加密库入口即拒绝（摘要需进 FTS，当前实现仅支持明文库）
-        if getattr(self.storage, "encrypted", False) is True:
-            from mindforge.core.encryption import SecurityError
-            raise SecurityError(
-                "加密库暂不支持记忆压缩（摘要需进入明文 FTS 索引）。"
-                "如需压缩请先解密数据库。"
-            )
 
         # v6.3.6 修复：真实库上 _doc_texts 可能为空（搜索主路径走 FTS5，
         # 不触发 TF-IDF 索引水合），find_similar_clusters 会静默返回 []，
@@ -287,14 +292,6 @@ class MemoryCompressor:
         """
         if len(memory_ids) < 2:
             return None
-
-        # v6.3.5：加密库入口即拒绝（与 auto_compress 一致）
-        if getattr(self.storage, "encrypted", False) is True:
-            from mindforge.core.encryption import SecurityError
-            raise SecurityError(
-                "加密库暂不支持记忆压缩（摘要需进入明文 FTS 索引）。"
-                "如需压缩请先解密数据库。"
-            )
 
         # STRICT guard
         safe_ids = []
@@ -485,14 +482,6 @@ class MemoryCompressor:
           - 源标记走 update_memory（读-合并-写回，metadata 为整体替换语义）
           - compressions 映射表保留模块私有 SQL（不触碰 memories 表）
         """
-        if getattr(self.storage, "encrypted", False) is True:
-            from mindforge.core.encryption import SecurityError
-            raise SecurityError(
-                "加密库暂不支持记忆压缩：摘要需进入 FTS 检索索引，"
-                "而当前压缩实现仅支持明文库。如需压缩请先解密数据库，"
-                "或等待后续版本的加密库压缩支持。"
-            )
-
         from mindforge.core.types import Importance, MemoryLayer
 
         # 1. 摘要记忆：标准写入通道（FTS + 嵌入 + 审计 + 完整 uuid）

@@ -11,7 +11,7 @@ import json
 import base64
 import threading  # v5.4.7 修复 H-4：全局引擎初始化线程安全
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Callable
 from dataclasses import dataclass
 
 # 懒加载 cryptography：避免 CLI 启动时导入耗时（低配电脑 300ms+）
@@ -48,6 +48,8 @@ PBKDF2_ITERATIONS_LEGACY = 60_000
 SCRYPT_N_CURRENT = 65_536
 SCRYPT_R_CURRENT = 8
 SCRYPT_P_CURRENT = 1
+# v6.5.6：KDF 成本下限（防降级攻击，见 KDFParams.from_dict）
+_KDF_MIN_SCRYPT_N = 4096
 
 # 密钥文件格式版本（v6.3 = scrypt 默认；5.6 = PBKDF2 版本化；更早 = legacy）
 KEY_FILE_VERSION = "6.3"
@@ -100,6 +102,20 @@ class KDFParams:
         """
         algorithm = data.get("algorithm", KDF_ALGORITHM_LEGACY)
         iterations = int(data.get("iterations", PBKDF2_ITERATIONS_LEGACY))
+        # v6.5.6 安全修复：KDF 成本下限（防降级攻击）——密钥文件/密文头
+        # 是外部可篡改输入，攻击者把参数改小（如 iterations=100 或
+        # scrypt n=1024）可使暴力破解成本骤降。from_dict 是唯一入口，
+        # 此处强制下限：PBKDF2 ≥ 60k（legacy 下限）、scrypt n ≥ 4096。
+        # 真实历史数据全部满足（60k/600k/2^16），不影响兼容读取。
+        if algorithm == KDF_ALGORITHM_CURRENT:
+            if int(data.get("n", iterations)) < _KDF_MIN_SCRYPT_N:
+                raise SecurityError(
+                    f"KDF 参数低于安全下限（scrypt n={data.get('n')} < "
+                    f"{_KDF_MIN_SCRYPT_N}），疑似降级攻击，已拒绝")
+        elif iterations < PBKDF2_ITERATIONS_LEGACY:
+            raise SecurityError(
+                f"KDF 参数低于安全下限（PBKDF2 iterations={iterations} < "
+                f"{PBKDF2_ITERATIONS_LEGACY}），疑似降级攻击，已拒绝")
         if algorithm == KDF_ALGORITHM_CURRENT:
             # scrypt：iterations 承载 N（信息性）；实际派生用 n/r/p
             n = int(data.get("n", iterations))
@@ -388,14 +404,28 @@ def _write_key_file(key_path: Path, salt: bytes, kdf_params: KDFParams,
             pass  # icacls 失败不阻断流程
 
 
-def _verify_key_password(engine: EncryptionEngine, key_data: dict) -> bool:
+def _verify_key_password(engine: EncryptionEngine, key_data: dict,
+                         probe_decrypt: Optional[Callable[[EncryptionEngine], bool]] = None) -> bool:
     """使用验证令牌检查密码是否正确
 
     v5.6.0: 新密钥文件包含 verify_blob 字段。旧文件没有则跳过验证
     （向后兼容，避免老用户升级后被锁）。
+    v6.5.6 安全修复：legacy 密钥文件（无 verify_blob）在调用方提供
+    probe_decrypt 时进行试探解密验证——此前恒放行意味着 rekey 路径
+    用错误旧密码也能把密钥文件重写成新密码（数据仍可用旧密钥解开，
+    但新密钥从此对不上数据，构成可用性攻击面 + 双判官独立评审
+    （Qwen4-Max / Kimi K3.1）重叠指出的校验缺口）。
+    probe_decrypt 回调负责从库中取一条真实密文让 engine 试解；
+    返回 True/False。无回调（None）时维持旧行为放行（调用方
+    无验证材料，如空库）。
     """
     if "verify_blob" not in key_data:
-        return True  # legacy 密钥文件，无法验证，放行
+        if probe_decrypt is not None:
+            try:
+                return bool(probe_decrypt(engine))
+            except Exception:
+                return False
+        return True  # legacy 且无验证材料：放行（旧行为）
 
     try:
         blob = EncryptedBlob.from_dict(key_data["verify_blob"])

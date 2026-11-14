@@ -6,11 +6,11 @@
 
 MindForge 为 AI Agent 提供持久、结构化的长期记忆：四层记忆生命周期、知识图谱、混合检索、端到端加密，以及 MCP / CLI / REST 统一接口。所有数据运行并存储在本机。
 
-> **开发历程** — 一个人，七个多月，从 v1.0（2026 年 3 月）到 v6.5.5：没有团队，没有融资，1298 项测试通过（1299 项中 1 项随环境跳过）。[读完整故事 →](https://opok-ops.github.io/MindForge/#developer)
+> **开发历程** — 一个人，七个多月，从 v1.0（2026 年 3 月）到 v6.5.6：没有团队，没有融资，1305 项测试通过（1306 项中 1 项随环境跳过）。[读完整故事 →](https://opok-ops.github.io/MindForge/#developer)
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-6.5.5-green.svg)](https://github.com/opok-ops/MindForge/releases)
+[![Version](https://img.shields.io/badge/version-6.5.6-green.svg)](https://github.com/opok-ops/MindForge/releases)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
 [![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
@@ -47,7 +47,7 @@ MindForge 为 AI Agent 提供持久、结构化的长期记忆：四层记忆生
 - **结构化记忆。** 四层模型（感官 / 短期 / 长期 / 永久），依据艾宾浩斯遗忘曲线自动晋升与衰减。
 - **检索质量。** 六条互补检索通路融合为一份排序结果，而非单一向量索引。
 - **默认加密。** 落盘 AES-256-GCM + PBKDF2 密钥派生；支持导出受信任的加密备份。
-- **开放接口。** MCP Server（87 个工具）、Python SDK、带 Shell 补全的 CLI，以及面向非 Python 应用的 REST API。
+- **开放接口。** MCP Server（90 个工具）、Python SDK、带 Shell 补全的 CLI，以及面向非 Python 应用的 REST API。
 
 ## 快速开始
 
@@ -139,7 +139,7 @@ v6.1.3 – v6.4.9 连发（2026-11-01 → 11-11，两日内四发），由 **125
 
 **集成**
 
-- **MCP Server** — 87 个工具，可直接接入 Claude Code、OpenClaw 或任意 MCP 客户端。
+- **MCP Server** — 90 个工具，可直接接入 Claude Code、OpenClaw 或任意 MCP 客户端。
 - **联邦记忆** — Agent 间 P2P 共享，含信任等级、ACL 与冲突解决。
 - **REST API** — 面向非 Python 应用的标准 HTTP 接口。
 - **CLI** — 200+ 命令，支持 bash / zsh / fish 自动补全。

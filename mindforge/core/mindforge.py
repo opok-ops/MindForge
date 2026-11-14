@@ -442,7 +442,27 @@ class MindForge:
                 old_password, old_salt,
                 kdf_params=verify_params,
             )
-            if not _verify_key_password(verify_engine, key_data):
+            # v6.5.6：legacy 文件（无 verify_blob）接 probe 试探解密——
+            # 从库中取一条真实密文让旧密码引擎试解；空库无材料时退回放行。
+            def _probe(eng):
+                try:
+                    rows = self._storage._get_conn().execute(
+                        "SELECT * FROM memories WHERE encrypted=1 LIMIT 1"
+                    ).fetchall()
+                    if not rows:
+                        return True  # 无验证材料（空库）：不因缺材料拒真
+                    from mindforge.core.encryption import EncryptedBlob
+                    e = self._storage._row_to_entry(rows[0])
+                    blob = EncryptedBlob(
+                        ciphertext=e.ciphertext, nonce=e.nonce, salt=e.salt,
+                        kdf_params=getattr(e, "kdf_params", None) or eng.kdf_params)
+                    eng.decrypt(blob)
+                    return True  # 试解成功即密码正确
+                except Exception:
+                    return False  # 试解失败 = 旧密码错误
+
+            if not _verify_key_password(verify_engine, key_data,
+                                        probe_decrypt=_probe):
                 raise SecurityError("旧密码错误")
 
         # v6.3.1: 默认升级到 scrypt（64 MiB 内存墙）；显式传 new_iterations

@@ -2415,9 +2415,11 @@ class StorageEngine:
                        key_file: Optional[str] = None) -> Dict[str, Any]:
         """删除权（被遗忘权）实现（v5.7.6 新增）
 
-        先自动创建完整备份（数据库 + 密钥文件），再永久删除
-        memory_links / memory_versions / audit_log / archived_memories /
-        memories / memory_fts，并清空缓存与访问计数挂账。
+        先自动创建完整备份（数据库 + 密钥文件），再永久删除全部
+        含个人数据的表（v6.5.6 补齐：knowledge_graph 实体、
+        memory_snapshots 快照、memory_templates、drama_* 剧作创作
+        内容——此前遗留实体表残留，被遗忘权不完整），并清空缓存
+        与访问计数挂账。
         返回各表删除计数与备份路径。不可逆，调用方必须先提示确认。
         """
         backup_path = ""
@@ -2444,9 +2446,16 @@ class StorageEngine:
         # graph_relations（含 memory_ids 指向被删记忆的引用）。
         # 这些表留下孤儿行不仅占空间，更构成「名义上已行使删除权、
         # 实际数据仍残留」的合规缺口。
+        # v6.5.6：补齐 knowledge_graph（实体含从记忆抽取的个人数据）、
+        # memory_snapshots（历史内容快照）、memory_templates、
+        # drama_series/scenes/characters/lines（剧作创作内容）——
+        # 双判官独立评审（Qwen4-Max / Kimi K3.1）重叠指出的级联残留。
         for table in ("memory_links", "memory_versions", "memory_notes",
                       "review_schedules", "memory_evolutions",
                       "memory_embeddings", "graph_relations",
+                      "knowledge_graph", "memory_snapshots",
+                      "memory_templates", "drama_series", "drama_scenes",
+                      "drama_characters", "drama_lines",
                       "audit_log", "archived_memories", "memories"):
             try:
                 deleted[table] = int(conn.execute(f"DELETE FROM {table}").rowcount)

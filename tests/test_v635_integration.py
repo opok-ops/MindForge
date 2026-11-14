@@ -99,17 +99,29 @@ class TestCompressIntegration(unittest.TestCase):
         self.assertEqual(self.mf.list_compressions(), [])
 
     def test_encrypted_store_rejects_compression(self):
-        """加密库压缩被显式拒绝（防明文直插 FTS）"""
-        from mindforge.core.encryption import SecurityError
+        """v6.5.6 契约反转：加密库支持压缩（进程内解密聚类，明文不落盘）
+
+        旧契约（v6.3.5-v6.5.5）：加密库入口 SecurityError——「记忆压缩」
+        与「静态加密」默认互斥（双判官评审指出的产品级冲突）。
+        新契约：压缩走 _plaintext_for_index 内存解密路径，摘要写入
+        自动加密，FTS 不落明文（加密库本就不维护 FTS）。
+        """
         mf2 = mindforge.MindForge(
             db_path=os.path.join(self.tmp, "enc.db"),
             encrypted=True,
             key_file=os.path.join(self.tmp, "enc.key"),
         )
         mf2.init_with_password("v635-pass")
-        mf2.add("加密库里的记忆内容", category="test")
-        with self.assertRaises(SecurityError):
-            mf2.compress_memories()
+        # 3 条高度相似记忆 → 应聚成 1 簇
+        for txt in ("机器学习是人工智能的一个分支",
+                    "机器学习是人工智能的重要分支",
+                    "机器学习是人工智能领域的分支方向"):
+            mf2.add(txt, category="test")
+        result = mf2.compress_memories(threshold=0.3, dry_run=False)
+        self.assertGreaterEqual(result.get("compressed_count", 0), 1)
+        # 摘要与源均在加密库中可检索（读路径透明解密）
+        hits = mf2.search("机器学习", max_results=10)
+        self.assertTrue(hits.chunks)
         mf2.close()
 
 

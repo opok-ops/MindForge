@@ -83,7 +83,7 @@ class TestWebsiteModuleCountTruth(unittest.TestCase):
                 f"官网「{k}」={v[0]}，实测 modules/={want}")
 
     def test_website_mcp_tool_count_matches_reality(self):
-        """MCP 工具数守卫（87 实测口径；import server 拿 TOOL_SCHEMAS）。"""
+        """MCP 工具数守卫（90 实测口径，v6.5.6 起 87+3；import server 拿 TOOL_SCHEMAS）。"""
         try:
             from mindforge.mcp.server import TOOL_SCHEMAS
         except Exception as exc:  # pragma: no cover
@@ -101,7 +101,7 @@ class TestVersionBump(unittest.TestCase):
     """版本钉值：忘记 bump 时在此显形。"""
 
     def test_version_is_current(self):
-        self.assertEqual(__version__, "6.5.5")
+        self.assertEqual(__version__, "6.5.6")
 
 
 if __name__ == "__main__":

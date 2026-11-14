@@ -156,6 +156,12 @@ class TestBugDKeyFileBoundary(unittest.TestCase):
                 err = ""
             except Exception as e:
                 err = str(e)
+            finally:
+                # v6.5.8：Windows 文件锁——_get_memory 构造的临时实例
+                # 未被显式 close，等 GC 会锁住 plain.db（WinError 32）；
+                # 强制 GC 释放全部句柄后再交还 TemporaryDirectory
+                import gc as _gc
+                _gc.collect()
             self.assertNotIn("密码", err)
             self.assertNotIn("password", err.lower())
 

@@ -8624,7 +8624,10 @@ class StorageEngine:
             " memory_type, layer, source_session, source_agent, metadata,"
             " created_at, updated_at"
             " FROM memories"
-            " WHERE layer = ? AND category != 'trash' AND created_at < ?",
+            # v6.5.8：created_at <= cutoff（Windows 15.6ms 计时精度下
+            # max_age_hours=0 时 created_at 与 cutoff 同 tick，严格
+            # < 恒 False → 归档 0 条；Linux 高精度时钟从未暴露）
+            " WHERE layer = ? AND category != 'trash' AND created_at <= ?",
             (layer, cutoff_time)
         ).fetchall()
 

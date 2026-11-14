@@ -84,6 +84,13 @@ class TestSynchronousNormalGuard(_WALCase):
         t = threading.Thread(target=probe)
         t.start()
         t.join(timeout=10)
+        # v6.5.8：Windows 文件锁——probe 线程的 thread-local 连接
+        # 显式关闭（线程死后的 GC 时机不保证，Windows 上未关连接
+        # 锁住 db 文件，tearDown unlink 炸 WinError 32）
+        try:
+            self.storage.close_thread_conn()
+        except Exception:
+            pass
         self.assertNotIn("error", results, results.get("error", ""))
         self.assertEqual(results.get("mode"), 1)
 

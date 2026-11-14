@@ -31,21 +31,16 @@ import shutil
 import statistics
 import sys
 import tempfile
-import threading
-import time
-from pathlib import Path
 
-_REPO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_REPO))
 
-from mindforge.core.mindforge import MindForge  # noqa: E402
-from mindforge.core.types import MemoryConfig  # noqa: E402
+def _pkg_version() -> str:
+    """动态取 MindForge 版本，避免硬编码随发版漂移（用户反馈采纳）"""
+    try:
+        from mindforge.core.version import __version__
+        return f"v{__version__}"
+    except Exception:
+        return "unknown"
 
-DEFAULT_N = 500
-DEFAULT_ROUNDS = 2
-DEFAULT_LATENCY_ROUNDS = 50
-QUERY_CN = "并发"
-CONTENT_TMPL = "基准测试记忆第{i}条：Python 并发与检索性能研究 #{i}"
 
 
 def _make_mf(prefix: str, encrypted: bool = False):
@@ -195,7 +190,10 @@ def main() -> int:
     print("=" * 60)
 
     result = {"meta": {
-        "tool": "repro_benchmark", "version": "v6.2.0",
+        # v6.5.8：version 动态引用（用户反馈采纳）——硬编码会随发版
+        # 漂移（repro 报告里的版本与实际不符）；与 connectors.py v6.4.5
+        # 同款修复模式
+        "tool": "repro_benchmark", "version": _pkg_version(),
         "python": sys.version.split()[0], "n": n, "rounds": rounds,
         "date": time.strftime("%Y-%m-%d %H:%M:%S"),
     }}

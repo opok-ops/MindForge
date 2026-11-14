@@ -46,6 +46,21 @@ WEBSITE = "website/index.html"
 READMES = ["README.md", "README.zh-CN.md"]
 
 
+def check_no_hardcoded_versions() -> list:
+    """v6.5.8：扫描 benchmarks/ 硬编码版本号（repro_benchmark 教训）
+
+    benchmarks/*.py 里出现 "v6.x.y" 字面量 = 随发版漂移的地雷
+    （repro 报告版本与实际不符）。统一用 _pkg_version() 动态引用。
+    """
+    problems = []
+    for py in (ROOT / "benchmarks").glob("*.py"):
+        txt = py.read_text(encoding="utf-8")
+        for n, line in enumerate(txt.split("\n"), 1):
+            if re.search(r'"version":\s*"v\d+\.\d+\.\d+"', line):
+                problems.append(f"{py.name}:{n} 硬编码版本 {line.strip()[:60]}")
+    return problems
+
+
 def current_version() -> str:
     src = (ROOT / VERSION_FILE).read_text(encoding="utf-8")
     m = re.search(r'__version__: str = "([\d.]+)"', src)
@@ -221,6 +236,13 @@ def main():
         print(f"已修改 {len(changed)} 个文件：")
         for f in changed:
             print("  ", f)
+        print("\n[预检] benchmarks 硬编码版本扫描：")
+        hw = check_no_hardcoded_versions()
+        for ln in hw:
+            print("   ", ln)
+        if not hw:
+            print("    PASS（无硬编码）")
+
         print("\n[预检] docs consistency guard：")
         g_ok = run_guard()
         print("[预检] 版本钉测试组：")

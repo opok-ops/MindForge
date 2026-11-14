@@ -85,11 +85,37 @@ def _is_network_fs(path: Path) -> bool:
 # ===== 路径安全校验（v5.2.9 新增：存储层统一防护）=====
 
 # v5.3.5 安全加固：检测 Windows 短文件名（8.3）绕过尝试
-def _is_suspicious_windows_path(comp: str) -> bool:
-    """检测 Windows 短文件名绕过模式（如 PROGRA~1、FILE~1.TXT）"""
+def _is_dangerous_component(comp: str) -> bool:
+    """v6.5.8：结构性危险组件（.. / 分隔符 / NUL / Windows 冒号）
+
+    必须在**原始未 resolve** 的路径上检查——resolve 会把 `..` 归一化
+    掉，归一化后的组件列表里遍历痕迹消失（v6.5.7 曾因此引入回归，
+    test_path_traversal_rejected 抓住）。
+    """
     if not comp or len(comp) == 0:
         return False
-    # v5.4.5 修复 #11：豁免 Unix 根路径 '/'，否则 Linux/Mac 上所有导出功能不可用
+    # v5.4.5 修复 #11：豁免 Unix 根路径 '/'
+    if comp == '/':
+        return False
+    import sys as _sys
+    _dangerous = ('..', '/', '\\', '\x00', ':') if _sys.platform == 'win32' else ('..', '/', '\\', '\x00')
+    if any(s in comp for s in _dangerous):
+        return True
+    return False
+
+
+def _is_suspicious_windows_path(comp: str) -> bool:
+    """检测 Windows 短文件名绕过模式（如 PROGRA~1、FILE~1.TXT）
+
+    v6.5.8：只负责短名模式匹配。调用方应在 **resolve(strict=False)
+    之后** 的组件上调用——Windows API 会展开**已存在**的短名
+    （RUNNER~1 → runneradmin，文件系统现实非攻击），展开后组件不再
+    匹配短名模式即放行；**不存在**的短名 resolve 保留原样 → 匹配 →
+    拒绝（攻击性短名）。Linux 上 resolve 不展开 8.3（无此概念），
+    恶意短名照拒。
+    """
+    if not comp or len(comp) == 0:
+        return False
     if comp == '/':
         return False
     import re as _re
@@ -98,11 +124,6 @@ def _is_suspicious_windows_path(comp: str) -> bool:
         return False
     # 匹配 短名模式：基础名 + ~N + 可选扩展名
     if _re.match(r'^[^~]{1,6}~\d(\..{1,3})?$', comp, _re.IGNORECASE):
-        return True
-    # v5.5.1 fix: colon only dangerous on Windows
-    import sys as _sys
-    _dangerous = ('..', '/', '\\', '\x00', ':') if _sys.platform == 'win32' else ('..', '/', '\\', '\x00')
-    if any(s in comp for s in _dangerous):
         return True
     return False
 
@@ -121,15 +142,17 @@ def _safe_path(path_str, must_exist=False, allow_symlinks=False,
         # 过滤双向控制字符（RLO/LRO 等）和 NUL，防止显示欺骗
         if cat in ('Cf', 'Cc') and ch not in '\n\r\t':
             raise ValueError("路径中包含非法控制字符")
-    # v5.3.5 安全：逐组件检测 Windows 短文件名绕过
+    # v5.3.5 安全：逐组件检测路径遍历/危险字符（原始路径，resolve 前）
     target = Path(path_str)
     if not target.is_absolute():
         target = Path.cwd() / target
-    # v6.5.7：先展开已存在前缀的 8.3 短名再校验——GitHub Actions
-    # Windows runner 的用户目录本身就是 C:\Users\RUNNER~1（8.3 短名
-    # 是文件系统现实，不是绕过攻击），原逻辑直接拒绝导致 7 个
-    # 备份/导入测试全挂。resolve(strict=False) 由 Windows API 展开
-    # 存在部分的短名为真实长名；不存在部分（新建文件）按原样校验。
+    for comp in target.parts:
+        if comp and _is_dangerous_component(comp):
+            raise ValueError(f"路径组件不安全: {comp}")
+    # v6.5.7/v6.5.8：短名检测在 resolve 之后——Windows API 展开
+    # 已存在前缀的 8.3 短名（C:\Users\RUNNER~1 是 runner 目录的
+    # 文件系统现实，展开后不再匹配短名模式）；不存在的短名
+    # （攻击性）resolve 后原样保留 → 仍匹配 → 拒绝。
     try:
         check_target = target.resolve(strict=False)
     except (OSError, RuntimeError):

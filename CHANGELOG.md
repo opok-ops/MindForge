@@ -3,6 +3,30 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.5.9] - 2026-11-14
+
+Windows 兼容收官 + LoCoMo 全量数据入档。v6.5.8 tag 因 PyPI 同版本
+不可重传，全部修复收编本版。
+
+- **Windows-only 修复 ×4**（CI Windows 3.12 试水矩阵五轮追凶）：
+  ① 8.3 短名误判（RUNNER~1 是 runner 目录现实，resolve 展开后
+  校验；攻击性短名语义保持）×7 测试；② 盘符根 `C:\` 冒号误拒
+  （拆层时丢失豁免）；③ CLI 中文 help 在 cp1252/cp936 控制台
+  UnicodeEncodeError（真 Windows 用户 --help 即崩）→ 入口强制
+  UTF-8；④ conflict reconcile keep_newer 平局决胜（updated_at
+  同 tick 时 `<=` 恒杀「扫描第一位」=更新的条目 → created_at
+  决胜）+ probe 线程自关 thread-local 连接（WinError 32）。
+- **repro_benchmark.py**：version 硬编码 → `_pkg_version()` 动态
+  引用（用户实测反馈）；release.py bump 预检新增硬编码版本扫描。
+- **LoCoMo 全量终局入档**（1986 问）：acc 52.7%（+1.2pt），
+  temporal 9.6%→29.3%（+19.7pt）、multi-hop 25.2%→10.3%（-14.9pt
+  诚实倒退，graph 补盲挤占 top-k；尾部补位语义排 v6.6）。
+
+### Tests
+
+- CI 8/8 全绿（Windows 3.12 首次通过）。全量 **1319** 项通过
+  （1318 passed + 1 环境性跳过），2026-11-14 实测。
+
 ## [6.5.8] - 2026-11-14
 
 Windows 兼容补丁：CI Windows 3.12 试水矩阵（v6.5.6 加入）首跑

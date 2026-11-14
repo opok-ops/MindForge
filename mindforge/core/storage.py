@@ -18829,7 +18829,12 @@ class StorageEngine:
             # 自动选择：更新的 > 重要度高的 > 访问次数多的
             imp_map = {"LOW": 0, "MEDIUM": 1, "HIGH": 2, "CRITICAL": 3}
 
-            a_newer = entry_a.updated_at >= entry_b.updated_at
+            # v6.5.8：updated_at 相等（Windows 15.6ms 计时精度下两条
+            # add 落在同一 tick）时用 created_at 决胜——`>=` 恒让先
+            # add 的条目赢，与「保留更新者」语义相反
+            a_newer = (entry_a.updated_at > entry_b.updated_at
+                       or (entry_a.updated_at == entry_b.updated_at
+                           and entry_a.created_at > entry_b.created_at))
             a_higher_imp = imp_map.get(str(entry_a.importance), 1) > \
                            imp_map.get(str(entry_b.importance), 1)
             a_more_access = entry_a.access_count >= entry_b.access_count

@@ -97,6 +97,12 @@ def _is_dangerous_component(comp: str) -> bool:
     # v5.4.5 修复 #11：豁免 Unix 根路径 '/'
     if comp == '/':
         return False
+    # v5.3.7 修复（v6.5.8 回归补）：豁免 Windows 盘符根（C:\ / C:）——
+    # 冒号在危险列表里，但盘符根是每个 Windows 绝对路径的第一个
+    # 组件，不豁免则全部导出功能炸（CI Windows 首跑抓到）
+    import re as _re
+    if len(comp) <= 3 and _re.match(r'^[A-Za-z]:\\?$', comp):
+        return False
     import sys as _sys
     _dangerous = ('..', '/', '\\', '\x00', ':') if _sys.platform == 'win32' else ('..', '/', '\\', '\x00')
     if any(s in comp for s in _dangerous):

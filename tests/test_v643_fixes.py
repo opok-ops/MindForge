@@ -80,6 +80,14 @@ class TestSynchronousNormalGuard(_WALCase):
                 ).fetchone()[0]
             except Exception as exc:  # pragma: no cover - 显形优先
                 results["error"] = repr(exc)
+            finally:
+                # v6.5.8：线程自己关自己的 thread-local 连接——主线程
+                # 调 close_thread_conn 关不到其他线程的 local 槽，
+                # Windows 上未关连接锁住 db 文件（WinError 32）
+                try:
+                    self.storage.close_thread_conn()
+                except Exception:
+                    pass
 
         t = threading.Thread(target=probe)
         t.start()

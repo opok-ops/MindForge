@@ -6,13 +6,13 @@
 
 MindForge gives AI agents a persistent, structured long-term memory: a four-tier lifecycle model, knowledge graphs, hybrid retrieval, end-to-end encryption, and MCP / CLI / REST interfaces. All data stays on your machine.
 
-> **The story** — one developer, seven months, from v1.0 (March 2026) to v6.6.2: no team, no funding, 1,435 passing tests. [Read the journey →](https://opok-ops.github.io/MindForge/#developer)
+> **The story** — one developer, seven months, from v1.0 (March 2026) to v6.6.3: no team, no funding, 1,435 passing tests. [Read the journey →](https://opok-ops.github.io/MindForge/#developer)
 >
 > *Timeline note (v6.6.0):* "seven months" counts from project start (2026-03, pre-git prototyping era). Git history begins 2026-07-17 with the v5.7.x repository consolidation — earlier code lived outside this repo. The 416+ commits reflect consolidated history only.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-6.6.2-green.svg)](https://github.com/opok-ops/MindForge/releases)
+[![Version](https://img.shields.io/badge/version-6.6.3-green.svg)](https://github.com/opok-ops/MindForge/releases)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
 [![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
@@ -84,7 +84,9 @@ MindForge stats
 
 ## What's New
 
-v6.1.3 – v6.6.2 shipped in two weeks (2026-11-01 → 11-14), guarded by **1,300+ tests**.
+v6.1.3 – v6.6.3 shipped in two weeks (2026-11-01 → 11-17), guarded by **1,400+ tests**.
+
+- **v6.6.3 — ultimate bug-fix pack + retrieval enhancement for the named v6.6 targets** (2026-11-17). Three externally-found must-fix stability bugs closed (daemon dies on any invalid-UTF-8 input line — strict→replace decoding; REST double HTTP response after 413; lone-surrogate crash in the encrypted write path), plus rekey race honest-error and daemon error-dict forwarding. Temporal parsing overhauled: year-month queries (2024年5月 / 2024-05) no longer parse to None (full-month window now), English month-name dates (17 July 2023 / May 2023) parsed and matched on the evidence side, N-quantity windows actually multiply (two weeks ago had a 2-day window since v6.5.7), weekday expressions (last Wednesday / 上周三) resolved precisely, and Chinese phrases now flow through assembly-layer normalization. New retrieval layer (zero LLM, all rule-based): `search_chain` (hop1 evidence → entity extraction → hop2, the structural fix behind the multi-hop 25.2% bucket), path-aware graph retrieval (A-B shortest-path bridge evidence at 0.65), `decompose_two_hop` rule split, and `search_broad` open-domain entry. 36 new contract tests (`tests/test_v663_fixes.py`); full suite 1,477 green. LoCoMo re-judge pending an external API key.
 
 - **v6.6.0 — security fix pack from dual-judge external review** (2026-11-14). Qwen4-Max (Doubao) and Kimi K3.1 independently reviewed the codebase; their overlapping findings became this release. (1) **GDPR erasure completed**: `gdpr_erase_all` now cascades to 17 tables — added `knowledge_graph` entities, `memory_snapshots`, `memory_templates`, and the four drama_* creation-content tables that previously survived erasure (the "right to be forgotten" had a real gap). (2) **Legacy key-file verification fixed**: v5.5-era key files (no `verify_blob`) previously accepted *any* password during `rekey` — a wrong old password could rewrite the key file and orphan all data. Rekey now probe-decrypts a real ciphertext from the store; empty stores fall back to the old behavior. (3) **KDF cost floor**: `KDFParams.from_dict` rejects tampered parameters (PBKDF2 < 60k, scrypt N < 4096) that would downgrade brute-force cost — key files and ciphertext headers are attacker-visible input. (4) **Compression × encryption unblocked**: `compress_memories` previously raised `SecurityError` on encrypted stores, making the two flagship features mutually exclusive by default. Compression now hydrates its TF-IDF index via the same in-memory decryption path as `fuzzy_search` (`_plaintext_for_index`) — plaintext never touches disk or FTS5. (5) **Interface matrix completed**: REST gains `/api/gdpr/report`, `/api/gdpr/export`, `/api/gdpr/erase` (confirm=true required), `/api/compress`, `/api/compressions`; MCP gains `gdpr_report`, `gdpr_erase` (confirm required), `memory_compress` — 87→90 tools, all three interfaces now expose the full governance surface. (6) **Honesty fixes**: README previously claimed "six-way hybrid search"; the actual retrieval count is four (vector/FTS5/TF-IDF/fuzzy) — wording corrected, and the cross-encoder/heuristic distinction is now explicit. LoCoMo full-suite results (51.5%, dual-judge) added to the benchmarks section. 7+ new contract tests (`tests/test_v656_security.py`).
 
@@ -163,7 +165,7 @@ v6.1.3 – v6.6.2 shipped in two weeks (2026-11-01 → 11-14), guarded by **1,30
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│           MindForge v6.6.2            │
+│           MindForge v6.6.3            │
 │  Cognitive Layer  Personality · KnowledgeGraph       │
 │                   MemoryEvolution · FederatedMemory  │
 ├──────────────────────────────────────────────────────┤

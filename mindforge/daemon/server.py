@@ -89,11 +89,16 @@ def run_daemon(db_path: str, key_file: str | None = None, encrypted: bool = Fals
     from mindforge.core.types import MemoryConfig
     from mindforge.core.mindforge import MindForge
 
-    # v6.6.2（F3 附带）修复：stdin 强制 UTF-8 严格解码。宿主写入的是 UTF-8
+    # v6.6.2（F3 附带）修复：stdin 强制 UTF-8 解码。宿主写入的是 UTF-8
     # JSON 行，Windows 控制台/管道默认编码（如 cp936）会把多字节行读成乱码
     # 导致解析失败。旧解释器无 reconfigure 时跳过，保持原行为。
+    # v6.6.3（M1）修复：strict 改 replace——此前 for line in sys.stdin 的
+    # 迭代解码发生在单行 try/except 之外，任何一行含非法 UTF-8 字节（宿主
+    # bug、二进制误写）会抛 UnicodeDecodeError 逃出全部兜底、杀死常驻进程。
+    # replace 后坏字节变 U+FFFD，该行走既有的 bad json → ok:false 分支，
+    # 进程继续服务后续请求。
     try:
-        sys.stdin.reconfigure(encoding="utf-8", errors="strict")
+        sys.stdin.reconfigure(encoding="utf-8", errors="replace")
     except (AttributeError, ValueError, OSError):
         pass
 
@@ -282,10 +287,22 @@ def run_daemon(db_path: str, key_file: str | None = None, encrypted: bool = Fals
 
         try:
             data = handler(args)
-            sys.stdout.write(
-                json.dumps({"id": rid, "ok": True, "data": data}, ensure_ascii=False)
-                + "\n"
-            )
+            # v6.6.3（次要-2）：handler 返回的 dict 若自带 error 字段（如
+            # memory-recall/memory-context 在 agent 为空时返回的错误 dict），
+            # 是调用方配置错误，不能包装成 ok:true 静默吞掉——转 ok:false。
+            if isinstance(data, dict) and "error" in data and "ok" not in data:
+                sys.stdout.write(
+                    json.dumps(
+                        {"id": rid, "ok": False, "error": str(data.get("error"))},
+                        ensure_ascii=False,
+                    )
+                    + "\n"
+                )
+            else:
+                sys.stdout.write(
+                    json.dumps({"id": rid, "ok": True, "data": data}, ensure_ascii=False)
+                    + "\n"
+                )
         except Exception as e:  # 单请求失败不杀进程
             sys.stdout.write(
                 json.dumps(

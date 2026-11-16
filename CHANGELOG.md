@@ -3,6 +3,41 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.6.3] - 2026-11-17
+
+终极修复版 + 检索增强：外审稳定性狩猎 3 项必修 + 2 项次要全清偿，temporal 解析六项修复（含一个 v6.5.7 既有量级 bug），检索层新增链式两跳 / 图路径感知 / open-domain 召回入口（named v6.6 targets 落地）。36 项新契约测试（tests/test_v663_fixes.py），全量 1477 项测试通过。
+
+### Bug 修复（稳定性狩猎）
+
+- **M1（高）：daemon 非法 UTF-8 输入杀死整个常驻进程。** v6.6.2 F2/F3 把 stdin 解码改为 strict，但 `for line in sys.stdin` 的迭代解码发生在单行 try/except 之外——任何一行含非法 UTF-8 字节（宿主 bug、二进制误写）直接抛 UnicodeDecodeError 逃出全部兜底，毫秒级主路径整 session 死亡。修复：daemon/server.py 与 cli/main.py 双处 strict → replace，坏字节行降级为 U+FFFD 走既有 bad json → ok:false 分支，进程继续服务。契约：真实子进程写坏字节行后 ping 仍存活（test_v663_fixes.TestDaemonContract）。
+- **M2（中）：REST 413 之后对同一连接再发一个 400（双 HTTP 响应）。** `_read_body` 用 None 同时表达「已回 413」与「body 非法」，超限请求收到两个拼接的完整响应（413 + 400 "Invalid JSON body"）；keep-alive 客户端/反向代理会把第二个响应错配到下一个请求，静默丢请求。修复：新增 `_BODY_RESPONSE_SENT` 哨兵，do_POST/do_PUT 对已响应分支直接返回。契约：11MB 请求原始字节恰好一个 HTTP 响应（TestRestSingleResponse）。
+- **M3（中）：加密写路径 lone surrogate 未捕获 UnicodeEncodeError。** JSON 规范允许 `\ud800` 转义，`json.loads` 产出含 lone surrogate 的 str，`add()` 全链路无清洗，encrypt() UTF-8 编码抛异常——REST 表现为 500 + 全 traceback。修复：facade add() 入口统一清洗（surrogatepass → decode replace），真实内容不可能合法携带 lone surrogate，全部接口受益。契约：add/search 全通（TestLoneSurrogate）。
+- **次要-1：并发 rekey 竞态误报「数据损坏」。** 两线程同时 rekey 时失败一方被定性为「解密失败：数据损坏」，实际是竞态且回滚后数据一致。修复：facade rekey 加实例级互斥锁（主体移入 `_rekey_locked`），失败消息恢复真实定性。契约：并发 rekey 无「数据损坏」、错密码如实报「旧密码错误」（TestRekeyMutex）。
+- **次要-2：daemon 错误被包装成 ok:true。** `memory-recall`/`memory-context` 在 agent 为空时返回含 error 字段的 dict，daemon 包装为 ok:true 静默吞掉配置错误。修复：handler 返回 dict 自带 error 字段时转发为 ok:false。契约：TestDaemonContract.test_minor2。
+
+### Bug 修复（temporal 解析，第 5 路召回前置）
+
+- **T1（实锤 bug）：年月查询解析恒 None。** 「2024年5月」命中旧第一分支后 `int(None)` 抛 TypeError 被静默吞掉，年月类查询整类失效（elif 分支为死代码）；ISO 年月（2024-05）完全无 pattern。修复：绝对日期模式带 kind 标签按类分派，年月返回**整月窗口**。
+- **T2：英文月名日期完全不支持。** 「17 July 2023」「July 17, 2023」「May 2023」全解析 None——而 LoCoMo 语料与 fact 抽取 prompt 的日期恰全是该格式，时间锚定召回的证据匹配端在英文语料上基本死路。修复：新增 D Month YYYY / Month D, YYYY / Month YYYY 三类模式（月名全称+缩写，"may" 仅在强制带年份的模式内参与，不与情态动词冲突）。
+- **T3（既有量级 bug）：N-数量分支 mult 算了从未乘上去。** 「两周前」窗口只有 2 天、「三个月前」只有 3 天——自 v6.5.7 起该路径窗口量级全错（v6.5.7 修复报告只发现了 regex 不匹配层，没发现这一层）。同轮修复：「三个月前」的「个」字隔断（regex 加 `个?`）与英文数字词（three months ago）。
+- **T4：星期级表达无精确解析。** 英文 weekday（last Wednesday）完全不支持；中文「上周三」只能蹭「上周」-7±3 粗窗且 label 错标为「上周」。修复：last/next <weekday>（最近出现）与 上/下周X（日历周、周一锚定）精确日历运算，先于短语表匹配（「上周三」含子串「上周」，CN 短语循环加 offset 守卫防覆盖）。
+- **T5：`_normalize_temporal` 对中文与星期零效果。** 旧归一化循环只遍历英文短语表——组装层窗口扩展对中文时间词完全无效。修复：补遍历 `_CN_TEMPORAL_RULES`（先长后短）+ 星期级归一（英文/中文）。
+- **T6：证据端英文日期扫描空转 + 月粒度 LIMIT 无序。** `_temporal_candidates` 的 ISO LIKE 在英文语料上恒空、0.6 精确加权全程无效；月粒度 LIMIT 30 无 ORDER BY 命中子集任意。修复：SQL 端追加英文月名/日级 pattern（短窗口 ≤10 天时逐日生成），评分统一走 `_iter_window_dates`（ISO + 英文月名双格式），ORDER BY id 确定性。
+
+### 新功能（检索增强，named v6.6 targets）
+
+- **`decompose_two_hop()`（core/query.py，纯规则零 LLM）**：「X 然后 Y」式两跳问句规则拆解，只对显式分隔词触发，漏检查询安全降级原样直通（承 v6.5.4 LLM 拆解证伪教训）。
+- **`search_chain()`（facade 新 API）**：链式两跳检索——hop1 先检索，从 top chunks 抽实体（KG 规则抽取，零 LLM），实体注入后续子查询再检索，融合去重。与 search_multi 的本质区别是子查询之间交换产物：multi-hop 桶 25.2% 的结构性根因（缺「hop1 结果 → 实体 → hop2」链式编排）落地。hop1 空召回自动退回并行融合。
+- **`search_two_hop()`（facade 新 API）**：一站式入口——拆解命中走链式，未命中走普通 search。
+- **图路径感知（第 6 路 `_graph_candidates` 增强）**：query 命中 ≥2 实体时在 graph_relations 上做有界 BFS 找实体对最短路径，路径桥接记忆加权 0.65（高于普通 1 跳 0.55、低于四路典型命中，仍走补位语义不挤主排序）——「A 和 B 什么关系」的桥接证据不再被无关邻居稀释。新增 `_graph_path_memories()`（visited 剪枝 + 独立已加载集合防漏边）。
+- **`search_broad()`（facade 新 API，open-domain 入口）**：宽泛问句三件套——常规检索先行，召回不足（< max_results/2）触发 QueryExpander 同义词/上位词泛化 + search_multi 融合，融合仍不足按 expand_context 拉邻居上下文。非宽泛或召回充足时与普通 search 行为一致。
+
+### 测试
+
+- 新增 `tests/test_v663_fixes.py`：36 项契约（temporal 解析 15、lone surrogate 2、rekey 互斥 2、daemon 2、REST 413 单响应 1、图路径 3、链式/拆解/宽泛 9、T6 证据加权 1），全绿。
+- 全量回归：**1477 passed, 0 failed**（1441 既有 + 36 新增）。
+
+
 ## [6.6.2] - 2026-11-17
 
 终极稳定版：四路并行深查（加密面/检索链路/接口面/并发面），1 项 P0 + 3 项 P1 + 12 项 P2 + 7 项低危全部落地，每项带契约测试与复现转绿。

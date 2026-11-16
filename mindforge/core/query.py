@@ -93,21 +93,134 @@ _CN_TEMPORAL_RULES = [
 _N_REL = re.compile(
     r"(\b\d+\s+(?:day|week|month|year)s?\s+ago\b"
     r"|\bin\s+\d+\s+(?:day|week|month|year)s?\b"
-    r"|[两二三四五六七八九十0-9]+\s*(?:天|周|月|年)(?:之)?\s*[前后以])", re.IGNORECASE)
+    # v6.6.3（T3）：英文数字词表——"three months ago" 此前完全无法解析
+    r"|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)"
+    r"\s+(?:day|week|month|year)s?\s+ago\b"
+    # v6.6.3（T3）：中文数量词「个」隔断——"三个月前" 因 "个" 字不匹配旧模式
+    r"|[两二三四五六七八九十0-9]+\s*个?\s*(?:天|周|月|年)(?:之)?\s*[前后以])",
+    re.IGNORECASE)
 _CN_NUM = {"两": 2, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6,
            "七": 7, "八": 8, "九": 9, "十": 10}
+# v6.6.3（T3）：英文数字词 → 数值（"three months ago" 数量解析）
+_EN_NUM = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+           "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11,
+           "twelve": 12}
 _REL_DUR = {"day": 1, "week": 7, "month": 30, "year": 365,
             "天": 1, "周": 7, "月": 30, "年": 365}
 
 
+# v6.6.3（T2）：英文月份名 → 月序（全称+常用缩写；"may" 仅在月名日期
+# 模式内参与匹配——全部英文模式强制携带年份，不与情态动词 may 冲突）
+_EN_MONTHS = {
+    "january": 1, "february": 2, "march": 3, "april": 4, "may": 5,
+    "june": 6, "july": 7, "august": 8, "september": 9, "october": 10,
+    "november": 11, "december": 12,
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "jun": 6, "jul": 7,
+    "aug": 8, "sep": 9, "sept": 9, "oct": 10, "nov": 11, "dec": 12,
+}
+_MNM = "|".join(sorted(_EN_MONTHS, key=len, reverse=True))
+
+# v6.6.3（T1/T2）：绝对日期模式带 kind 标签。旧实现对「2024年5月」
+# （有年月无日）命中第一分支后 int(None) 抛 TypeError 被 except 吞掉
+# → 解析恒 None，年月查询全灭；英文月名日期则完全无模式。重构为
+# 按 kind 分派；无日模式返回整月窗口。
 _ABS_DATE_PATTERNS = [
     # ISO 日期 2023-05-06 / 2023-5-6
-    re.compile(r"\b(20\d{2})-(\d{1,2})-(\d{1,2})\b"),
-    # 中文 2023年5月6日 / 2023年5月
-    re.compile(r"(20\d{2})\s*年\s*(\d{1,2})\s*月(?:\s*(\d{1,2})\s*日)?"),
-    # M月D日 / M月（年份取锚年，无锚则跳过）
-    re.compile(r"(?<!\d)(\d{1,2})\s*月\s*(\d{1,2})\s*日(?![\d年])"),
+    (re.compile(r"\b(20\d{2})-(\d{1,2})-(\d{1,2})\b"), "ymd"),
+    # 中文 2023年5月6日（带日） / 2023年5月（整月）
+    (re.compile(r"(20\d{2})\s*年\s*(\d{1,2})\s*月(?:\s*(\d{1,2})\s*日)?"),
+     "ymd_opt"),
+    # M月D日（年份取锚年，无锚则跳过）
+    (re.compile(r"(?<!\d)(\d{1,2})\s*月\s*(\d{1,2})\s*日(?!\d年)"),
+     "md_anchor"),
+    # 英文 D Month YYYY：17 July 2023
+    (re.compile(r"\b(\d{1,2})\s+(" + _MNM + r")\.?,?\s+(20\d{2})\b",
+                re.IGNORECASE), "dmy_en"),
+    # 英文 Month D, YYYY：July 17, 2023 / July 17 2023
+    (re.compile(r"\b(" + _MNM + r")\.?\s+(\d{1,2}),?\s+(20\d{2})\b",
+                re.IGNORECASE), "mdy_en"),
+    # 英文 Month YYYY：May 2023（整月）
+    (re.compile(r"\b(" + _MNM + r")\.?,?\s+(20\d{2})\b", re.IGNORECASE),
+     "my_en"),
+    # ISO 年月 2024-05（整月；v6.6.3 T1 附带——旧实现无此模式）
+    (re.compile(r"\b(20\d{2})-(\d{1,2})(?!-)"), "ym_iso"),
 ]
+
+# v6.6.3（T6）：证据端英文日期扫描模式（_temporal_candidates 内容扫描用）。
+# LoCoMo 语料与 fact 抽取 prompt 的日期都是英文自然语言格式，旧扫描只认
+# ISO——0.6 精确加权在英文语料上全程空转。
+_DATE_SCAN_RES = [
+    re.compile(r"\b(20\d{2})-(\d{1,2})-(\d{1,2})\b"),
+    re.compile(r"\b(\d{1,2})\s+(" + _MNM + r")\.?,?\s+(20\d{2})\b", re.IGNORECASE),
+    re.compile(r"\b(" + _MNM + r")\.?\s+(\d{1,2}),?\s+(20\d{2})\b", re.IGNORECASE),
+    re.compile(r"\b(" + _MNM + r")\.?,?\s+(20\d{2})\b", re.IGNORECASE),
+]
+
+
+def _iter_window_dates(text: str):
+    """v6.6.3（T6）：扫描 text 中的日期（ISO + 英文月名），yield date 对象。
+    供 _temporal_candidates 的窗口精确命中加权使用。"""
+    from datetime import date as _d
+    for pat in _DATE_SCAN_RES:
+        for m in pat.finditer(text):
+            g = m.groups()
+            try:
+                if len(g) == 2:
+                    # Month YYYY（整月锚：按窗口首日比较）
+                    yield _d(int(g[1]), _EN_MONTHS[g[0].lower()], 1)
+                elif g[0].isdigit():
+                    if len(g[0]) == 4:
+                        # ISO：2023-07-17
+                        yield _d(int(g[0]), int(g[1]), int(g[2]))
+                    else:
+                        # D Month YYYY：17 July 2023
+                        yield _d(int(g[2]), _EN_MONTHS[g[1].lower()], int(g[0]))
+                else:
+                    # Month D, YYYY：July 17, 2023
+                    yield _d(int(g[2]), _EN_MONTHS[g[0].lower()], int(g[1]))
+            except (ValueError, KeyError):
+                continue
+_WEEKDAY_EN = { "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+               "friday": 4, "saturday": 5, "sunday": 6}
+# v6.6.3（T4）：中文星期数字 → weekday 序号（周一=0 … 周日/周天=6）
+_WEEKDAY_CN = { "一": 0, "二": 1, "三": 2, "四": 3, "五": 4, "六": 5,
+               "日": 6, "天": 6}
+_WEEKDAY_RE = re.compile(
+    r"\b(last|next)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b"
+    r"|上(?:个)?周\s*([一二三四五六日天])"
+    r"|下(?:个)?周\s*([一二三四五六日天])", re.IGNORECASE)
+
+
+def _match_weekday(ql: str, today):
+    """v6.6.3（T4）：解析星期级表达 → (offset_days, label)。
+
+    语义（以锚为参照）：
+    - last X：今天之前最近的一个 X（含上周日历周内的 X）；
+    - next X：今天之后最近的一个 X；
+    - 上周X：上个日历周（周一锚定）的星期 X；
+    - 下周X：下个日历周（周一锚定）的星期 X。
+    无匹配返回 None。纯日历运算零 LLM。
+    """
+    m = _WEEKDAY_RE.search(ql)
+    if not m:
+        return None
+    wd = today.weekday()
+    if m.group(1):  # last/next <weekday>（英文）
+        target = _WEEKDAY_EN[m.group(2).lower()]
+        if m.group(1).lower() == "last":
+            offset = -((wd - target) % 7 or 7)
+        else:
+            offset = (target - wd) % 7 or 7
+        label = m.group(0).lower()
+    elif m.group(3) is not None:  # 上周X：上个日历周（周一锚定）
+        target = _WEEKDAY_CN[m.group(3)]
+        offset = target - wd - 7
+        label = m.group(0)
+    else:  # 下周X：下个日历周
+        target = _WEEKDAY_CN[m.group(4)]
+        offset = target - wd + 7
+        label = m.group(0)
+    return offset, label
 
 
 def _parse_query_window(query: str,
@@ -134,28 +247,48 @@ def _parse_query_window(query: str,
         except (ValueError, IndexError, TypeError):
             today = None
 
-    # 1) 绝对日期优先
-    for pat in _ABS_DATE_PATTERNS:
+    # 1) 绝对日期优先（v6.6.3 T1/T2：按 kind 分派；年月返回整月窗口）
+    import calendar as _cal
+    from datetime import date as _d
+    for pat, kind in _ABS_DATE_PATTERNS:
         m = pat.search(q)
         if not m:
             continue
         try:
-            groups = m.groups()
-            if len(groups) == 3 and groups[0] and len(groups[0]) == 4:
-                y, mo, dy = int(groups[0]), int(groups[1]), int(groups[2])
-            elif len(groups) == 3 and groups[2] is None:
-                y, mo, dy = int(groups[0]), int(groups[1]), 1
-            else:
-                # M月D日：年份取锚
+            g = m.groups()
+            if kind == "ymd":
+                w0 = w1 = _d(int(g[0]), int(g[1]), int(g[2]))
+            elif kind == "ymd_opt":
+                y, mo = int(g[0]), int(g[1])
+                if g[2] is not None:
+                    w0 = w1 = _d(y, mo, int(g[2]))
+                else:
+                    # 年月无日 → 整月窗口（旧实现 int(None) 崩溃后
+                    # 被吞掉返回 None，年月查询整类失效）
+                    w0 = _d(y, mo, 1)
+                    w1 = _d(y, mo, _cal.monthrange(y, mo)[1])
+            elif kind == "md_anchor":
                 if today is None:
                     continue
-                y, mo, dy = today.year, int(groups[0]), int(groups[1])
-            from datetime import date as _d
-            the_day = _d(y, mo, dy)
-        except (ValueError, TypeError):
+                w0 = w1 = _d(today.year, int(g[0]), int(g[1]))
+            elif kind == "dmy_en":
+                mo = _EN_MONTHS[g[1].lower()]
+                w0 = w1 = _d(int(g[2]), mo, int(g[0]))
+            elif kind == "mdy_en":
+                w0 = w1 = _d(int(g[2]), _EN_MONTHS[g[0].lower()], int(g[1]))
+            elif kind == "ym_iso":
+                y, mo = int(g[0]), int(g[1])
+                w0 = _d(y, mo, 1)
+                w1 = _d(y, mo, _cal.monthrange(y, mo)[1])
+            else:  # my_en
+                y, mo = int(g[1]), _EN_MONTHS[g[0].lower()]
+                w0 = _d(y, mo, 1)
+                w1 = _d(y, mo, _cal.monthrange(y, mo)[1])
+        except (ValueError, KeyError, TypeError):
             continue
-        iso = the_day.isoformat()
-        return iso, iso, iso
+        s_iso, e_iso = w0.isoformat(), w1.isoformat()
+        label = s_iso if s_iso == e_iso else f"{s_iso}..{e_iso}"
+        return s_iso, e_iso, label
 
     # 2) 相对词 → 锚换算
     if today is None:
@@ -163,13 +296,23 @@ def _parse_query_window(query: str,
     from datetime import timedelta as _td
     ql = q.lower()
     offset = None
+    label = None
+    # v6.6.3（T4）：星期级表达精确解析——last Wednesday / 上周三。
+    # 旧实现「上周三」只能蹭「上周」的 -7±3 粗窗且 label 错标为「上周」，
+    # 英文 weekday 完全不支持。必须先于短语表（「上周三」含子串「上周」）。
+    _wd = _match_weekday(ql, today)
+    if _wd is not None:
+        offset, label = _wd
     # 中文相对词优先（"上个月"含"个月"会被 _N_REL 数量模式误吸，
-    # 必须先于英文表与数量模式匹配）
-    for phrase, off in _CN_TEMPORAL_RULES:
-        if phrase in q:
-            offset = off
-            label = phrase
-            break
+    # 必须先于英文表与数量模式匹配）。
+    # v6.6.3（T4）：weekday 已精确命中时不再被短语表覆盖
+    # （「上周三」含子串「上周」，无守卫会回退到 -7±3 粗窗）。
+    if offset is None:
+        for phrase, off in _CN_TEMPORAL_RULES:
+            if phrase in q:
+                offset = off
+                label = phrase
+                break
     if offset is None:
         for phrase, off in _TEMPORAL_RULES:
             if phrase in ql:
@@ -182,18 +325,28 @@ def _parse_query_window(query: str,
             token = m.group(1)
             # 数字 + 单位 + 前/后
             import re as _re2
-            num_m = _re2.search(r"(\d+|[两二三四五六七八九十]+)", token)
+            # v6.6.3（T3）：token 数量词兼容英文数字词
+            num_m = _re2.search(
+                r"(\d+|[两二三四五六七八九十]+|one|two|three|four|five|six|"
+                r"seven|eight|nine|ten|eleven|twelve)", token, _re2.IGNORECASE)
             unit_m = _re2.search(r"(day|week|month|year|天|周|月|年)", token,
                                  _re2.IGNORECASE)
             if num_m and unit_m:
                 raw = num_m.group(1)
+                raw_l = raw.lower()
                 n = (_CN_NUM.get(raw) if raw in _CN_NUM
-                     else int(raw) if raw.isdigit() else None)
+                     else int(raw) if raw.isdigit()
+                     else _EN_NUM.get(raw_l) if raw_l in _EN_NUM
+                     else None)
                 if n is not None:
                     mult = _REL_DUR.get(unit_m.group(1).lower(), 1)
-                    offset = (-n if ("ago" in token or "前" in token)
-                              else n if ("in " in token or "后" in token
-                                         or "以" in token) else -n)
+                    # v6.6.3（T3 真根因）：mult 此前算了但从未乘上去——
+                    # 「两周前」窗口只有 2 天、「三个月前」只有 3 天，
+                    # 自 v6.5.7 起该路径窗口量级全错。
+                    sign = (-1 if ("ago" in token or "前" in token)
+                            else 1 if ("in " in token or "后" in token
+                                       or "以" in token) else -1)
+                    offset = sign * n * mult
                     label = token
     if offset is None:
         return None
@@ -244,10 +397,18 @@ def _normalize_temporal(text: str, anchor: Optional[str]) -> str:
             else:
                 n = _CN_NUM.get(t[0], 1) * 10 + _CN_NUM.get(t[1], 0)
         else:
-            num = _r.search(r"(\d+)", s)
+            # v6.6.3（T3）：英文数字词（three months ago）
+            num = _r.search(
+                r"(\d+|one|two|three|four|five|six|seven|eight|nine|ten|"
+                r"eleven|twelve)", s, _r.IGNORECASE)
             if not num:
                 return m.group(0)
-            n = int(num.group(1))
+            raw = num.group(1)
+            n = (int(raw) if raw.isdigit()
+                 else _EN_NUM.get(raw.lower()) if raw.lower() in _EN_NUM
+                 else None)
+            if n is None:
+                return m.group(0)
         unit = None
         for k in _REL_DUR:
             if k in s:
@@ -263,9 +424,22 @@ def _normalize_temporal(text: str, anchor: Optional[str]) -> str:
         return f"[{fmt(d)}]"
 
     out = _N_REL.sub(rel_repl, out)
+    # v6.6.3（T5）：星期级表达归一——先于短语表（「上周三」含「上周」）。
+    def weekday_repl(m):
+        wd = _match_weekday(m.group(0).lower(), base)
+        if wd is None:
+            return m.group(0)
+        return f"[{fmt(base + timedelta(days=wd[0]))}]"
+    out = _WEEKDAY_RE.sub(weekday_repl, out)
     # 固定短语表（倒序替换避免子串误伤：先长后短）
     for phrase, delta_days in sorted(_TEMPORAL_RULES, key=lambda x: -len(x[0])):
         pat = re.compile(r"\b" + re.escape(phrase) + r"\b", re.IGNORECASE)
+        d = base + timedelta(days=delta_days)
+        out = pat.sub(f"[{fmt(d)}]", out)
+    # v6.6.3（T5）：中文固定短语归一——旧循环只遍历英文表，组装层
+    # 窗口扩展对中文时间词零效果。
+    for phrase, delta_days in sorted(_CN_TEMPORAL_RULES, key=lambda x: -len(x[0])):
+        pat = re.compile(re.escape(phrase))
         d = base + timedelta(days=delta_days)
         out = pat.sub(f"[{fmt(d)}]", out)
     return out
@@ -420,37 +594,54 @@ class QueryEngine:
             d0, d1 = _d.fromisoformat(start_iso), _d.fromisoformat(end_iso)
         except ValueError:
             return []
-        # 生成窗口覆盖的年月 pattern（最多 3 个，防超宽窗口全表扫）
-        months = []
+        # 生成窗口覆盖的年月 pattern（最多 3 个月，防超宽窗口全表扫）。
+        # v6.6.3（T6）：追加英文月名/日级 pattern——LoCoMo 语料与 fact
+        # 抽取的日期全为 "17 July 2023" 格式，ISO LIKE 在英文语料上恒空，
+        # 第 5 路对英文库只剩 0.5 月粒度且常空转。日级 pattern 仅在
+        # 窗口 ≤10 天时生成（短窗口查询是主用例）。
+        import calendar as _cal2
+        patterns = []
         y, mo = d0.year, d0.month
         while True:
-            months.append(f"{y:04d}-{mo:02d}")
-            if (y, mo) == (d1.year, d1.month) or len(months) >= 3:
+            ym = f"{y:04d}-{mo:02d}"
+            mname = _cal2.month_name[mo]
+            patterns.append(f"%{ym}-%")
+            patterns.append(f"%{y:04d}年{mo}月%")
+            patterns.append(f"%{mname} {y}%")
+            if (y, mo) == (d1.year, d1.month) or len(patterns) >= 9:
                 break
             mo += 1
             if mo > 12:
                 y, mo = y + 1, 1
+        span_days = (d1 - d0).days
+        if span_days <= 10:
+            from datetime import timedelta as _tdp
+            dcur = d0
+            while dcur <= d1:
+                iso_d = dcur.isoformat()
+                mn = _cal2.month_name[dcur.month]
+                patterns.append(f"%{iso_d}%")
+                patterns.append(f"%{dcur.day} {mn}%")
+                patterns.append(f"%{mn} {dcur.day}%")
+                dcur += _tdp(days=1)
         conn = self.storage._get_conn()
         ids: Dict[str, float] = {}
         try:
-            for ym in months:
-                pat = f"%{ym}-%"
+            for pat in patterns:
                 rows = conn.execute(
                     "SELECT id, content, tags FROM memories "
                     "WHERE encrypted=0 AND category != 'trash' "
-                    "AND (content LIKE ? OR tags LIKE ?) LIMIT ?",
+                    "AND (content LIKE ? OR tags LIKE ?) ORDER BY id LIMIT ?",
                     (pat, pat, max_candidates)).fetchall()
                 for r in rows:
                     score = 0.5   # 月粒度命中（v6.5.7 小样校准：补盲分
                     # 必须低于四路典型命中 0.5-0.7，否则挤掉正确证据）
                     text = (r[1] or "") + " " + (r[2] or "")
                     # 窗口内日期精确命中 → 加权
-                    import re as _re3
-                    for dm in _re3.finditer(r"20\d{2}-\d{2}-\d{2}", text):
-                        try:
-                            dd = _d.fromisoformat(dm.group(0)[:10])
-                        except ValueError:
-                            continue
+                    # v6.6.3（T6）：ISO + 英文月名日期统一扫描——英文语料
+                    # （LoCoMo fact 抽取日期全为 "17 July 2023" 格式）上
+                    # 0.6 精确加权此前全程空转，只剩月粒度 LIKE。
+                    for dd in _iter_window_dates(text):
                         if d0 <= dd <= d1:
                             score = 0.6
                             break
@@ -460,6 +651,75 @@ class QueryEngine:
             logger.warning("temporal 路召回失败（降级跳过）: %s", e)
             return []
         return [(mid, s, label) for mid, s in ids.items()]
+
+    # v6.6.3（检索增强 · 图路径感知）
+    def _graph_path_memories(self, conn, from_id: str, to_id: str,
+                             max_depth: int = 3):
+        """在 graph_relations 表上做有界 BFS，找 from→to 最短路径，
+        返回路径各边携带的 (memory_id, 边weight) 列表；无路径返回 []。
+
+        与第 6 路的邻域扩散不同：只收路径上的边，不收无关邻居——
+        「A 和 B 什么关系」的桥接证据不再被 A、B 各自的无关邻居稀释。
+        BFS 上限 max_depth（默认 3），visited 剪枝防指数扩散。
+        """
+        import json as _jp
+        adjacency = {}
+        _loaded_ids = set()
+
+        def load_adj(ids):
+            # v6.6.3 修复：以独立 _loaded_ids 判断是否已加载过——不能以
+            # 「节点在 adjacency 里」判断，双向写入会让起点邻居提前入表，
+            # 其出边永远加载不到（eB→eC 被漏，路径恒空）。
+            todo = [i for i in ids if i not in _loaded_ids]
+            if not todo:
+                return
+            _loaded_ids.update(todo)
+            placeholders = ",".join("?" * len(todo))
+            rows = conn.execute(
+                f"SELECT from_entity, to_entity, weight, memory_ids "
+                f"FROM graph_relations "
+                f"WHERE from_entity IN ({placeholders}) "
+                f"OR to_entity IN ({placeholders})",
+                todo + todo).fetchall()
+            for fe, te, w, mids in rows:
+                weight = 1.0 if w is None else float(w)
+                adjacency.setdefault(fe, []).append((te, weight, mids))
+                adjacency.setdefault(te, []).append((fe, weight, mids))
+
+        load_adj([from_id])
+        queue = [(from_id, [from_id])]
+        visited = {from_id}
+        while queue:
+            cur, path = queue.pop(0)
+            if len(path) > max_depth + 1:
+                continue
+            load_adj([cur])
+            for nb, _w, _m in adjacency.get(cur, []):
+                if nb in visited:
+                    continue
+                visited.add(nb)
+                if nb == to_id:
+                    # 路径命中：沿 path 逐边收集 memory_ids
+                    out = []
+                    prev = path[0]
+                    nodes = path[1:] + [nb]
+                    for node in nodes:
+                        edge = None
+                        for _other, w, mids in adjacency.get(prev, []):
+                            if _other == node:
+                                edge = (w, mids)
+                                break
+                        if edge and edge[1]:
+                            try:
+                                for mid in _jp.loads(edge[1]):
+                                    if mid:
+                                        out.append((mid, edge[0]))
+                            except (ValueError, TypeError):
+                                continue
+                        prev = node
+                    return out
+                queue.append((nb, path + [nb]))
+        return []
 
     def _graph_candidates(self, query: str,
                           max_entities: int = 8,
@@ -514,6 +774,19 @@ class QueryEngine:
         frontier = {eid: (0.55, 1) for eid in start_ids}
         visited = set(start_ids)
         collected_rel_ids: set = set()
+        # v6.6.3（检索增强 · 图路径感知）：query 命中 ≥2 实体时尝试
+        # 找实体对最短路径；路径上的桥接记忆加权 0.65（高于普通 1 跳
+        # 0.55、低于四路典型命中，仍走补位语义不挤主排序）——
+        # 「A 和 B 什么关系」的桥接证据不再被无关邻居稀释/挤出。
+        if len(matched) >= 2:
+            pairs = [(matched[i], matched[j])
+                     for i in range(len(matched))
+                     for j in range(i + 1, len(matched))][:6]
+            for (ea, _na), (eb, _nb) in pairs:
+                path_mids = self._graph_path_memories(conn, ea, eb)
+                for mid, _w in path_mids:
+                    if mid not in cand or 0.65 > cand[mid]:
+                        cand[mid] = 0.65
         for _hop in range(max_hops):
             if not frontier:
                 break
@@ -1072,3 +1345,31 @@ class QueryEngine:
     def get_by_layer(self, layer: MemoryLayer, limit: int = 50) -> List[MemoryEntry]:
         """按层级获取记忆"""
         return self.storage.list_memories(layer=layer, limit=limit)
+
+
+# v6.6.3（检索增强 · two-hop 规则拆解）
+# 纯规则查询分解：识别「X 然后 Y」式两跳问句，输出子查询序列。
+# 设计约束（承 v6.5.4 教训，CHANGELOG 已证伪 LLM 拆解）：
+# - 零 LLM、零模型调用；只对显式分隔词触发，漏检查询走原 search
+#   （安全降级，行为不变）。
+# - 关系型问句（「A 和 B 什么关系」）不在此拆——由第 6 路图检索的
+#   路径感知增强（_graph_candidates v6.6.3）处理。
+_TWO_HOP_SPLIT_RE = re.compile(
+    r"然后|之后又|接着又|又问| then | after that | afterwards ", re.IGNORECASE)
+
+
+def decompose_two_hop(query: str) -> Optional[List[str]]:
+    """两跳问句规则拆解（v6.6.3 检索增强）。
+
+    「用户在哪里工作然后和谁共事」→ ["用户在哪里工作", "谁共事"]。
+    Returns:
+        子查询列表（≥2 段）；非两跳问句返回 None（调用方原样直通）。
+    """
+    q = (query or "").strip()
+    if not q:
+        return None
+    parts = [p.strip(" ？?。，,") for p in _TWO_HOP_SPLIT_RE.split(q)]
+    parts = [p for p in parts if p]
+    if len(parts) < 2:
+        return None
+    return parts

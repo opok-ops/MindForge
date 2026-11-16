@@ -3631,11 +3631,13 @@ def main(argv=None):
                 _stream.reconfigure(encoding="utf-8")
         except (ValueError, AttributeError, OSError):
             pass
-    # v6.6.2（F3 附带）：stdin 同样强制 UTF-8 严格解码——daemon 子命令把
+    # v6.6.2（F3 附带）：stdin 同样强制 UTF-8 解码——daemon 子命令把
     # stdin 转交给行式 JSON 主循环，cp936/cp1252 控制台会把 UTF-8 行读成乱码。
+    # v6.6.3（M1）：errors strict → replace，与 daemon/server.py 同药——strict
+    # 下坏字节行在迭代解码处抛 UnicodeDecodeError 逃出主循环、杀死进程。
     try:
         if hasattr(sys.stdin, "reconfigure"):
-            sys.stdin.reconfigure(encoding="utf-8", errors="strict")
+            sys.stdin.reconfigure(encoding="utf-8", errors="replace")
     except (ValueError, AttributeError, OSError):
         pass
     parser = argparse.ArgumentParser(

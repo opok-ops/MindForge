@@ -444,6 +444,12 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    # v6.6.3（M2）：_read_body 的「已自行发送响应」哨兵——此前 413 分支
+    # 与 body 非法分支共用 None 返回值，调用方无法区分，对超限请求连发
+    # 413 + 400 两个完整 HTTP 响应；keep-alive 客户端/反向代理会把第二
+    # 个响应错配到下一个请求，静默丢请求。
+    _BODY_RESPONSE_SENT = object()
+
     def _read_body(self):
         # v5.6.2 安全修复：Content-Length 非数值时返回 None，不抛异常
         try:
@@ -480,7 +486,8 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                 },
                 413,
             )
-            return None
+            # v6.6.3（M2）：已回 413，返回哨兵，调用方不再补发 400。
+            return self._BODY_RESPONSE_SENT
         if content_length < 0:
             return None
         raw = self.rfile.read(content_length)
@@ -1062,6 +1069,10 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
 
         try:
             body = self._read_body()
+            # v6.6.3（M2）：超限分支已在 _read_body 内回 413，此处直接返回，
+            # 不再对同一连接补发第二个响应。
+            if body is self._BODY_RESPONSE_SENT:
+                return
             if body is None:
                 self._send_json({"error": "Invalid JSON body"}, 400)
                 return
@@ -1432,6 +1443,9 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
 
         try:
             body = self._read_body()
+            # v6.6.3（M2）：同 do_POST——413 已在 _read_body 内回过。
+            if body is self._BODY_RESPONSE_SENT:
+                return
             if body is None:
                 self._send_json({"error": "Invalid JSON body"}, 400)
                 return

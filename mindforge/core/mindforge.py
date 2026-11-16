@@ -132,6 +132,10 @@ class MindForge:
         self._privacy_engine = None     # v5.6.2 lazy (隐私引擎)
         self._kg = None                 # v5.7.9 lazy (知识图谱)
         self._skill_store_obj = None    # v5.8.0 lazy (经验蒸馏)
+        # v6.6.3（次要-1）：rekey 实例级互斥——两个线程对同一实例并发
+        # rekey 会在密钥文件替换/全库重加密处竞态，失败一方被误报为
+        # 「解密失败：数据损坏」。串行化后竞态消除，错误定性恢复真实。
+        self._rekey_lock = __import__("threading").Lock()
 
         if self.config.encrypted:
             self._init_encryption()
@@ -541,6 +545,10 @@ class MindForge:
               new_iterations: Optional[int] = None) -> dict:
         """更换加密密钥（密码变更或 KDF 参数升级）
 
+        v6.6.3（次要-1）：并发 rekey 串行化。两个线程对同一实例并发
+        rekey 时第二个在此排队；若第一个已换走密钥，第二个的旧密码
+        校验在持锁后如实失败（旧密码错误），不再伪装成「数据损坏」。
+
         安全流程：
         1. 用旧密码和旧 KDF 参数验证并解密
         2. 生成新密钥（新密码 + 新 KDF 参数 + 新盐）
@@ -567,6 +575,13 @@ class MindForge:
 
         if self._pending_encryption:
             raise SecurityError("加密引擎未初始化，请先调用 init_with_password()")
+
+        with self._rekey_lock:
+            return self._rekey_locked(old_password, new_password, new_iterations)
+
+    def _rekey_locked(self, old_password: str, new_password: str,
+                      new_iterations: Optional[int] = None) -> dict:
+        """rekey 主体（调用方必须已持有 self._rekey_lock）。"""
 
         # 1. 获取旧参数信息（用于返回报告）
         old_params = get_key_params(self.config.key_file)
@@ -798,6 +813,17 @@ class MindForge:
         _MAX_CONTENT_LENGTH = 1_000_000  # 1MB 字符上限
         if len(content) > _MAX_CONTENT_LENGTH:
             raise ValueError(f"content 超过最大长度限制（{_MAX_CONTENT_LENGTH} 字符）")
+        # v6.6.3（M3）：清洗 lone surrogate（如 JSON 转义 \ud800）。JSON 规范
+        # 允许该转义，json.loads 会产出含 lone surrogate 的 str，下游加密
+        # 写路径 encrypt() 的 UTF-8 编码会抛未捕获 UnicodeEncodeError，
+        # REST 侧表现为 500。真实内容不可能合法携带 lone surrogate——统一
+        # 清洗为 U+FFFD（与 errors="replace" 同语义），全部接口受益。
+        try:
+            content.encode("utf-8")
+        except UnicodeEncodeError:
+            content = content.encode("utf-8", "surrogatepass").decode(
+                "utf-8", errors="replace"
+            )
 
         entry = self._storage.add_memory(
             content=content,
@@ -1184,6 +1210,167 @@ class MindForge:
             query_time_ms=round(elapsed, 2),
             strategy_used=f"multi:{len(queries)}queries",
             token_estimate=sum(len(c.content) for c in merged) // 4)
+
+    # ------------------------------------------------------------------
+    # v6.6.3 检索增强：链式两跳检索 / 宽泛问句召回入口
+    # ------------------------------------------------------------------
+
+    def search_chain(self, queries: Optional[List[str]],
+                     per_hop: int = 3,
+                     max_results: int = 10,
+                     min_relevance: float = 0.3,
+                     categories: Optional[List[str]] = None,
+                     layers: Optional[List[str]] = None,
+                     agent_id: str = "",
+                     session_id: str = "",
+                     use_embedding: bool = True,
+                     max_injected_entities: int = 5,
+                     ) -> "RecallResult":
+        """链式两跳检索（v6.6.3 检索增强）。
+
+        与 search_multi 的本质区别：子查询之间交换产物——
+        hop1 子查询先检索，从返回的 top chunks 里抽实体（KG 规则
+        抽取，零 LLM），实体注入后续子查询再检索，最后与 hop1
+        证据融合去重。这是 multi-hop 桶 25.2% 的结构性修复：
+        「用户在哪里工作然后和谁共事」的第二跳需要第一跳结果里的
+        实体（公司名）作为检索锚，并行融合给不了。
+
+        降级语义：
+        - queries 为空 → 空结果；
+        - hop1 无召回或抽不到实体 → 退回 search_multi 并行融合；
+        - KG 不可用 → 用 hop1 chunks 原文尾部词作锚（仍有链式效果）。
+
+        Returns:
+            RecallResult，strategy_used 形如 "chain:2hops"。
+        """
+        import time as _time
+        start = _time.perf_counter()
+        from mindforge.core.query import RecallResult as _RR
+
+        if not queries:
+            return _RR(chunks=[], total_found=0, query_time_ms=0.0,
+                       strategy_used="chain:0queries", token_estimate=0)
+        if len(queries) == 1:
+            return self.search_multi(queries, per_query=per_hop,
+                                     max_results=max_results,
+                                     min_relevance=min_relevance,
+                                     categories=categories, layers=layers,
+                                     agent_id=agent_id,
+                                     session_id=session_id,
+                                     use_embedding=use_embedding)
+
+        hop1 = self.search(queries[0], max_results=per_hop,
+                           min_relevance=min_relevance,
+                           categories=categories, layers=layers,
+                           agent_id=agent_id, session_id=session_id,
+                           use_embedding=use_embedding)
+        hop1_chunks = hop1.chunks
+        if not hop1_chunks:
+            return self.search_multi(queries[1:], per_query=per_hop,
+                                     max_results=max_results,
+                                     min_relevance=min_relevance,
+                                     categories=categories, layers=layers,
+                                     agent_id=agent_id,
+                                     session_id=session_id,
+                                     use_embedding=use_embedding)
+
+        # 从 hop1 证据抽实体（KG 规则抽取；失败则用 chunk 尾部词兜底）
+        anchors: List[str] = []
+        try:
+            kg = self._knowledge_graph
+            texts = " ".join(c.content for c in hop1_chunks)
+            for name, _etype in kg.extract_entities(texts):
+                if name and name not in anchors:
+                    anchors.append(name)
+                if len(anchors) >= max_injected_entities:
+                    break
+        except Exception:
+            anchors = []
+        if not anchors:
+            for c in hop1_chunks:
+                tail = " ".join(c.content.split()[-3:])
+                if tail and tail not in anchors:
+                    anchors.append(tail)
+                if len(anchors) >= max_injected_entities:
+                    break
+
+        hop2_queries = [f"{tpl} {a}" for tpl in queries[1:] for a in anchors]
+        if not hop2_queries:
+            hop2_queries = list(queries[1:])
+        fused = self.search_multi(
+            [queries[0]] + hop2_queries[:8],
+            per_query=per_hop, max_results=max_results,
+            min_relevance=min_relevance, categories=categories,
+            layers=layers, agent_id=agent_id, session_id=session_id,
+            use_embedding=use_embedding)
+        # strategy 语义如实标注为链式
+        elapsed = (_time.perf_counter() - start) * 1000
+        return _RR(
+            chunks=fused.chunks,
+            total_found=fused.total_found,
+            query_time_ms=round(elapsed, 2),
+            strategy_used=f"chain:2hops",
+            token_estimate=sum(len(c.content) for c in fused.chunks) // 4)
+
+    def search_two_hop(self, query: str,
+                       per_hop: int = 3,
+                       max_results: int = 10,
+                       min_relevance: float = 0.3,
+                       **kwargs) -> "RecallResult":
+        """两跳问句一站式入口（v6.6.3 检索增强）。
+
+        内部先做规则拆解（decompose_two_hop，零 LLM）：识别出
+        「X 然后 Y」式两跳问句则走 search_chain 链式检索；识别不出
+        则原样普通 search（安全降级，行为与 v6.6.2 完全一致）。
+        """
+        from mindforge.core.query import decompose_two_hop
+        parts = decompose_two_hop(query)
+        if not parts:
+            return self.search(query, max_results=max_results,
+                               min_relevance=min_relevance, **kwargs)
+        return self.search_chain(parts, per_hop=per_hop,
+                                 max_results=max_results,
+                                 min_relevance=min_relevance, **kwargs)
+
+    def search_broad(self, query: str,
+                     max_results: int = 10,
+                     min_relevance: float = 0.3,
+                     expand_context: int = 2,
+                     **kwargs) -> "RecallResult":
+        """宽泛问句（open-domain）召回入口（v6.6.3 检索增强）。
+
+        LoCoMo open-domain 桶 acc 仅 10.4%：问句宽泛、无显式实体/时间
+        锚，四路词面命中天然吃亏。本入口三件套：
+        1. 常规检索先跑（对齐既有行为）；
+        2. 召回不足（< max_results/2）时触发查询扩展（QueryExpander
+           同义词/上位词泛化，零 LLM）+ search_multi 并行融合；
+        3. 融合后仍不足时按 expand_context 拉取候选邻居坐标上下文。
+
+        非宽泛查询或召回充足时与普通 search 行为一致。
+        """
+        res = self.search(query, max_results=max_results,
+                          min_relevance=min_relevance,
+                          expand_context=expand_context, **kwargs)
+        if res.chunks and len(res.chunks) >= max_results // 2:
+            return res
+
+        # 召回不足 → 查询扩展 + 并行融合
+        rewrites: List[str] = []
+        try:
+            from mindforge.modules.hybrid_search import QueryExpander
+            exp = QueryExpander().expand(query)
+            rewrites = list(exp.rewrites or [])
+            if not rewrites and exp.expanded_terms:
+                rewrites = [f"{query} {t}" for t in exp.expanded_terms[:4]]
+        except Exception:
+            rewrites = []
+        if rewrites:
+            fused = self.search_multi([query] + rewrites[:5],
+                                      per_query=3, max_results=max_results,
+                                      min_relevance=min_relevance, **kwargs)
+            if len(fused.chunks) > len(res.chunks):
+                return fused
+        return res
 
     def rebuild_embeddings(self, batch_size: int = 100,
                            incremental: bool = True) -> dict:

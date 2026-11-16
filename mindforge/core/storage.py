@@ -1126,6 +1126,23 @@ class StorageEngine:
         except sqlite3.OperationalError:
             pass  # columns already exist
 
+        # v6.6.0 fix（bug #2）：建库即落 schema_version。
+        # 此前 schema_version 表只在 migrate_to_latest() 里创建——全新库
+        # get_db_version() 恒为 0，doctor 对出厂库恒报「版本落后 v0->v1」
+        # 伪警告并引导用户跑 migrate --force（当前迁移脚本为空，纯噪音）。
+        # v0->v1 无实际迁移步骤，存量老库下次打开自动补齐，补写安全。
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS schema_version (
+                id INTEGER PRIMARY KEY,
+                value INTEGER NOT NULL
+            )
+        """)
+        conn.execute(
+            "INSERT OR REPLACE INTO schema_version (id, value) VALUES (1, ?)",
+            (self._LATEST_DB_VERSION,),
+        )
+        conn.commit()
+
     @staticmethod
     def _strip_control(text: Optional[str]) -> str:
         """v5.4.0 安全加固：过滤控制字符（保留 \\t\\n\\r，过滤 \\x00-\\x1f 和 \\x7f）。

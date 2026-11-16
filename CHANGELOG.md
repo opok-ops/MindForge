@@ -3,6 +3,39 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.6.0] - 2026-11-16
+
+Bug 修复版本：主动狩猎抓到两个真 bug，全部带契约测试落地。
+
+- **bug #1：加密 defer 状态公开 API 全线哑谜 AttributeError**
+  `_require_ready()` 自 v6.3.5 存在但从未接线到公开方法——288 个公开
+  方法中 285 个未调用。`encrypted=True` 且无密码构造（v5.4.8 P0-001
+  的延迟初始化设计）后，任何 `add/search/update/delete/get/stats`
+  调用都抛 `AttributeError: 'NoneType' object has no attribute ...`，
+  PyPI 直连 API 用户无从得知该先调 `init_with_password()`。修复：
+  defer 状态下实例级包装公开方法挂 guard（豁免 init_with_password/
+  rekey/get_encryption_info/close/save_config/config_summary），任何
+  未豁免调用统一抛 `SecurityError("加密引擎未初始化，请先调用
+  init_with_password()")`。正常构造（encrypted=False 或密码就绪）
+  完全不受影响，零额外开销。
+- **bug #2：全新库 schema_version 缺失，doctor 恒报「版本落后 v0->v1」
+  伪警告**。schema_version 表只在 `migrate_to_latest()` 里创建——建库
+  路径从不写版本号，`get_db_version()` 恒为 0，doctor 对每个出厂库
+  恒报「版本落后」并引导用户跑 `migrate --force`（当前迁移脚本为空，
+  纯噪音）。修复：`_init_db()` 尾部落 schema_version=_LATEST_DB_VERSION；
+  v0→v1 无实际迁移步骤，存量老库下次打开自动补齐。修复后新库 doctor
+  直接「✅ 版本最新 (v1)」。
+- **狩猎过程**：26 项 FTS5 特殊字符查询 fuzz 全过（引号/括号/NEAR/
+  注入串/emoji/反斜杠等，无注入面）、6 线程×48 并发读写过、CLI 核心
+  命令冒烟过、GitHub issues 0 open、基线 1322 全绿。
+- **测试**：新增 9 项契约测试（defer guard ×6 + schema_version ×3），
+  全量 1332 项通过（1331 通过 + 1 环境性跳过）。
+- **LoCoMo 全量复验背景**（v6.5.12 修复的终局数字）：1986 问 acc
+  58.4%（+5.6pt），temporal 40.2%（+10.9pt）、single-hop 66.4%
+  （+8.2pt）、multi-hop 12.1%（+1.8pt 止跌，组装层瓶颈确认留给
+  v6.6 主线）、open-dom 13.5% 持平、adversarial 95.3%。
+
+
 ## [6.5.12] - 2026-11-14
 
 FTS5 检索质量修复：停用词 + AND 共现两阶段（时间检索修复主役）。

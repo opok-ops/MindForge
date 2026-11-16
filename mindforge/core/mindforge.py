@@ -154,6 +154,57 @@ class MindForge:
                 "Call init_with_password(password) to complete setup. "
                 "DO NOT use add/search/update until encryption is initialized."
             )
+            # v6.6.0 fix（bug #1）：_require_ready() 自 v6.3.5 存在但从未
+            # 接线到公开方法——defer 期间 285 个公开 API 全部裸
+            # AttributeError('NoneType')。defer 状态下给实例级公开方法
+            # 挂 guard：任何未豁免调用 → SecurityError 明示，而非哑谜。
+            self._arm_pending_guard()
+
+    # ------------------------------------------------------------------
+    # v6.6.0 fix（bug #1）：加密 defer 状态的公开 API guard 接线
+    # ------------------------------------------------------------------
+    _PENDING_GUARD_EXEMPT = frozenset({
+        "init_with_password",   # 初始化入口本身
+        "rekey",                # 密钥管理（自行处理加密状态）
+        "get_encryption_info",  # 状态查询
+        "close",                # 资源释放
+        "save_config",          # 配置落盘
+        "config_summary",       # 配置只读
+        "init_status",          # 初始化状态查询
+        "v6_status",            # 版本状态查询
+    })
+
+    def _arm_pending_guard(self):
+        """加密 defer 期间为实例级公开方法挂 _require_ready guard。
+
+        仅在 _pending_encryption=True 时调用——正常构造（encrypted=False
+        或已完成 init_with_password）完全不受影响，零额外开销。
+        init_with_password 成功后 wrapper 保留但 _require_ready 直接通过，
+        代价为几次属性检查，可忽略。
+        """
+        import functools as _ft
+        import inspect as _inspect
+        import types as _types
+
+        cls = type(self)
+        for name in dir(cls):
+            if name.startswith("_") or name in self._PENDING_GUARD_EXEMPT:
+                continue
+            static_attr = _inspect.getattr_static(cls, name, None)
+            # property / 类属性（引擎引用、枚举常量）不拦——属性访问不抛
+            # AttributeError 语义由 _require_ready 在方法内兜底
+            if not isinstance(static_attr, _types.FunctionType):
+                continue
+            orig = getattr(self, name, None)
+            if not callable(orig):
+                continue
+
+            def _guarded(*args, _orig=orig, _self=self, **kwargs):
+                _self._require_ready()
+                return _orig(*args, **kwargs)
+
+            _ft.update_wrapper(_guarded, orig)
+            setattr(self, name, _guarded)
 
     def _init_encryption(self):
         """初始化加密引擎（v5.2.2 修复：补充缺失的初始化逻辑）

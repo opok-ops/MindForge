@@ -804,12 +804,26 @@ class QueryEngine:
         # 合并排序
         raw_results = sorted(score_map.items(), key=lambda x: x[1], reverse=True)
 
+        # v6.6.1: 全空 quota 兜底——所有召回落选于 min_relevance 时静默
+        # 返回空（LoCoMo 冒烟集实测：中文问句与语料措辞不一致时 TF-IDF
+        # 最相似仅 ~0.28，正确证据被 0.3 阈值整条滤掉且 judged 0 结果）。
+        # 与 fts_search 的 AND→OR 两阶段降级同哲学：确有候选但都偏弱时，
+        # 把有效阈值降到 max(0.15, min_relevance/2)，宁给弱相关候选不
+        # 给空结果。排序不变（仍按分数降序），只放宽入榜线。
+        effective_min = min_relevance
+        threshold_relaxed = False
+        if raw_results and raw_results[0][1] < min_relevance:
+            effective_min = max(0.15, min_relevance / 2.0)
+            threshold_relaxed = True
+            logger.debug(
+                "search 全候选低于 min_relevance=%.2f，放宽到 %.2f 重捞",
+                min_relevance, effective_min)
 
         # ===== 第二阶段：构建结果 =====
         chunks = []
         seen_contents: set = set()
         for doc_id, score in raw_results:
-            if score < min_relevance:
+            if score < effective_min:
                 break
 
             entry = _cached_get(doc_id)

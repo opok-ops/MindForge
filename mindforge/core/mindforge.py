@@ -396,6 +396,69 @@ class MindForge:
         except Exception as e:
             logger.error("Index rebuild failed at offset %d: %s", offset, e)
 
+    def _maybe_recover_rekey(self, password: str) -> bool:
+        """v6.6.1（缺陷 #1 收尾）：rekey 崩溃窗口残留自动恢复。
+
+        存在 .rekey-tmp 残留（重加密已 commit 但密钥文件尚未原子替换
+        时进程崩溃）时，用 tmp 中的 verify_blob 验证密码 + 试探解密库中
+        真实密文判断库侧状态：
+        - tmp 能解开库中密文 → 库已是新密文：把 tmp 原子替换为正式
+          密钥文件，恢复完成，返回 True；
+        - tmp 解不开 → 崩溃发生在 commit 之前，库仍是旧密文：tmp 是
+          垃圾，删除后按旧密钥正常初始化，返回 False。
+        """
+        import os as _os
+        import base64 as _b64
+        import json as _json
+        import sqlite3 as _sqlite3
+        from mindforge.core.encryption import (
+            EncryptionEngine, KDFParams, EncryptedBlob, _verify_key_password,
+        )
+        key_path = Path(self.config.key_file)
+        tmp_key = Path(str(key_path) + ".rekey-tmp")
+        if not tmp_key.exists():
+            return False
+        try:
+            with open(tmp_key, "r", encoding="utf-8") as f:
+                key_data = _json.load(f)
+            salt = _b64.b64decode(key_data["salt"])
+            params = KDFParams.from_dict(key_data.get("kdf_params") or {})
+            engine, _ = EncryptionEngine.from_password(
+                password, salt, kdf_params=params)
+            if not _verify_key_password(engine, key_data):
+                return False  # 密码不对，保留 tmp 等下次（可能只是打错密码）
+
+            # 试探解密：库中有加密行则必须能用 tmp 引擎解开
+            db_file = Path(self.config.db_path)
+            if db_file.exists():
+                conn = _sqlite3.connect(str(db_file))
+                try:
+                    row = conn.execute(
+                        "SELECT ciphertext, nonce, salt FROM memories "
+                        "WHERE ciphertext IS NOT NULL LIMIT 1"
+                    ).fetchone()
+                finally:
+                    conn.close()
+                if row is not None:
+                    blob = EncryptedBlob(
+                        ciphertext=row[0], nonce=row[1], salt=row[2],
+                        kdf_params=params or engine.kdf_params)
+                    engine.decrypt(blob)  # 失败抛异常 → 走下方 discard
+            _os.replace(str(tmp_key), str(key_path))
+            logger.warning(
+                "检测到 rekey 中断残留（%s）：库已是新密文，已自动完成"
+                "密钥文件恢复", tmp_key)
+            return True
+        except Exception as e:
+            # 解不开/文件损坏：库仍是旧密文（或状态不明），删除 tmp 按
+            # 旧密钥初始化。旧密钥能正常解开库即无损失。
+            logger.warning("rekey 残留恢复未生效（%s），按旧密钥继续", e)
+            try:
+                tmp_key.unlink()
+            except OSError:
+                pass
+            return False
+
     def init_with_password(self, password: str):
         """使用密码初始化加密引擎
 
@@ -415,6 +478,9 @@ class MindForge:
                 "Consider backing up and recreating with encryption.",
                 db_path
             )
+
+        # v6.6.1（缺陷 #1 收尾）：rekey 崩溃窗口残留恢复
+        self._maybe_recover_rekey(password)
 
         engine = _init_engine(password, self.config.key_file)
         self._encryption = engine
@@ -531,10 +597,35 @@ class MindForge:
             new_password, new_salt, kdf_params=new_kdf_params
         )
 
+        # v6.6.1 修复（缺陷 #1，P0 数据丢失）：
+        #   旧顺序 = 先 commit 全库重加密、后写密钥文件。写密钥文件失败
+        #   （磁盘满/崩溃）时新密钥的随机盐随调用栈丢弃，而库里已是新
+        #   密文——旧密码解不开、新密钥派生不出，全部数据永久不可恢复
+        #   （.zwork_repro5.py 实测）。且原注释声称"切换中途崩溃重启自洽"
+        #   与实际顺序相反。
+        #   新顺序 = 预写临时密钥文件 → 库内事务重加密（失败自动回滚）→
+        #   原子 os.replace 换正式密钥文件。每一步失败都有一致退路：
+        #   - 预写失败：库未动，直接报错；
+        #   - 重加密失败：事务已回滚，删 tmp，报错；
+        #   - replace 失败：用旧引擎把库重加密回旧密文，删 tmp，报错；
+        #   - commit 与 replace 之间崩溃：重启 init_with_password 检测
+        #     .rekey-tmp 残留并自动恢复（见 _maybe_recover_rekey）。
+        from mindforge.core.encryption import _write_key_file
+        key_path = Path(self.config.key_file)
+        tmp_key = Path(str(key_path) + ".rekey-tmp")
+        _write_key_file(tmp_key, new_salt, new_kdf_params, new_engine)
+
         # 3. 批量重加密所有记忆（数据库事务内，失败自动回滚）
         count = 0
-        if self._storage:
-            count = self._storage.rekey_memories(old_engine, new_engine)
+        try:
+            if self._storage:
+                count = self._storage.rekey_memories(old_engine, new_engine)
+        except Exception:
+            try:
+                tmp_key.unlink()
+            except OSError:
+                pass
+            raise
 
         # 4. 重加密成功 → 原子切换密钥文件 + 引擎引用
         #    此时数据库已是新密文，切换密钥后两边一致；
@@ -543,15 +634,27 @@ class MindForge:
         # 是 v5.8.13 命名空间迁移前的顶层路径，包安装模式下必然
         # ModuleNotFoundError——门面 rekey 自 v5.8.13 起实际不可用，
         # 本次修复并以回归测试钉死（见 tests/test_v631_scrypt.py）。
-        from mindforge.core.encryption import _write_key_file
-        backup_path = Path(self.config.key_file).with_suffix(
-            Path(self.config.key_file).suffix + ".bak"
-        )
+        backup_path = key_path.with_suffix(key_path.suffix + ".bak")
         import shutil
-        if Path(self.config.key_file).exists():
-            shutil.copy2(self.config.key_file, backup_path)
-
-        _write_key_file(Path(self.config.key_file), new_salt, new_kdf_params, new_engine)
+        if key_path.exists():
+            shutil.copy2(key_path, backup_path)
+        try:
+            _os.replace(str(tmp_key), str(key_path))
+        except OSError as e:
+            # 密钥文件没换成 → 把库重加密回旧密钥，与旧 key 文件保持一致
+            if self._storage:
+                try:
+                    self._storage.rekey_memories(new_engine, old_engine)
+                except Exception as re_err:
+                    logger.error("rekey 回滚重加密失败（库与旧密钥文件不一致，"
+                                 "请勿删除备份 %s）: %s", backup_path, re_err)
+            try:
+                tmp_key.unlink()
+            except OSError:
+                pass
+            raise SecurityError(
+                "rekey 失败：密钥文件替换失败（%s），数据库已回滚到旧密钥" % e
+            ) from e
 
         self._encryption = new_engine
         if self._storage:
@@ -873,6 +976,13 @@ class MindForge:
         ok, _reason = self.privacy_engine.check_access(entry, actor, session_id)
         if not ok:
             return None
+        # v6.6.1 修复（缺陷 #2）：门面主读取路径不解密——encrypted=True
+        # 时 mf.get(id) 返回 content=''（storage._row_to_entry 只回填
+        # 密文字段），明文静默丢失且被 _memory_cache 放大；而 search 路径
+        # 与 get_random_memories 都会解密，同一数据不同 API 行为不一致。
+        # 在门面统一解密回填（decrypt_content 对未加密条目是恒等返回）。
+        if getattr(entry, "encrypted", False) and not entry.content:
+            entry.content = self._storage.decrypt_content(entry)
         return entry
 
     def search(self,

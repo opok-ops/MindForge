@@ -86,8 +86,19 @@ class TestFts5MultiWordOr(unittest.TestCase):
     """P2：FTS5 多词 OR 转义。"""
 
     def test_single_phrase_unchanged(self):
+        # v6.6.1 契约反转：单 token 恒为短语的旧钉值已过时——
+        # >=4 字 CJK token 展开为滑动 3-gram OR（中文长问句在 trigram
+        # tokenizer 下单短语逐字精确匹配、措辞不一致即硬零召回，见
+        # CHANGELOG v6.6.1「CJK gram 兜底」）。非 CJK 与短 CJK token
+        # 保持短语行为不变。
         self.assertEqual(
-            IndexEngine._escape_fts5_query("加密搜索"), '"加密搜索"')
+            IndexEngine._escape_fts5_query("hello"), '"hello"')
+        self.assertEqual(
+            IndexEngine._escape_fts5_query("过敏"), '"过敏"')
+        esc = IndexEngine._escape_fts5_query("加密搜索")
+        self.assertTrue(esc.startswith('("'), esc)
+        self.assertIn('"加密搜"', esc)
+        self.assertIn('"密搜索"', esc)
 
     def test_multi_word_english_or(self):
         """v6.5.12 契约反转：多词 AND 共现（泛化洪水修复）"""

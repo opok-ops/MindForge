@@ -446,14 +446,63 @@ class IndexEngine:
                 content_tokens.append(clean)
         if not content_tokens:
             content_tokens = tokens  # 全是停用词则回退原词（避免空查询）
-        # 单 token（含中文无空格）保持原短语行为
+        # v6.6.1: CJK 长词 gram 兜底——中文问句无空格，整句成单个短语
+        # 后在 trigram tokenizer 下要求与语料逐字精确连续匹配；问句措辞
+        # 与语料不一致（"用户对什么食物过敏？" vs "我对花生严重过敏"）
+        # 时硬零召回且 AND/OR 两阶段兜底均不生效（单短语无 AND）。
+        # 改为：含 CJK 且 >=4 字的 token 展开为滑动 3-gram 的 OR 子查询，
+        # bm25 以命中的 gram 数量自然排序，语义近似"部分子串匹配"。
         if len(content_tokens) <= 1:
-            t = content_tokens[0]
-            return '"' + t.replace('"', '""') + '"'
+            return IndexEngine._cjk_escaped_or(content_tokens[0])
         # v6.5.12: AND 优先——要求实词共现；调用方 fts_search 在
-        # AND 空结果时自动降级 OR（两阶段，见 fts_search）
-        escaped = ['"' + t.replace('"', '""') + '"' for t in content_tokens]
+        # AND 空结果时自动降级 OR（两阶段，见 fts_search）。
+        # v6.6.1: 各 token 先经 CJK gram 展开（无 CJK 的 token 保持
+        # 短语行为），AND 语义不变。
+        escaped = [IndexEngine._cjk_escaped_or(t) for t in content_tokens]
         return " AND ".join(escaped)
+
+    # v6.6.1: CJK 检测与 gram 展开参数
+    _CJK_RANGES = (
+        (0x4E00, 0x9FFF),   # CJK 统一表意文字
+        (0x3400, 0x4DBF),   # 扩展 A
+    )
+    _CJK_GRAM_MAX = 12          # gram 数上限，约束 OR 查询成本
+    # CJK 停用字：gram 全部由这些字构成时无区分度，剔除
+    _CJK_STOP_CHARS = frozenset(
+        "的了吗呢是在我和与或但就都很个们你他那为什怎么样哪谁时多少"
+        "对要会被把给让向往从到于上下出入中里也还又再才只等等吧啊呢"
+    )
+
+    @classmethod
+    def _cjk_escaped_or(cls, token: str) -> str:
+        """含 CJK 且 >=4 字的 token 展开为滑动 3-gram OR 子查询。
+
+        非 CJK 或短 token 保持短语行为（返回带引号的短语查询）。
+        展开失败（无有效 gram）时同样回退短语——宁可零匹配也不改变
+        既有语义。
+        """
+        phrase = '"' + token.replace('"', '""') + '"'
+        if len(token) < 4:
+            return phrase
+        if not any(any(lo <= ord(c) <= hi for lo, hi in cls._CJK_RANGES)
+                   for c in token):
+            return phrase
+        grams = []
+        seen = set()
+        for i in range(len(token) - 2):
+            g = token[i:i + 3]
+            if g in seen:
+                continue
+            if all(ch in cls._CJK_STOP_CHARS for ch in g):
+                continue
+            seen.add(g)
+            grams.append(g)
+            if len(grams) >= cls._CJK_GRAM_MAX:
+                break
+        if not grams:
+            return phrase
+        return "(" + " OR ".join(
+            '"' + g.replace('"', '""') + '"' for g in grams) + ")"
 
     def fts_search(self, conn: sqlite3.Connection, query: str,
                    top_k: int = 10) -> List[Tuple[str, float]]:
@@ -545,6 +594,10 @@ class IndexEngine:
         点查；以 memories.max_rowid 为失效标记，覆盖 add/update；
         硬删导致的 df 缓存偏大只会让剪枝偏保守，5% 阈值级近似）。
         """
+        # v6.6.1: 括号子表达式（CJK gram OR 展开）不支持短语级重组——
+        # 重组会把 OR 子查询内的 gram 错误地用 AND 连接，直接跳过剪枝
+        if "(" in escaped:
+            return escaped
         # v6.5.12: 从 escaped 解析短语（而非原始 query）——AND 语义下
         # escaped 只含实词，prune 的 df 判断与重组都应基于同一词集
         import re as _re2

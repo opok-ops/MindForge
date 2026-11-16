@@ -3,6 +3,74 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.6.1] - 2026-11-16
+
+Bug 修复 + LLM 判官接线 + 检索兜底。缺陷狩猎报告 8 项（5 项实测复现），本轮修复 6 项，全部带契约测试。
+
+- **缺陷 #1（P0）：rekey 中途失败导致全部加密数据永久不可恢复。**
+  旧顺序先 commit 全库重加密、后写密钥文件，写失败（磁盘满/崩溃）时新
+  密钥盐随调用栈丢弃，旧密码解不开、新密钥派生不出（`.zwork_repro5.py`
+  实测：重启后 `SecurityError 解密失败`，数据不可恢复）。修复：预写临时
+  密钥文件（`.rekey-tmp`）→ 库内事务重加密（失败自动回滚）→ 原子
+  `os.replace` 换正式密钥文件；replace 失败时用旧引擎把库重加密回旧密文；
+  commit 与 replace 之间崩溃的窗口由 `init_with_password` 检测 `.rekey-tmp`
+  残留自动恢复（verify_blob 验证 + 试探解密）。原注释与实际顺序相反的
+  崩溃恢复语义一并改正。
+- **缺陷 #2（P1）：加密记忆主读取路径不解密，`get()` 静默返回 content=''。**
+  `storage._row_to_entry` 只回填密文字段，门面 `get()`/`get_memories_by_ids`
+  不补解密（search 路径与 `get_random_memories` 反而会解密，行为不一致）。
+  修复：门面统一解密回填，明文不再静默丢失。
+- **缺陷 #3（P1）：`batch_delete()` 无过滤条件必抛 TypeError。**
+  v6.5.7 缓存失效代码误写 `for _mid in category:`——无过滤时迭代 None 整批
+  回滚（全路径不可用），带 category 时逐字符失效缓存。修复：遍历实际被删
+  的 ids。
+- **缺陷 #4（P1）：`cleanup_expired` 用空串调 FTS5 'delete'，索引不一致。**
+  contentless FTS5 的 'delete' 必须与索引值精确匹配；词项/文档不一致是代码
+  自注 malformed 损坏的前兆（fts5vocab 实测词项残留）。修复：UPDATE 前先取
+  真实旧值，与 auto-expire（v5.6.9 P3）同模式"删旧值 → 以 trash 重插"。
+- **缺陷 #5（P1）：跨线程关闭遗留连接从未生效。**
+  两层根因：①`sqlite3.Connection` 不支持弱引用，v6.5.7 的 WeakSet 注册被
+  except 静默吞掉，`_all_conns` 从未有成员；②连接未开 `check_same_thread`，
+  跨线程 close 必抛 ProgrammingError 被吞。修复：注册改强引用集合（关闭后
+  clear 防泄漏）+ `check_same_thread=False` + `_access_lock` 串行化 close。
+- **缺陷 #6（P1）：`delete_memory` 缺 `@_with_rollback`。**
+  硬删除中途失败的部分删除留在未提交事务里，被同线程下一次无关提交带出
+  （实测孤儿状态）。补装饰器，与同文件其余写方法一致。
+- **缺陷 #8（P2）：`analyze_similarity` 把原始 content 直接传 FTS5 MATCH。**
+  含 `" ( :` 等特殊字符必抛 OperationalError 静默降级 LIKE，相似度分析对
+  这类记忆系统性降质。复用 `IndexEngine._escape_fts5_query` 转义。
+- **LLM 判官接线（v6.4.6 遗留议题落地）。** `benchmarks/locomeval_eval.py`
+  的 `judge_llm` 从降级脚手架接为 OpenAI 兼容接口真调用：`OPENAI_API_KEY`
+  （启用开关）+ `OPENAI_BASE_URL`（默认官方 v1）+ `OPENAI_MODEL`（默认
+  gpt-4o-mini）；1-10 打分 ≥8 判 hit，`first_hit_rank` 沿用 keyword 位置
+  口径保证 MRR@K 可比；无 key / 调用失败 / 输出不可解析三路自动降级
+  keyword，CI 零网络依赖（调用点全部 mock 测试钉住）。
+- **检索兜底：全空 quota 放宽。** 所有召回落选于 `min_relevance` 时静默返回
+  空（冒烟集实测：中文问句与语料措辞不一致时 TF-IDF 最相似 ~0.28 被阈值
+  整条滤掉）。现降级到 `max(0.15, min_relevance/2)` 重捞，排序不变只放宽
+  入榜线。冒烟 12 问 recall@5 0.75→0.8333、MRR@5 0.75→0.7917。
+- **检索兜底：CJK gram 展开。** 中文无空格长问句在 FTS5 trigram 下成单短语
+  精确匹配，问句措辞与语料不一致时硬零召回且 AND/OR 两阶段兜底不生效
+  （单短语无 AND）。含 CJK 且 ≥4 字的 token 展开为滑动 3-gram OR 子查询
+  （≤12 gram，全停用字 gram 剔除），df 剪枝对括号子表达式跳过。注：加密库
+  FTS5 按设计不入索引，此兜底作用于明文库；加密库词法召回的 quota 兜底
+  见上一条。
+- **诚实边界（multi-hop 85% 目标）**：v6.6.0 全量 1986 问 acc 58.4%，multi-hop
+  12.1%。分析确认 85% 需约 +27pt，open-dom 13.5% 与 temporal 剩余失分不是
+  检索层可独立解决的，检索层理想上限 ~76-78%。本版先落低风险的兜底与判官
+  接线；multi-hop 的主杠杆（组装层聚合视图、规则化查询拆解接 `search_multi`、
+  graph 条件激活）留待下版按 conv0 + 全量双口径验证。
+
+### Tests
+
+- 新增 `tests/test_v661_fixes.py`（16 项契约）+ `tests/test_v661_llm_judge.py`
+  （6 项判官接线契约，网络调用全 mock）。
+- 缺陷复现脚本 `.zwork_repro1/3/5.py` 全部由失败转修复后行为。
+- 全量 **1354** 项（1348 通过 + 6 项 CLI e2e 环境性既有失败：子进程
+  `python -m mindforge.cli.main` 在未安装仓库下 ModuleNotFoundError，与本版
+  改动无关；基线 v6.6.0 同样 6 项失败，1326 passed）。
+
+
 ## [6.6.0] - 2026-11-16
 
 Bug 修复版本：主动狩猎抓到两个真 bug，全部带契约测试落地。

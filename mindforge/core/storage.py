@@ -784,16 +784,34 @@ class StorageEngine:
     def _get_conn(self) -> sqlite3.Connection:
         conn = getattr(self._conn_local, "conn", None)
         if conn is None:
-            conn = sqlite3.connect(str(self.db_path), timeout=10.0)
+            # v6.6.1 修复（缺陷 #5）：开启 check_same_thread=False——
+            # 连接本身仍按线程局部使用，但 close()/checkpoint 兜底需要
+            # 从其他线程关闭遗留连接；默认 True 时跨线程 close 必抛
+            # ProgrammingError 被 _close_conns 吞掉，v6.5.7 的"关遗留
+            # 连接"修复实际无效（Windows WinError 32 文件锁仍在）。
+            # 跨线程 close 已用 _access_lock 串行化（见 _close_conns）。
+            conn = sqlite3.connect(str(self.db_path), timeout=10.0,
+                                   check_same_thread=False)
             # v6.5.7：注册到全连接表（弱引用，GC 后自动消失）——
             # close() 时可关闭其他线程遗留连接。Windows 上未关的
             # sqlite 连接会锁住文件（WinError 32），临时目录清理
             # 直接炸；Linux 无文件锁所以此前从未暴露。
             try:
-                import weakref as _weakref
+                # v6.6.1 修复（缺陷 #5 续）：sqlite3.Connection 不支持弱
+                # 引用（TypeError: cannot create weak reference to
+                # 'sqlite3.Connection'），旧 WeakSet 注册被本 except 静默
+                # 吞掉，_all_conns 从未有成员——v6.5.7 的"关遗留连接"在
+                # 注册层就无效。改为强引用集合；_close_conns 关闭后统一
+                # clear，不泄漏。
                 if not hasattr(self, "_all_conns"):
-                    self._all_conns = _weakref.WeakSet()
+                    self._all_conns = set()
+                if not hasattr(self, "_conn_owners"):
+                    self._conn_owners = {}
                 self._all_conns.add(conn)
+                # v6.6.1：记录属主线程——_close_conns 只关属主已死亡的
+                # 遗留连接，绝不从外部关闭存活线程正在使用的连接
+                # （实测会触发 SQLite 原生层 access violation）。
+                self._conn_owners[id(conn)] = threading.get_ident()
             except Exception:
                 pass
             conn.row_factory = sqlite3.Row
@@ -1558,6 +1576,11 @@ class StorageEngine:
         for row in rows:
             try:
                 entry = self._row_to_entry(row)
+                # v6.6.1 修复（缺陷 #2）：批量读取路径同样不解密——
+                # expand_context 等调用方拿到 content=''。与 search 路径
+                # 对齐，加密条目解密回填（未加密条目恒等返回）。
+                if getattr(entry, "encrypted", False) and not entry.content:
+                    entry.content = self.decrypt_content(entry)
                 entry_map[entry.id] = entry
             except Exception:
                 pass
@@ -3065,6 +3088,10 @@ class StorageEngine:
         ).fetchone()
         return row is not None
 
+    # v6.6.1 修复（缺陷 #6）：补 @_with_rollback，与同文件其余写方法
+    # （batch_delete/restore_memory/add_memory）保持一致——此前硬删除中途
+    # 抛异常时部分删除留在未提交事务里，会被同线程下一次无关提交带出。
+    @_with_rollback
     def delete_memory(self, entry_id: str,
                       actor: str = "", session_id: str = "",
                       hard_delete: bool = False) -> bool:
@@ -3251,9 +3278,12 @@ class StorageEngine:
                 )
 
         # v6.5.7：写路径缓存失效
-        for _mid in category:
-            if isinstance(_mid, str) and _mid:
-                self._memory_cache.invalidate(_mid)
+        # v6.6.1 修复（缺陷 #3）：此前误写成 `for _mid in category:`——
+        # 无过滤条件时 category=None 直接 TypeError 整批回滚（batch_delete()
+        # 全路径不可用）；带 category 时逐字符失效缓存，真正被删的 ids
+        # 一个没失效。改为遍历实际被删除的记忆 id。
+        for _mid in ids:
+            self._memory_cache.invalidate(_mid)
         conn.commit()
         # v5.5.5 fix: 审计日志记录真实隐私级别
         for row in rows:
@@ -7196,6 +7226,16 @@ class StorageEngine:
 
         # 使用 FTS5 全文搜索找相似内容
         # v5.5.4 fix: 排除软删除记忆，防止回收站内容泄露
+        # v6.6.1 修复（缺陷 #8）：原始 content 直接作 MATCH 参数，含
+        # " ( : 等 FTS5 特殊字符必抛 OperationalError 静默降级 LIKE，
+        # 相似度分析对这类记忆系统性降质。复用 IndexEngine 的
+        # _escape_fts5_query 转义为短语查询（失败仍走 LIKE 兜底）。
+        fts_query = entry.content[:200]
+        try:
+            from mindforge.core.indexer import IndexEngine
+            fts_query = IndexEngine._escape_fts5_query(fts_query)
+        except Exception:
+            fts_query = entry.content[:200]
         try:
             rows = conn.execute(
                 "SELECT m.id, m.content, m.category, m.layer, m.importance, m.starred, "
@@ -7205,7 +7245,7 @@ class StorageEngine:
                 "WHERE memory_fts MATCH ? AND m.id != ? AND m.category != 'trash' "
                 "ORDER BY relevance "
                 "LIMIT ?",
-                (entry.content[:200], memory_id, limit * 2)
+                (fts_query, memory_id, limit * 2)
             ).fetchall()
         except sqlite3.OperationalError:
             # FTS 搜索失败，回退到 LIKE 搜索
@@ -7688,9 +7728,11 @@ class StorageEngine:
     def _close_conns(self):
         """关闭当前线程持有的 SQLite 连接（v5.4.6 线程安全改造）
 
-        v6.5.7：遍历全连接表关闭其他线程遗留连接（弱引用，已 GC 的
-        自动跳过）。此前只关当前线程——probe/请求线程死掉后连接
-        悬挂，Windows 文件锁导致 unlink 失败（WinError 32）。
+        v6.5.7：遍历全连接表关闭其他线程遗留连接（v6.6.1 起为强引用
+        集合，sqlite3.Connection 不支持弱引用，见 _get_conn 注释）。
+        此前只关当前线程——probe/请求线程死掉后连接悬挂，Windows
+        文件锁导致 unlink 失败（WinError 32）；且默认 check_same_thread
+        下跨线程 close 必抛 ProgrammingError 被吞（本版修复）。
         """
         conn = getattr(self._conn_local, "conn", None)
         if conn is not None:
@@ -7699,13 +7741,31 @@ class StorageEngine:
             except sqlite3.Error:
                 pass
             self._conn_local.conn = None
-        for c in list(getattr(self, "_all_conns", ()) or ()):
-            if c is conn:
-                continue
-            try:
-                c.close()
-            except sqlite3.Error:
-                pass
+        # v6.6.1 修复（缺陷 #5）：跨线程 close 用 _access_lock 串行化。
+        # 只关属主线程已死亡的遗留连接——存活线程的连接绝不从外部关
+        # （REST/请求线程可能正在使用，实测外部 close 触发 SQLite 原生
+        # 层 access violation 硬崩溃，test_v576 TestAPI 复现）；存活线程
+        # 的连接由其自己的 close_thread_conn 关闭。
+        with self._access_lock:
+            _live_idents = {t.ident for t in threading.enumerate()}
+            owners = getattr(self, "_conn_owners", None) or {}
+            for c in list(getattr(self, "_all_conns", ()) or ()):
+                owner = owners.get(id(c))
+                if owner is not None and owner in _live_idents:
+                    continue  # 属主存活：留给它自己关
+                try:
+                    c.close()
+                except sqlite3.Error:
+                    pass
+                self._all_conns.discard(c)
+                owners.pop(id(c), None)
+        if conn is not None:
+            # 当前线程连接已在方法开头关闭：从登记表移除
+            if hasattr(self, "_conn_owners"):
+                self._conn_owners.pop(id(conn), None)
+            all_conns = getattr(self, "_all_conns", None)
+            if all_conns is not None:
+                all_conns.discard(conn)
         try:
             getattr(self, "_all_conns", None) and self._all_conns.clear()
         except Exception:
@@ -7769,6 +7829,18 @@ class StorageEngine:
             old_category = row["category"]
 
             try:
+                # v6.6.1 修复（缺陷 #4）：UPDATE 前先抓取旧 FTS 值——
+                # contentless FTS5 的 'delete' 命令必须与索引中的当前值
+                # 精确匹配，此前用空串调 'delete' 造成词项/文档不一致
+                # （fts5vocab 实测词项残留），是代码自注的 malformed 前兆。
+                # 与 auto-expire（v5.6.9 P3）同模式：删旧值 → 以 trash 重插。
+                old_fts = None
+                if not self.encrypted:
+                    old_fts = conn.execute(
+                        "SELECT rowid, content, category, tags FROM memories "
+                        "WHERE id = ? AND category != 'trash'",
+                        (entry_id,)).fetchone()
+
                 conn.execute("""
                     UPDATE memories SET
                         category = 'trash',
@@ -7777,11 +7849,16 @@ class StorageEngine:
                     WHERE id = ?
                 """, (old_category, now, entry_id))
 
-                if not self.encrypted:
+                if old_fts is not None:
                     conn.execute("""
                         INSERT INTO memory_fts(memory_fts, rowid, content, category, tags)
-                        VALUES('delete', (SELECT rowid FROM memories WHERE id = ?), '', '', '')
-                    """, (entry_id,))
+                        VALUES('delete', ?, ?, ?, ?)
+                    """, (old_fts[0], old_fts[1] or "",
+                          old_fts[2] or "", old_fts[3] or "[]"))
+                    conn.execute("""
+                        INSERT INTO memory_fts (rowid, content, category, tags)
+                        VALUES (?, ?, 'trash', ?)
+                    """, (old_fts[0], old_fts[1] or "", old_fts[3] or "[]"))
 
                 deleted_count += 1
             except (sqlite3.OperationalError, sqlite3.IntegrityError):

@@ -29,6 +29,7 @@ import json
 import os
 import platform
 import random
+import re
 import sys
 import tempfile
 import time
@@ -135,17 +136,82 @@ def judge_keyword(query_item: Dict[str, Any], chunks: List[Any]) -> Dict[str, An
             "concat_preview": concat[:200]}
 
 
-def judge_llm(query_item: Dict[str, Any], chunks: List[Any]) -> Dict[str, Any]:
-    """LLM-as-judge（可选）。无 API key 时降级到 keyword。"""
+def _llm_chat(prompt: str, max_tokens: int = 64, retries: int = 3) -> str:
+    """OpenAI 兼容 chat/completions 调用。失败返回空串（调用方降级）。"""
+    import urllib.error
+    import urllib.request
+
     api_key = os.environ.get("OPENAI_API_KEY", "")
-    if not api_key:
-        r = judge_keyword(query_item, chunks)
+    base = os.environ.get("OPENAI_BASE_URL",
+                          "https://api.openai.com/v1").rstrip("/")
+    model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+    body = json.dumps({"model": model,
+                       "messages": [{"role": "user", "content": prompt}],
+                       "max_tokens": max_tokens,
+                       "temperature": 0.0}).encode()
+    for attempt in range(retries):
+        try:
+            req = urllib.request.Request(
+                base + "/chat/completions", data=body,
+                headers={"Content-Type": "application/json",
+                         "Authorization": "Bearer " + api_key})
+            with urllib.request.urlopen(req, timeout=90) as r:
+                out = json.loads(r.read())
+            return (out["choices"][0]["message"]["content"] or "").strip()
+        except Exception:
+            if attempt == retries - 1:
+                return ""
+            time.sleep(1.0 * (attempt + 1))
+    return ""
+
+
+JUDGE_LLM_PROMPT = """你是评测判官。判断检索到的记忆片段是否足以回答问题。\
+参考要点（金标准关键词）：{must_have}
+
+问题：{q}
+
+记忆片段（按相关度排序）：
+{evidence}
+
+评分（1-10 整数）：
+- 8-10：片段包含回答问题所需的全部关键信息
+- 5-7：包含部分关键信息，不足以完整回答
+- 1-4：无关或信息缺失
+只输出一个整数分数。"""
+
+JUDGE_LLM_THRESHOLD = 8
+
+
+def judge_llm(query_item: Dict[str, Any], chunks: List[Any]) -> Dict[str, Any]:
+    """LLM-as-judge（v6.6.1 接线）。无 API key 或调用失败时降级到 keyword。
+
+    环境变量：OPENAI_API_KEY（必填才启用）、OPENAI_BASE_URL（OpenAI 兼容
+    端点，默认官方 v1）、OPENAI_MODEL（默认 gpt-4o-mini）。
+    hit 口径：LLM 分数 >= JUDGE_LLM_THRESHOLD；first_hit_rank 沿用 keyword
+    位置口径，保证 MRR@K 在两种判官下可比。
+    """
+    r = judge_keyword(query_item, chunks)
+    if not os.environ.get("OPENAI_API_KEY", ""):
         r["judge"] = "keyword-fallback"
         return r
-    # 真实 LLM 调用留给外部集成：脚手架默认仍用确定性裁判，
-    # 这里仅标记调用点，避免在 CI 里硬依赖网络。
-    r = judge_keyword(query_item, chunks)
-    r["judge"] = "keyword (llm judge not wired in scaffold)"
+    evidence = "\n".join(
+        "[%d] %s" % (i, getattr(c, "content", "") or "")
+        for i, c in enumerate(chunks, start=1)) or "（无片段）"
+    prompt = JUDGE_LLM_PROMPT.format(
+        must_have="、".join(query_item["must_have"]),
+        q=query_item["q"], evidence=evidence)
+    out = _llm_chat(prompt, max_tokens=8)
+    if not out:
+        r["judge"] = "keyword-fallback (llm error)"
+        return r
+    m = re.search(r"\d+", out)
+    if not m:
+        r["judge"] = "keyword-fallback (llm unparsable)"
+        return r
+    score = int(m.group())
+    r["judge"] = "llm"
+    r["llm_score"] = score
+    r["hit"] = score >= JUDGE_LLM_THRESHOLD
     return r
 
 

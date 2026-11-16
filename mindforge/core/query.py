@@ -227,12 +227,22 @@ def _normalize_temporal(text: str, anchor: Optional[str]) -> str:
         import re as _r
         cn = _r.search(r"([两二三四五六七八九十]+)", s)
         if cn:
-            # 中文数字（十以内单字；十X=10+X、X十=X*10 简化处理）
+            # v6.6.2 (B-7)：中文两位数换算修正——十X=10+X、X十=X*10、
+            # X十Y=X*10+Y。旧实现 X十 分支恒多加 10（_CN_NUM 含
+            # "十":10）：「二十天前」被算成 30 天、「三十天前」40 天。
             t = cn.group(1)
-            if len(t) == 1:
+            if t[0] == "十":
+                # 十X（十二=12）与裸「十」=10
+                n = 10 + (_CN_NUM.get(t[1:], 0) if len(t) > 1 else 0)
+            elif len(t) == 1:
                 n = _CN_NUM.get(t, 1)
+            elif t[1] == "十":
+                # X十（二十=20）或 X十Y（二十五=25）
+                tail = t[2:]
+                n = _CN_NUM.get(t[0], 1) * 10 + (
+                    _CN_NUM.get(tail, 0) if tail else 0)
             else:
-                n = 10 + _CN_NUM.get(t[1], 0) if t[0] == "十" else _CN_NUM.get(t[0], 1) * 10 + _CN_NUM.get(t[1], 0)
+                n = _CN_NUM.get(t[0], 1) * 10 + _CN_NUM.get(t[1], 0)
         else:
             num = _r.search(r"(\d+)", s)
             if not num:
@@ -518,7 +528,11 @@ class QueryEngine:
             for fe, te, w, mids in rows:
                 score0, hop = frontier.get(fe) or frontier.get(te) or (0.45, 2)
                 other = te if fe in frontier else fe
-                rel_score = min(0.9, score0 * (w or 1.0))
+                # v6.6.2 (B-4)：w 为 None 视为 1.0，否则用 float(w) 本值——
+                # 旧 (w or 1.0) 把合法的 weight=0.0（最弱关系）也归一成
+                # 1.0（最强），0 权重边反压过 query 词直接命中的文档。
+                weight = 1.0 if w is None else float(w)
+                rel_score = min(0.9, score0 * weight)
                 if mids:
                     try:
                         for mid in _json.loads(mids):
@@ -772,12 +786,16 @@ class QueryEngine:
             for mid, s, lbl in self._temporal_candidates(query, time_anchor):
                 if explain:
                     _bd(mid)["temporal"] = max(s, _bd(mid).get("temporal", 0.0))
-                if s >= score_map.get(mid, 0.0):
+                # v6.6.2 (B-5)：仅当 s > existing 才覆盖（去掉 = 平分
+                # 覆盖，后到路径不再抢占先到路径的胜者标签）；覆盖（含
+                # 新命中与抢占既有命中）时同步更新 winner/final，消除
+                # explain 的 breakdown 与 chunk.relevance_score 的矛盾。
+                if s > score_map.get(mid, 0.0):
                     is_new = mid not in score_map
                     score_map[mid] = s
                     if is_new:
                         temporal_mixed = True
-                    if explain and is_new:
+                    if explain:
                         _bd(mid)["winner"] = "temporal"
                         _bd(mid)["final"] = s
         if query:
@@ -1023,8 +1041,18 @@ class QueryEngine:
                         if t.startswith("ctxdate:"):
                             e_date = t[8:]
                             break
-                    content = (_normalize_temporal(e.content, e_date)
-                               if e_date else e.content)
+                    # v6.6.2 (B-6)：加密行 content 为空串（密文在独立
+                    # 列），走与主 chunk 相同的 decrypt_content 解密回填；
+                    # 解密失败跳过该邻居——与主路径解密失败跳过语义一致，
+                    # 不再向 context_expansion 塞静默截空的证据。
+                    content = e.content
+                    if e.encrypted and not content:
+                        try:
+                            content = self.storage.decrypt_content(e)
+                        except Exception:
+                            continue
+                    if e_date:
+                        content = _normalize_temporal(content, e_date)
                     neighbours.append((e_seq, content))
             if neighbours:
                 neighbours.sort(key=lambda x: x[0])

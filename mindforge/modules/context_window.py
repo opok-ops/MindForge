@@ -15,6 +15,7 @@ MindForge v6.1.5 新增：自适应上下文窗口 (Adaptive Context Window)
 
 import logging
 import re
+import threading
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -26,6 +27,9 @@ logger = logging.getLogger(__name__)
 MAX_POOL_SIZE = 200
 WARM_BOOST = 0.15  # 预热条目额外加分
 PATTERN_WINDOW = 30  # 保留最近 N 次查询模式
+# v6.6.2（P3-8）：会话窗口总数上限——session_id 客户端可控，无上限时
+# 每次请求换新 ID 即内存无界增长（DoS 面）；超限按最久未活跃淘汰
+MAX_WINDOWS = 1000
 
 
 @dataclass
@@ -83,14 +87,32 @@ class AdaptiveContextEngine:
         self.storage = storage
         self.index = index
         self._windows: Dict[str, ContextWindow] = {}
+        # v6.6.2（P3-8）：get_or_create_window 的 check-then-insert 加锁，
+        # 消除同 session 并发首次访问互相覆盖窗口的竞态
+        self._lock = threading.RLock()
 
     def get_or_create_window(self, session_id: str) -> ContextWindow:
-        """获取或创建会话的上下文窗口"""
-        if session_id not in self._windows:
-            self._windows[session_id] = ContextWindow(session_id=session_id)
-        window = self._windows[session_id]
-        window.touch()
-        return window
+        """获取或创建会话的上下文窗口
+
+        v6.6.2（P3-8）：加锁消除 check-then-insert 竞态；_windows 加上限
+        MAX_WINDOWS（默认 1000），超限按最久未活跃淘汰——REST/MCP 每次
+        请求传新 session_id 的内存无界增长面被封顶。
+        """
+        with self._lock:
+            window = self._windows.get(session_id)
+            if window is None:
+                window = ContextWindow(session_id=session_id)
+                self._windows[session_id] = window
+                self._evict_windows_locked()
+            window.touch()
+            return window
+
+    def _evict_windows_locked(self) -> None:
+        """调用方必须持有 _lock：窗口数超上限时按最久未活跃淘汰"""
+        while len(self._windows) > MAX_WINDOWS:
+            oldest = min(self._windows,
+                         key=lambda k: self._windows[k]._last_active)
+            self._windows.pop(oldest)
 
     def record_search(
         self,

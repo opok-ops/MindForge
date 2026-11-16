@@ -109,6 +109,8 @@ class _RateLimiter:
         self.max_requests = max_requests
         self.window = window_seconds
         self._requests = defaultdict(list)
+        # v6.6.2（F9）：每 IP 最近一次请求时间，逐出按「最久未活跃」排序
+        self._last_seen = {}
         self._lock = threading.Lock()
 
     def check(self, client_ip: str) -> bool:
@@ -120,21 +122,36 @@ class _RateLimiter:
         """
         now = time.time()
         with self._lock:
+            self._last_seen[client_ip] = now
+            # v6.6.2（F9）：仅当该 IP 此前已被跟踪且历史全部过期时才清
+            # last_seen——新访客首次 check 时 times 也为空，不能误删刚写入
+            # 的时间戳，否则逐出排序会把新 IP 当成「最久未活动」。
+            was_tracked = client_ip in self._requests
             times = [t for t in self._requests[client_ip] if now - t < self.window]
             # 过滤后为空 → 该 IP 历史已过期，删除空键避免常驻
             if not times:
                 self._requests.pop(client_ip, None)
+                if was_tracked:
+                    self._last_seen.pop(client_ip, None)
             else:
                 self._requests[client_ip] = times
             if len(times) >= self.max_requests:
                 return False
             times.append(now)
             self._requests[client_ip] = times
-            # IP 总数上限：丢弃最久未活动的键
+            # IP 总数上限：丢弃最久未活动的键。
+            # v6.6.2（F9）修复：此前按 dict 插入序弹出前 N 个键——更新计数
+            # 不会改变已有键的位置，长期活跃的旧 IP 反而先被逐出，且逐出即
+            # 计数清零构成 fail-open。现按 last_seen 逐出真正最久未活动者，
+            # 两个字典同步删除。
             if len(self._requests) > self._MAX_TRACKED_IPS:
                 excess = len(self._requests) - self._MAX_TRACKED_IPS
-                for stale_ip in list(self._requests.keys())[:excess]:
+                stale_ips = sorted(
+                    self._requests, key=lambda ip: self._last_seen.get(ip, 0.0)
+                )[:excess]
+                for stale_ip in stale_ips:
                     self._requests.pop(stale_ip, None)
+                    self._last_seen.pop(stale_ip, None)
             return True
 
 
@@ -1110,11 +1127,23 @@ class MindForgeAPIHandler(BaseHTTPRequestHandler):
                                  "backup": res.get("backup")})
             elif path == "/api/compress":
                 # v6.5.6：REST 对齐记忆压缩入口
+                # v6.6.2（F7）修复：threshold/min_cluster_size 类型非法时回
+                # 400——此前 ValueError 直接落入 do_POST 顶层 except 回 500，
+                # 与同文件其他端点的 400 口径不一致，错误日志也无上下文。
+                try:
+                    threshold = float(body.get("threshold", 0.75))
+                    min_cluster_size = int(body.get("min_cluster_size", 3))
+                except (TypeError, ValueError):
+                    self._send_json(
+                        {"error": "'threshold' must be a number and "
+                                  "'min_cluster_size' must be an integer"},
+                        400)
+                    return
                 res = self.mindforge.compress_memories(
-                    threshold=float(body.get("threshold", 0.75)),
+                    threshold=threshold,
                     dry_run=bool(body.get("dry_run", False)),
                     categories=body.get("categories"),
-                    min_cluster_size=int(body.get("min_cluster_size", 3)))
+                    min_cluster_size=min_cluster_size)
                 self._send_json(res)
             elif path == "/api/agent/forget":
                 mid = body.get("id", "")

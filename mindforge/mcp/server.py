@@ -2381,7 +2381,9 @@ HANDLERS: Dict[str, Any] = {
 # ---------------------------------------------------------------------------
 
 def _handle_initialize(request: Dict[str, Any]) -> Dict[str, Any]:
-    _notify("notifications/initialized")
+    # v6.6.2（F6）修复：不再向客户端回发 notifications/initialized——按 MCP
+    # 协议该通知是客户端→服务端的方向确认，服务端回发属于方向错误的多余帧，
+    # 严格客户端会把 initialize 响应错位到第二帧并报「意外通知」。
     return {
         "protocolVersion": "2024-11-05",
         "capabilities": {"tools": {}, "logging": {}},
@@ -2409,16 +2411,35 @@ def _is_tool_error(result: Any) -> bool:
     return result.get("ok") is False or result.get("success") is False
 
 
+class _JsonRpcError(ValueError):
+    """携带 JSON-RPC 错误码的协议级异常（v6.6.2 F4 新增）。
+
+    serve_forever 捕获后按 code/message 回错误帧，而不是折叠进
+    -32000 Internal server error——客户端需要区分「参数/调用名错了」
+    （-32602 Invalid params）与「服务端内部故障」（-32000）。
+    继承 ValueError：v6.6.2 前本路径 raise ValueError（v6.6.2 前的契约，
+    test_v558 断言仍成立），外部 except ValueError 的兼容面不破坏。
+    """
+
+    def __init__(self, code: int, message: str):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
 def _handle_tools_call(mf, request: Dict[str, Any]) -> Dict[str, Any]:
     params = request.get("params") or {}
+    # v6.6.2（F4）修复：params 非对象与未知工具名按 JSON-RPC 2.0 规范回
+    # -32602 Invalid params；此前 raise ValueError 被 serve_forever 顶层
+    # except 统一折叠成 -32000，客户端无法区分调用错误与服务端故障。
     if not isinstance(params, dict):
-        raise ValueError("Invalid params: expected object")
+        raise _JsonRpcError(-32602, "Invalid params: expected object")
     name = params.get("name")
     arguments = params.get("arguments") or {}
     if not isinstance(arguments, dict):
         arguments = {}
     if name not in HANDLERS:
-        raise ValueError(f"Unknown tool: {name}")
+        raise _JsonRpcError(-32602, f"Unknown tool: {name}")
     result = HANDLERS[name](mf, arguments)
     text = json.dumps(result, ensure_ascii=False, indent=2, default=str)
     envelope: Dict[str, Any] = {"content": [{"type": "text", "text": text}]}
@@ -2538,6 +2559,11 @@ def serve_forever(db_path: Optional[str] = None, key_file: Optional[str] = None,
                 "(or --auth-secret) is empty. Refusing to start an unauthenticated "
                 "MCP server."
             )
+            # v6.6.2（F12）：此处引擎已创建，退出前同样关闭
+            try:
+                mf.close()
+            except Exception:
+                pass
             return 2
         _log(
             "WARNING: MINDFORGE_MCP_SECRET not set — MCP server accepts all clients. "
@@ -2547,41 +2573,84 @@ def serve_forever(db_path: Optional[str] = None, key_file: Optional[str] = None,
             "MINDFORGE_MCP_REQUIRE_AUTH=1 to refuse startup without a secret."
         )
 
-    while True:
-        try:
-            msg = _read_message()
-        except EOFError:
-            _log("stdin closed")
-            return 0
-        except Exception as e:
-            _log(f"read error: {e}")
-            continue
+    try:
+        # v6.6.2（F12）修复：所有退出路径（EOF / shutdown / exit / 异常逃逸）
+        # 统一在此 finally 关闭引擎——此前各 return 路径都不调用 mf.close()，
+        # StorageEngine 的访问计数挂账（_access_pending）只在 flush/close 时
+        # 落库，MCP 进程退出即丢挂账。close 自身异常吞掉，不改变退出码。
+        while True:
+            try:
+                msg = _read_message()
+            except EOFError:
+                _log("stdin closed")
+                return 0
+            except Exception as e:
+                # v6.6.2（F5）修复：坏 JSON body / 非法帧头不再静默吞掉——
+                # 按 JSON-RPC 2.0 回 -32700 Parse error 帧（id 未知，置 None），
+                # 协议同步的客户端不再无限等待，随后继续读下一帧。
+                _log(f"read error: {e}")
+                _write_message({
+                    "jsonrpc": "2.0",
+                    "id": None,
+                    "error": {
+                        "code": -32700,
+                        "message": f"Parse error: {_safe_error_msg(e)}",
+                    },
+                })
+                continue
 
-        method = msg.get("method", "")
-        rid = msg.get("id")
-        try:
-            if method == "initialize":
-                if _check_auth(msg, expected_secret):
-                    _auth.login(_time.monotonic())
-                    _respond(msg, _handle_initialize(msg))
-                else:
-                    _auth.reset()
+            # v6.6.2（F1）修复：非对象 JSON 消息（如数组/标量）此前在
+            # msg.get 处抛 AttributeError 逃出 serve_forever 杀死整个进程；
+            # 现按 JSON-RPC 2.0 回 -32600 Invalid Request 后继续服务。
+            rid = msg.get("id") if isinstance(msg, dict) else None
+            if not isinstance(msg, dict):
+                _log(f"non-object JSON-RPC message rejected: {type(msg).__name__}")
+                _write_message({
+                    "jsonrpc": "2.0",
+                    "id": rid,
+                    "error": {"code": -32600, "message": "Invalid Request"},
+                })
+                continue
+
+            method = msg.get("method", "")
+            try:
+                if method == "initialize":
+                    if _check_auth(msg, expected_secret):
+                        _auth.login(_time.monotonic())
+                        _respond(msg, _handle_initialize(msg))
+                    else:
+                        _auth.reset()
+                        if rid is not None:
+                            _respond_error(msg, code=-32001, message="Authentication failed")
+                elif method == "notifications/initialized":
+                    pass
+                elif expected_secret and not _auth.is_authed():
                     if rid is not None:
-                        _respond_error(msg, code=-32001, message="Authentication failed")
-            elif method == "notifications/initialized":
-                pass
-            elif expected_secret and not _auth.is_authed():
-                if rid is not None:
-                    _respond_error(msg, code=-32001, message="Not authenticated")
-            elif expected_secret and _auth.is_authed():
-                # P2 #16 修复：认证过期检查（30 分钟无活动自动登出）。
-                # v5.6.5：状态读改写在 _AuthState 锁内原子完成，计时用 monotonic。
-                _authz = _auth.authorize(_time.monotonic(), _AUTH_IDLE_TIMEOUT)
-                if _authz == "expired":
-                    if rid is not None:
-                        _respond_error(msg, code=-32001, message="Session expired")
-                    continue
-                if method == "tools/list":
+                        _respond_error(msg, code=-32001, message="Not authenticated")
+                elif expected_secret and _auth.is_authed():
+                    # P2 #16 修复：认证过期检查（30 分钟无活动自动登出）。
+                    # v5.6.5：状态读改写在 _AuthState 锁内原子完成，计时用 monotonic。
+                    _authz = _auth.authorize(_time.monotonic(), _AUTH_IDLE_TIMEOUT)
+                    if _authz == "expired":
+                        if rid is not None:
+                            _respond_error(msg, code=-32001, message="Session expired")
+                        continue
+                    if method == "tools/list":
+                        _respond(msg, _handle_tools_list(msg))
+                    elif method == "tools/call":
+                        _respond(msg, _handle_tools_call(mf, msg))
+                    elif method == "ping":
+                        _respond(msg, {})
+                    elif method in ("shutdown", "exit"):
+                        if rid is not None:
+                            _respond(msg, {})
+                        return 0
+                    else:
+                        if rid is None:
+                            _log(f"ignored notification: {method}")
+                        else:
+                            _respond_error(msg, code=-32601, message=f"Method not found: {method}")
+                elif method == "tools/list":
                     _respond(msg, _handle_tools_list(msg))
                 elif method == "tools/call":
                     _respond(msg, _handle_tools_call(mf, msg))
@@ -2596,26 +2665,21 @@ def serve_forever(db_path: Optional[str] = None, key_file: Optional[str] = None,
                         _log(f"ignored notification: {method}")
                     else:
                         _respond_error(msg, code=-32601, message=f"Method not found: {method}")
-            elif method == "tools/list":
-                _respond(msg, _handle_tools_list(msg))
-            elif method == "tools/call":
-                _respond(msg, _handle_tools_call(mf, msg))
-            elif method == "ping":
-                _respond(msg, {})
-            elif method in ("shutdown", "exit"):
+            except _JsonRpcError as e:
+                # v6.6.2（F4）：协议级错误按异常自带的码回帧（-32602 等）
+                _log(f"handler error {method}: {e}")
                 if rid is not None:
-                    _respond(msg, {})
-                return 0
-            else:
-                if rid is None:
-                    _log(f"ignored notification: {method}")
-                else:
-                    _respond_error(msg, code=-32601, message=f"Method not found: {method}")
-        except Exception as e:
-            tb = traceback.format_exc(limit=6)
-            _log(f"handler error {method}: {e}\n{tb}")
-            if rid is not None:
-                _respond_error(msg, code=-32000, message="Internal server error")
+                    _respond_error(msg, code=e.code, message=e.message)
+            except Exception as e:
+                tb = traceback.format_exc(limit=6)
+                _log(f"handler error {method}: {e}\n{tb}")
+                if rid is not None:
+                    _respond_error(msg, code=-32000, message="Internal server error")
+    finally:
+        try:
+            mf.close()
+        except Exception:
+            pass
 
 
 def main(argv: Optional[List[str]] = None) -> int:

@@ -8,6 +8,7 @@ import math
 import os
 import re
 import sqlite3
+import threading
 from collections import Counter, defaultdict
 from itertools import islice
 from typing import List, Dict, Tuple, Optional
@@ -88,6 +89,26 @@ class TFIDFVectorizer:
                 next_idx += 1
                 self.idf[token] = math.log(
                     (self.doc_count + 1) / 2) + 1
+
+    def _retract_doc(self, text: str) -> None:
+        """v6.6.2 (B-2) 新增：按单文档旧文本回退 df/doc_count。
+
+        update 路径（同 doc_id 覆盖写 index_memory）与 remove_memory
+        调用：doc_count -1，旧文本全部 token 的 df -1。vocab/idf 词条
+        保留不删——删词会移动维度号、作废既有向量；df 归零的 token
+        留在词表中，下次 incremental_fit 命中 vocab 分支重新计数。
+        """
+        if self.doc_count <= 0:
+            return
+        self.doc_count -= 1
+        for token in set(self._tokenize(text)):
+            df = self._df.get(token, 0)
+            if df <= 0:
+                continue
+            self._df[token] = df - 1
+            if token in self.vocab:
+                self.idf[token] = math.log(
+                    (self.doc_count + 1) / df) + 1
 
     def transform(self, text: str) -> Dict[int, float]:
         tokens = self._tokenize(text)
@@ -287,6 +308,14 @@ class IndexEngine:
     def __init__(self, db_path: str = "./data/memory.db",
                  max_docs: Optional[int] = None):
         self.db_path = db_path
+        # v6.6.2 (B-1)：整把 RLock 串行化内存结构读写（_doc_texts/
+        # 稀疏向量/倒排链）。REST 是每请求一线程（ThreadingHTTPServer），
+        # search 触发的 _fit_vectorizer 迭代 _doc_texts 与并发
+        # index_memory 的插入交错会打出 RuntimeError 并炸穿整次 search
+        # （query.py 路 1 无兜底）；add/remove 的多步读改写交错还会向
+        # _postings 泄漏幽灵权重。RLock 允许 search→_fit_vectorizer、
+        # index_memory→_fit_vectorizer 的同线程重入。
+        self._lock = threading.RLock()
         self.vectorizer = TFIDFVectorizer()
         self.vector_index = VectorIndex()
         # v6.4.8: 病态回退信号门面透传（见 search()）
@@ -326,15 +355,18 @@ class IndexEngine:
         Returns:
             水合的文档数量
         """
-        if self._hydrated:
-            return 0
-        self._doc_texts.update(documents)
-        self._evict_if_needed()
-        # 强制下次搜索时重新 fit，确保词表覆盖保留文档（被淘汰文档仍可经
-        # FTS5/fuzzy 召回，见类文档说明）
-        self._fitted = False
-        self._hydrated = True
-        return len(documents)
+        # v6.6.2 (B-1)：与 index/remove/search 共用一把 RLock——
+        # hydrate 重建 _doc_texts 与并发 search 的 fit 迭代互斥
+        with self._lock:
+            if self._hydrated:
+                return 0
+            self._doc_texts.update(documents)
+            self._evict_if_needed()
+            # 强制下次搜索时重新 fit，确保词表覆盖保留文档（被淘汰文档仍可经
+            # FTS5/fuzzy 召回，见类文档说明）
+            self._fitted = False
+            self._hydrated = True
+            return len(documents)
 
     def _evict_if_needed(self) -> None:
         """超过内存上限时，按插入顺序（近似 LRU）淘汰最旧文档，
@@ -349,46 +381,65 @@ class IndexEngine:
 
     def index_memory(self, doc_id: str, text: str, metadata: Optional[Dict] = None):
         """索引记忆"""
-        self._doc_texts[doc_id] = text
+        # v6.6.2 (B-1)：内存结构读写全程持锁（RLock 允许下方
+        # _fit_vectorizer 同线程重入）
+        with self._lock:
+            # v6.6.2 (B-2)：同 doc_id 覆盖写（update 路径）先按旧文本
+            # 回退 df/doc_count，再经 incremental_fit 重新计入——不再
+            # 每次 update 单向 +1 doc_count、df 漂移。未 fit 过时无计数
+            # 可回退（随后 _fit_vectorizer 全量重算）。
+            old_text = self._doc_texts.get(doc_id)
+            if self._fitted and old_text is not None:
+                self.vectorizer._retract_doc(old_text)
 
-        # v5.6.5 P1 #5: 渐进 fit 触发点（LRU 守卫契约：add 即索引）。
-        # v6.4.8 fix: fit 后的增量 add 先 incremental_fit 扩词表再
-        # transform——旧逻辑词表锁死在前 5 条文档，此后增量 add 的
-        # transform 全 vocab miss（空向量入索引，TF-IDF 路半瘫痪）。
-        if not self._fitted and len(self._doc_texts) >= 5:
-            self._fit_vectorizer()
-        elif self._fitted:
-            self.vectorizer.incremental_fit(text)
+            self._doc_texts[doc_id] = text
 
-        if self._fitted:
-            vector_dict = self.vectorizer.transform(text)
-            self.vector_index.add(doc_id, vector_dict, metadata)
+            # v5.6.5 P1 #5: 渐进 fit 触发点（LRU 守卫契约：add 即索引）。
+            # v6.4.8 fix: fit 后的增量 add 先 incremental_fit 扩词表再
+            # transform——旧逻辑词表锁死在前 5 条文档，此后增量 add 的
+            # transform 全 vocab miss（空向量入索引，TF-IDF 路半瘫痪）。
+            if not self._fitted and len(self._doc_texts) >= 5:
+                self._fit_vectorizer()
+            elif self._fitted:
+                self.vectorizer.incremental_fit(text)
 
-        # v5.6.5 P1 #5: 写入后 LRU 淘汰
-        self._evict_if_needed()
+            if self._fitted:
+                vector_dict = self.vectorizer.transform(text)
+                self.vector_index.add(doc_id, vector_dict, metadata)
+
+            # v5.6.5 P1 #5: 写入后 LRU 淘汰
+            self._evict_if_needed()
 
     def remove_memory(self, doc_id: str):
         """移除索引"""
-        self._doc_texts.pop(doc_id, None)
-        self.vector_index.remove(doc_id)
+        # v6.6.2 (B-1)：与并发 search/fit 互斥
+        with self._lock:
+            # v6.6.2 (B-2)：同步回退该文档 token 的 df 与 doc_count
+            # （此前只清向量，idf 计数只加不减，长期运行单向漂移）
+            old_text = self._doc_texts.pop(doc_id, None)
+            self.vector_index.remove(doc_id)
+            if self._fitted and old_text:
+                self.vectorizer._retract_doc(old_text)
 
     def search(self, query: str, top_k: int = 10) -> List[Tuple[str, float]]:
         """搜索"""
-        if not self._fitted and self._doc_texts:
-            self._fit_vectorizer()
+        # v6.6.2 (B-1)：fit 触发与倒排链遍历全程持锁
+        with self._lock:
+            if not self._fitted and self._doc_texts:
+                self._fit_vectorizer()
 
-        if not self._fitted:
-            # v6.4.8: 降级路径同样透传病态回退信号（保持门面契约一致）
-            self.last_fallback = False
-            return self._keyword_search(query, top_k)
+            if not self._fitted:
+                # v6.4.8: 降级路径同样透传病态回退信号（保持门面契约一致）
+                self.last_fallback = False
+                return self._keyword_search(query, top_k)
 
-        # v5.6.3 性能修复：查询向量同样保持稀疏，走倒排链检索
-        query_vec_dict = self.vectorizer.transform(query)
-        results = self.vector_index.search(query_vec_dict, top_k)
-        # v6.4.8: 把 VectorIndex 的病态回退信号透传到门面层
-        # （query.py 据此跳过 fuzzy 兜底路）
-        self.last_fallback = self.vector_index.last_fallback
-        return results
+            # v5.6.3 性能修复：查询向量同样保持稀疏，走倒排链检索
+            query_vec_dict = self.vectorizer.transform(query)
+            results = self.vector_index.search(query_vec_dict, top_k)
+            # v6.4.8: 把 VectorIndex 的病态回退信号透传到门面层
+            # （query.py 据此跳过 fuzzy 兜底路）
+            self.last_fallback = self.vector_index.last_fallback
+            return results
 
     def _keyword_search(self, query: str, top_k: int) -> List[Tuple[str, float]]:
         """关键词搜索（降级方案）"""
@@ -410,14 +461,17 @@ class IndexEngine:
         return scores[:top_k]
 
     def _fit_vectorizer(self):
-        texts = list(self._doc_texts.values())
-        self.vectorizer.fit(texts)
+        # v6.6.2 (B-1)：长迭代 _doc_texts 全程持锁（调用方已持锁，
+        # RLock 同线程重入）
+        with self._lock:
+            texts = list(self._doc_texts.values())
+            self.vectorizer.fit(texts)
 
-        for doc_id, text in self._doc_texts.items():
-            vector_dict = self.vectorizer.transform(text)
-            self.vector_index.add(doc_id, vector_dict)
+            for doc_id, text in self._doc_texts.items():
+                vector_dict = self.vectorizer.transform(text)
+                self.vector_index.add(doc_id, vector_dict)
 
-        self._fitted = True
+            self._fitted = True
 
     @staticmethod
     def _escape_fts5_query(query: str) -> str:
@@ -487,7 +541,7 @@ class IndexEngine:
         if not any(any(lo <= ord(c) <= hi for lo, hi in cls._CJK_RANGES)
                    for c in token):
             return phrase
-        grams = []
+        all_grams = []
         seen = set()
         for i in range(len(token) - 2):
             g = token[i:i + 3]
@@ -496,9 +550,21 @@ class IndexEngine:
             if all(ch in cls._CJK_STOP_CHARS for ch in g):
                 continue
             seen.add(g)
-            grams.append(g)
-            if len(grams) >= cls._CJK_GRAM_MAX:
-                break
+            all_grams.append(g)
+        # v6.6.2 (B-10.1)：超上限时均匀采样替代顺序截断——顺序截断只
+        # 覆盖 token 前段（18 字 token 只留下前 12 个 gram），尾部内容
+        # （长问句里常是区分性信息）整段不可搜。均匀采样首尾 gram 必选，
+        # 中间按位置等距取点，gram 数上限语义不变。
+        if len(all_grams) <= cls._CJK_GRAM_MAX:
+            grams = all_grams
+        else:
+            n = len(all_grams)
+            picks = []
+            for i in range(cls._CJK_GRAM_MAX):
+                pos = i * (n - 1) // (cls._CJK_GRAM_MAX - 1)
+                if pos not in picks:
+                    picks.append(pos)
+            grams = [all_grams[p] for p in picks]
         if not grams:
             return phrase
         return "(" + " OR ".join(
@@ -582,6 +648,19 @@ class IndexEngine:
         "什么", "怎么", "怎样", "哪里", "哪个", "谁", "为什么",
         "什么", "时候", "多少",
     })
+
+    def invalidate_fts_vocab_cache(self) -> None:
+        """v6.6.2 (B-3)：FTS df 剪枝缓存手动失活钩子。
+
+        _prune_fts_query 的 df 缓存以 memories.max(rowid) 为失效标记，
+        只能感知 INSERT/删尾行——UPDATE 改内容不改 rowid，缓存 df 停在
+        旧值：词被内容移除时 df 偏大被误剪（目标文档从 FTS 路整条丢失），
+        新增高频词时 df 偏小不剪（bm25 泛化洪水回归）。内容 UPDATE 后由
+        写路径（mindforge.update_memory）调用本方法强制下次重载 vocab。
+        rebuild_fts 后同理适用。
+        """
+        self._fts_vocab_cache = None
+        self._fts_vocab_rowid = -1
 
     def _prune_fts_query(self, conn: sqlite3.Connection, query: str,
                          escaped: str) -> str:

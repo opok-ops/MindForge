@@ -89,6 +89,14 @@ def run_daemon(db_path: str, key_file: str | None = None, encrypted: bool = Fals
     from mindforge.core.types import MemoryConfig
     from mindforge.core.mindforge import MindForge
 
+    # v6.6.2（F3 附带）修复：stdin 强制 UTF-8 严格解码。宿主写入的是 UTF-8
+    # JSON 行，Windows 控制台/管道默认编码（如 cp936）会把多字节行读成乱码
+    # 导致解析失败。旧解释器无 reconfigure 时跳过，保持原行为。
+    try:
+        sys.stdin.reconfigure(encoding="utf-8", errors="strict")
+    except (AttributeError, ValueError, OSError):
+        pass
+
     t_start = time.time()
     cm = MindForge(
         config=MemoryConfig(db_path=db_path, key_file=key_file, encrypted=encrypted)
@@ -203,12 +211,30 @@ def run_daemon(db_path: str, key_file: str | None = None, encrypted: bool = Fals
             continue
         try:
             req = json.loads(line)
+            if not isinstance(req, dict):
+                # v6.6.2（F2）修复：非对象 JSON 行（如 [1,2,3]）此前在
+                # req.get 处抛 AttributeError 逃出处理循环、杀死常驻进程，
+                # 违背「单条请求异常不杀进程」的设计承诺；现主动 raise，
+                # 归入下方通用 except 回 ok:false 错误行。
+                raise ValueError("request line must be a JSON object")
             rid = req.get("id")
             cmd = req.get("cmd", "")
             args = req.get("args", {}) or {}
         except json.JSONDecodeError as e:
             sys.stdout.write(
                 json.dumps({"id": None, "ok": False, "error": f"bad json: {e}"}) + "\n"
+            )
+            sys.stdout.flush()
+            continue
+        except Exception as e:
+            # v6.6.2（F2）：单行处理兜底——任何解析/取字段异常都回
+            # ok:false 错误行，进程继续服务后续请求。
+            sys.stdout.write(
+                json.dumps(
+                    {"id": None, "ok": False, "error": f"{type(e).__name__}: {e}"},
+                    ensure_ascii=False,
+                )
+                + "\n"
             )
             sys.stdout.flush()
             continue

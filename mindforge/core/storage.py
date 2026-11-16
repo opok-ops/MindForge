@@ -318,6 +318,23 @@ def _with_rollback(method):
     return wrapper
 
 
+def _with_write_gate(method):
+    """v6.6.2：加密写路径写闸装饰器（C3/P1 rekey 写冻结）。
+
+    rekey_memories 全程持 _write_gate 重加密全库并完成引擎切换；
+    加密写路径（add_memory/update_memory/batch_add）经此装饰器在
+    闸门上串行——rekey 期间到达的写入被冻结到重加密 commit 且
+    storage.encryption 切换完成后才执行，不会用旧引擎加密落库
+    （旧密文行在切钥后不可解，属不可恢复数据丢失）。RLock 可重入，
+    同线程嵌套调用（如 compressor 经 add_memory 落摘要）无死锁。
+    """
+    @_functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with self._write_gate:
+            return method(self, *args, **kwargs)
+    return wrapper
+
+
 # v5.3.3 安全加固：LIKE 通配符转义，防止 % 和 _ 被解释为 SQL LIKE 通配符
 def _escape_like(value: str) -> str:
     """转义 LIKE 模式中的通配符 % 和 _，防止通配符注入"""
@@ -774,6 +791,10 @@ class StorageEngine:
         self._access_last_prune: float = 0.0  # v5.6.5 P1 #4
         # v5.6.4: 挂账与刷盘的并发保护（flush 的 IO 部分在锁外执行）
         self._access_lock = threading.RLock()
+        # v6.6.2（C3/P1）：加密写闸——rekey 重加密全程持锁冻结并发写，
+        # 写路径（add/update/batch_add 经 _with_write_gate）在加密+落库
+        # 期间持锁，消除 rekey commit 与引擎切换之间的旧引擎加密窗口
+        self._write_gate = threading.RLock()
         # v6.2.0 增长治理：搜索审计去抖状态（同词 60s 内只落一条）
         self._search_dedup_lock = threading.Lock()
         self._search_dedup: Dict[str, float] = {}
@@ -1322,6 +1343,7 @@ class StorageEngine:
         return default
 
     @_with_rollback
+    @_with_write_gate
     def add_memory(self,
                    content: str,
                    category: str = "general",
@@ -1723,6 +1745,7 @@ class StorageEngine:
         return [self._row_to_entry(row) for row in rows]
 
     @_with_rollback
+    @_with_write_gate
     def update_memory(self,
                       entry_id: str,
                       content: Optional[str] = None,
@@ -3663,59 +3686,79 @@ class StorageEngine:
         if not self.encrypted:
             return 0
 
-        conn = self._get_conn()
+        # v6.6.2（C3/P1）：rekey 全程持 _write_gate 写冻结。并发加密写
+        # （add/update/batch_add 经 _with_write_gate）在闸门上阻塞到重
+        # 加密 commit 且引擎切换完成后才执行，消除「重加密已 commit、
+        # storage.encryption 仍指旧引擎」窗口内旧引擎加密落库（该行
+        # 切钥后不可解，不可恢复）。RLock 可重入，无死锁风险。
+        with self._write_gate:
+            conn = self._get_conn()
 
-        # 1. 查出所有加密记忆
-        rows = conn.execute(
-            "SELECT id, ciphertext, nonce, salt FROM memories WHERE encrypted = 1 AND ciphertext IS NOT NULL"
-        ).fetchall()
+            # 1. 查出所有加密记忆
+            rows = conn.execute(
+                "SELECT id, ciphertext, nonce, salt FROM memories WHERE encrypted = 1 AND ciphertext IS NOT NULL"
+            ).fetchall()
 
-        if not rows:
-            return 0
+            if not rows:
+                # v6.6.2：空库也要在持锁状态下完成引擎切换——否则窗口内
+                # 到达的首条写入仍以旧引擎加密，切钥后不可解
+                self.encryption = new_engine
+                return 0
 
-        # 2. 在事务中批量重加密
-        try:
-            cursor = conn.cursor()
-            cursor.execute("BEGIN")
+            # 2. 在事务中批量重加密
+            try:
+                cursor = conn.cursor()
+                # v6.6.2（C4/P2）：显式 BEGIN 前先提交同线程连接上的挂账
+                # 事务（典型：搜索后立即 rekey，record_search 的审计
+                # INSERT 残留），否则 BEGIN 抛
+                # "cannot start a transaction within a transaction"
+                if conn.in_transaction:
+                    conn.commit()
+                cursor.execute("BEGIN")
 
-            count = 0
-            for row in rows:
-                memory_id = row[0]
-                ciphertext = row[1]
-                nonce = row[2]
-                salt = row[3]
+                count = 0
+                for row in rows:
+                    memory_id = row[0]
+                    ciphertext = row[1]
+                    nonce = row[2]
+                    salt = row[3]
 
-                if not ciphertext or not nonce:
-                    continue
+                    if not ciphertext or not nonce:
+                        continue
 
-                # 用旧引擎解密
-                old_blob = EncryptedBlob(
-                    ciphertext=ciphertext,
-                    nonce=nonce,
-                    salt=salt or b"",
-                )
-                plaintext = old_engine.decrypt(old_blob)
+                    # 用旧引擎解密
+                    old_blob = EncryptedBlob(
+                        ciphertext=ciphertext,
+                        nonce=nonce,
+                        salt=salt or b"",
+                    )
+                    plaintext = old_engine.decrypt(old_blob)
 
-                # 用新引擎重加密
-                new_blob = new_engine.encrypt(plaintext)
+                    # 用新引擎重加密
+                    new_blob = new_engine.encrypt(plaintext)
 
-                # 写回
-                cursor.execute(
-                    "UPDATE memories SET ciphertext = ?, nonce = ?, salt = ?, updated_at = ? WHERE id = ?",
-                    (new_blob.ciphertext, new_blob.nonce, new_blob.salt, time.time(), memory_id),
-                )
-                count += 1
+                    # 写回
+                    cursor.execute(
+                        "UPDATE memories SET ciphertext = ?, nonce = ?, salt = ?, updated_at = ? WHERE id = ?",
+                        (new_blob.ciphertext, new_blob.nonce, new_blob.salt, time.time(), memory_id),
+                    )
+                    count += 1
 
-            cursor.execute("COMMIT")
-            # v6.5.7：重加密是全局数据变换——清进程内条目缓存，
-            # 否则 _memory_cache 里的旧 ciphertext 会被后续检索读到，
-            # 用新引擎解旧密文 → 「解密失败已跳过」→ 检索 0 命中
-            self._memory_cache.clear()
-            return count
+                cursor.execute("COMMIT")
+                # v6.5.7：重加密是全局数据变换——清进程内条目缓存，
+                # 否则 _memory_cache 里的旧 ciphertext 会被后续检索读到，
+                # 用新引擎解旧密文 → 「解密失败已跳过」→ 检索 0 命中
+                self._memory_cache.clear()
+                # v6.6.2（C3）：引擎切换在本闸门内完成——门面随后对
+                # storage.encryption 的赋值幂等；回滚分支
+                # rekey_memories(new, old) 同样把 encryption 切回旧引擎，
+                # 与库内回滚后的密文状态保持一致
+                self.encryption = new_engine
+                return count
 
-        except Exception as e:
-            conn.rollback()
-            raise SecurityError(f"重加密失败，已回滚：{e}")
+            except Exception as e:
+                conn.rollback()
+                raise SecurityError(f"重加密失败，已回滚：{e}")
 
     def health_check(self) -> dict:
         """数据库健康检查（v5.0.5 新增）
@@ -7611,10 +7654,11 @@ class StorageEngine:
         字典，计数不丢。
         """
         with self._access_lock:
-            audit_dirty = self._search_audit_dirty
-            if not self._access_pending and not audit_dirty:
+            # v6.6.2：record_search 改为立即短事务提交，search 审计不再
+            # 挂账——本函数只负责访问计数批量落库。_search_audit_dirty
+            # 标志随之废弃（属性保留仅为向后兼容）。
+            if not self._access_pending:
                 return
-            self._search_audit_dirty = False
             now = time.time()
             pending = self._access_pending
             self._access_pending = {}
@@ -7628,9 +7672,17 @@ class StorageEngine:
                     UPDATE memories SET access_count = access_count + ?, last_accessed_at = ?
                     WHERE id = ?
                 """, items)
-            # v6.4.2 perf: 挂账的 search 审计 INSERT（若有）随本事务一并提交
             conn.commit()
         except Exception as e:
+            # v6.6.2 修复（缺陷 #7 / P2-5）：失败路径先回滚线程连接——
+            # executemany 已应用的 UPDATE 行必须撤销，否则与合并回的增量
+            # 在下次 flush 成功 commit 时重复落库（双写）；遗留的打开
+            # 写事务还会放大 P1-3 的写锁等待。挂账增量合并回 pending，
+            # 计数不丢（与"绝不丢计数/差额扣减"的意图一致）。
+            try:
+                conn.rollback()
+            except Exception:
+                pass
             with self._access_lock:
                 for inc, _, mid in items:
                     self._access_pending[mid] =                         self._access_pending.get(mid, 0) + inc
@@ -7766,10 +7818,10 @@ class StorageEngine:
             all_conns = getattr(self, "_all_conns", None)
             if all_conns is not None:
                 all_conns.discard(conn)
-        try:
-            getattr(self, "_all_conns", None) and self._all_conns.clear()
-        except Exception:
-            pass
+        # v6.6.2 修复（P3-7）：不再无条件 _all_conns.clear()——上面的
+        # 循环已逐个 discard 已关闭的连接，存活线程的连接保留注册，
+        # 下次 close 时「关属主已死线程的遗留连接」覆盖面才完整
+        # （清空注册表会让 v6.5.7/v6.6.1 的遗留连接回收失效）。
 
     def close_thread_conn(self) -> None:
         """关闭当前线程持有的 SQLite 连接（v5.7.1 新增）
@@ -7870,6 +7922,7 @@ class StorageEngine:
         return deleted_count
 
     @_with_rollback
+    @_with_write_gate
     def batch_add(self, entries: List[Dict[str, Any]]) -> int:
         """批量添加记忆（v5.1.3 新增，v5.5.6 增强：支持 expires_at/pinned/metadata）
 
@@ -8757,6 +8810,16 @@ class StorageEngine:
                      row["source_agent"], row["metadata"],
                      row["created_at"], row["updated_at"], now)
                 )
+                # v6.6.2 修复（P2）：contentless FTS5 的 'delete' 必须与索引
+                # 中的当前值精确匹配——此前用空串调 'delete' 造成词项/文档
+                # 不一致（v6.6.1 cleanup_expired 缺陷 #4 同款）。UPDATE 前先
+                # 抓取旧 FTS 值：删旧值 → 以 trash 标记行重插。
+                old_fts = None
+                if not self.encrypted:
+                    old_fts = conn.execute(
+                        "SELECT rowid, content, category, tags FROM memories "
+                        "WHERE id = ? AND category != 'trash'",
+                        (row["id"],)).fetchone()
                 # 软删除原记忆
                 conn.execute(
                     "UPDATE memories SET category = 'trash',"
@@ -8764,13 +8827,16 @@ class StorageEngine:
                     " updated_at = ? WHERE id = ?",
                     (archive_id, now, row["id"])
                 )
-                # 从 FTS 删除
-                if not self.encrypted:
-                    conn.execute(
-                        "INSERT INTO memory_fts(memory_fts, rowid, content, category, tags)"
-                        " VALUES('delete', (SELECT rowid FROM memories WHERE id = ?), '', '', '')",
-                        (row["id"],)
-                    )
+                if old_fts is not None:
+                    conn.execute("""
+                        INSERT INTO memory_fts(memory_fts, rowid, content, category, tags)
+                        VALUES('delete', ?, ?, ?, ?)
+                    """, (old_fts[0], old_fts[1] or "",
+                          old_fts[2] or "", old_fts[3] or "[]"))
+                    conn.execute("""
+                        INSERT INTO memory_fts (rowid, content, category, tags)
+                        VALUES (?, ?, 'trash', ?)
+                    """, (old_fts[0], old_fts[1] or "", old_fts[3] or "[]"))
                 # 删除嵌入向量
                 conn.execute(
                     "DELETE FROM memory_embeddings WHERE memory_id = ?",
@@ -8856,18 +8922,31 @@ class StorageEngine:
                      row["source_agent"], row["metadata"],
                      row["created_at"], row["updated_at"], now, reason)
                 )
+                # v6.6.2 修复（P2）：UPDATE 前先抓取旧 FTS 值，'delete' 用
+                # 真实旧值而非空串（v6.6.1 cleanup_expired 同款），删旧值
+                # → 以 trash 标记行重插，保持词项/文档一致。
+                old_fts = None
+                if not self.encrypted:
+                    old_fts = conn.execute(
+                        "SELECT rowid, content, category, tags FROM memories "
+                        "WHERE id = ? AND category != 'trash'",
+                        (mid,)).fetchone()
                 conn.execute(
                     "UPDATE memories SET category = 'trash',"
                     " metadata = JSON_SET(metadata, '$.archived_id', ?),"
                     " updated_at = ? WHERE id = ?",
                     (archive_id, now, row["id"])
                 )
-                if not self.encrypted:
-                    conn.execute(
-                        "INSERT INTO memory_fts(memory_fts, rowid, content, category, tags)"
-                        " VALUES('delete', (SELECT rowid FROM memories WHERE id = ?), '', '', '')",
-                        (row["id"],)
-                    )
+                if old_fts is not None:
+                    conn.execute("""
+                        INSERT INTO memory_fts(memory_fts, rowid, content, category, tags)
+                        VALUES('delete', ?, ?, ?, ?)
+                    """, (old_fts[0], old_fts[1] or "",
+                          old_fts[2] or "", old_fts[3] or "[]"))
+                    conn.execute("""
+                        INSERT INTO memory_fts (rowid, content, category, tags)
+                        VALUES (?, ?, 'trash', ?)
+                    """, (old_fts[0], old_fts[1] or "", old_fts[3] or "[]"))
                 conn.execute(
                     "DELETE FROM memory_embeddings WHERE memory_id = ?",
                     (row["id"],)
@@ -9574,14 +9653,17 @@ class StorageEngine:
             self._search_dedup_lock = threading.Lock()
             self._search_dedup = {}
         try:
-            # v6.4.2 perf: search 审计 INSERT 挂账不 commit，与下一次
-            # flush_access() 的批量 UPDATE 合并成同一次事务提交（IO 慢态
-            # 下 commit ~1ms，search 热路径 100 次 commit → 与挂账合并归零）。
-            # search 审计为非合规数据（v6.2.0 prune 同一分类），崩溃窗口
-            # ≤ 单次 search 时长，可接受；合规类审计不受影响仍即时 commit。
-            self._search_audit_dirty = True
+            # v6.6.2 修复（P1-3/P2-4）：search 审计改为立即短事务提交。
+            # 此前 INSERT 挂账（commit=False）+ 全局 _search_audit_dirty
+            # 标志、提交点在搜索尾部 flush——INSERT 在整个搜索期间持有
+            # SQLite 写锁，并发写 busy_timeout 后抛 database is locked；
+            # 且全局 dirty 标志 × per-thread 连接错配，并发下审计系统性
+            # 丢失。立即 commit 后写锁窗口缩至单条 INSERT，跨线程不再
+            # 丢账。search 审计为非合规数据（v6.2.0 定级），去抖语义不变。
             self._add_audit("search", q, "", "", "INTERNAL",
-                            {"query": q}, commit=False)
+                            {"query": q}, commit=True)
+        except Exception as _err:
+            logger.warning("record_search 审计写入失败: %s", _err)
         except Exception as _err:
             logger.warning("record_search 审计写入失败: %s", _err)
 

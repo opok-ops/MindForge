@@ -26,6 +26,21 @@ from typing import Dict, List, Optional, Tuple, Any
 logger = logging.getLogger(__name__)
 
 
+def _privacy_is_strict(entry) -> bool:
+    """v6.6.2 修复（P0）：privacy 归一化后比较 STRICT。
+
+    真实条目的 privacy 是 PrivacyLevel 枚举（非 str-Enum），此前与字符串
+    "STRICT" 直接比较恒为 False，守卫完全反向——绝密记忆被压缩进
+    INTERNAL 摘要（隐私 fail-closed 被打破）。取 value 归一化后比较，
+    与 _hydrate_index_from_storage 的既有写法一致，同时兼容测试桩传入
+    的字符串形态。STRICT 绝不进压缩（fail-closed）。
+    """
+    privacy = getattr(entry, "privacy", None)
+    if privacy is None:
+        return False
+    return str(getattr(privacy, "value", privacy)).upper() == "STRICT"
+
+
 @dataclass
 class CompressionCluster:
     """一个压缩簇：多条记忆 + 摘要文本"""
@@ -241,10 +256,12 @@ class MemoryCompressor:
 
         for cluster_ids in clusters:
             # STRICT privacy guard: remove STRICT memories from cluster
+            # v6.6.2 修复（P0）：见 _privacy_is_strict——枚举/字符串双形态
+            # 归一化比较，STRICT 绝不进压缩。
             safe_ids = []
             for mid in cluster_ids:
                 entry = self.storage.get_memory(mid)
-                if entry and getattr(entry, "privacy", "PUBLIC") == "STRICT":
+                if entry and _privacy_is_strict(entry):
                     skipped_strict += 1
                 else:
                     safe_ids.append(mid)
@@ -294,10 +311,11 @@ class MemoryCompressor:
             return None
 
         # STRICT guard
+        # v6.6.2 修复（P0）：同 auto_compress——归一化比较，STRICT 不进压缩
         safe_ids = []
         for mid in memory_ids:
             entry = self.storage.get_memory(mid)
-            if entry and getattr(entry, "privacy", "PUBLIC") != "STRICT":
+            if entry and not _privacy_is_strict(entry):
                 safe_ids.append(mid)
 
         if len(safe_ids) < 2:

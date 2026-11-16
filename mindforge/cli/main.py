@@ -1375,6 +1375,26 @@ def cmd_daemon(args):
     """
     from mindforge.daemon.server import run_daemon
 
+    # v6.6.2（F3）修复：加密库 fail-closed。key_file 存在即视为加密库
+    # （判定与 _get_memory 一致），而 daemon 主循环不支持密码解锁；此前
+    # 静默以 encrypted=False 打开加密库——查询全部走明文列返回空结果，
+    # 表现为「数据丢失」且无任何报错，若此时 add 还会产生明文/混杂数据。
+    key_file_path = Path(args.key_file) if args.key_file else None
+    if key_file_path and key_file_path.exists():
+        print(c(
+            f"❌ 检测到密钥文件（{args.key_file}）：该库为加密库，daemon 模式暂不支持密码解锁。",
+            "red",
+        ))
+        print(c(
+            "   为避免静默以明文模式打开加密库（查询空结果/混杂数据），已拒绝启动。",
+            "yellow",
+        ))
+        print(c(
+            "   请改用其他子命令（会提示输入密码），或去掉 --key-file 指向明文库。",
+            "yellow",
+        ))
+        return 1
+
     return run_daemon(
         db_path=args.db_path,
         key_file=args.key_file,
@@ -3611,6 +3631,13 @@ def main(argv=None):
                 _stream.reconfigure(encoding="utf-8")
         except (ValueError, AttributeError, OSError):
             pass
+    # v6.6.2（F3 附带）：stdin 同样强制 UTF-8 严格解码——daemon 子命令把
+    # stdin 转交给行式 JSON 主循环，cp936/cp1252 控制台会把 UTF-8 行读成乱码。
+    try:
+        if hasattr(sys.stdin, "reconfigure"):
+            sys.stdin.reconfigure(encoding="utf-8", errors="strict")
+    except (ValueError, AttributeError, OSError):
+        pass
     parser = argparse.ArgumentParser(
         prog="mindforge",
         description=f"MindForge v{__version__} - AI Agent 终身记忆系统",
@@ -7558,6 +7585,14 @@ def cmd_import_chat(args):
     """功能 1：一键导入记忆（ChatGPT/Claude 导出，v6.0.0）"""
     cm = _get_memory(args)
     path = args.input
+    # v6.6.2（F10）修复：接入 _safe_import_path 统一校验（存在性/允许扩展名/
+    # 100MB 上限），与其他 6 处导入命令口径一致；此前直接 open 任意路径。
+    try:
+        path = _safe_import_path(path)
+    except (ValueError, OSError) as e:
+        print(c(f"❌ 导入路径校验失败: {e}", "red"))
+        cm.close()
+        return 1
     # v6.1.2：导入前先按体积护栏拦截。importer 的模块文档自 v6.0.0 起就承诺
     # 「MAX_EXPORT_SIZE = 200MB 超大导出直接拒绝」，但该常量从未被引用，
     # 几百 MB 的导出文件会直接被 json.load 整份读进内存。

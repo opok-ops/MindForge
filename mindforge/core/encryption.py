@@ -51,6 +51,12 @@ SCRYPT_R_CURRENT = 8
 SCRYPT_P_CURRENT = 1
 # v6.5.6：KDF 成本下限（防降级攻击，见 KDFParams.from_dict）
 _KDF_MIN_SCRYPT_N = 4096
+# v6.6.2：KDF 成本上限（防资源耗尽 DoS，见 KDFParams.from_dict）——
+# 密钥文件/密文头是外部可篡改输入，调大成本可造成每次解密内存/CPU DoS
+_KDF_MAX_SCRYPT_N = 2 ** 22            # n 上限：128·N·r 内存墙 ≤ 4 GiB（r=1 时）
+_KDF_ALLOWED_SCRYPT_R = (1, 8)         # r 白名单：8=当前默认；1=历史兼容位
+_KDF_MAX_SCRYPT_P = 8                  # p 上限：防并行/内存放大 DoS
+_KDF_MAX_PBKDF2_ITERATIONS = 2 ** 21   # PBKDF2 迭代上限：防 CPU DoS
 
 # 密钥文件格式版本（v6.3 = scrypt 默认；5.6 = PBKDF2 版本化；更早 = legacy）
 KEY_FILE_VERSION = "6.3"
@@ -100,38 +106,101 @@ class KDFParams:
         向后兼容：旧密钥文件可能只有 "iterations" 字段，没有 "algorithm" 等，
         此时按 PBKDF2 处理（历史上唯一的选择）。
         v6.3.1: algorithm == "scrypt" 时读取 n / r / p。
+        v6.6.2（C5 反降级补全）：
+        - int() 解析失败统一转 SecurityError（此前裸抛 ValueError/TypeError）；
+        - 未知 algorithm 拒绝（此前任意标签都走 PBKDF2 语义；缺 algorithm
+          仍按 PBKDF2 向后兼容）；
+        - scrypt r 白名单 {1, 8}（r 参与派生，自由篡改既改变派生结果又坍缩
+          内存墙）、p ∈ [1, 8]；
+        - 成本上限：scrypt n ≤ 2^22、PBKDF2 iterations ≤ 2^21（防内存/CPU DoS）；
+        - scrypt 缺 n 直接 SecurityError（此前落到 iterations=60000 的 PBKDF2
+          语义，报出与 KDF 无关的派生错误）；n 必须为 2 的幂（scrypt 硬性
+          要求，提前给出明确报错）。
+        合法既有密钥文件（scrypt n=65536,r=8,p=1 与 PBKDF2 600000/60000）
+        照常通过。
         """
-        algorithm = data.get("algorithm", KDF_ALGORITHM_LEGACY)
-        iterations = int(data.get("iterations", PBKDF2_ITERATIONS_LEGACY))
-        # v6.5.6 安全修复：KDF 成本下限（防降级攻击）——密钥文件/密文头
-        # 是外部可篡改输入，攻击者把参数改小（如 iterations=100 或
-        # scrypt n=1024）可使暴力破解成本骤降。from_dict 是唯一入口，
-        # 此处强制下限：PBKDF2 ≥ 60k（legacy 下限）、scrypt n ≥ 4096。
-        # 真实历史数据全部满足（60k/600k/2^16），不影响兼容读取。
+        if not isinstance(data, dict):
+            raise SecurityError("KDF 参数必须是 dict，疑似篡改，已拒绝")
+        try:
+            algorithm = data.get("algorithm", KDF_ALGORITHM_LEGACY)
+            iterations = int(data.get("iterations", PBKDF2_ITERATIONS_LEGACY))
+            salt_length = int(data.get("salt_length", 16))
+        except (TypeError, ValueError) as exc:
+            raise SecurityError(
+                f"KDF 参数字段类型非法（algorithm/iterations/salt_length 解析"
+                f"失败：{exc}），疑似篡改，已拒绝") from exc
+
+        # v6.6.2：未知 algorithm 拒绝——防止 scrypt 参数被当 PBKDF2 读取
+        # 或任意标签走错派生分支
+        if algorithm not in (KDF_ALGORITHM_CURRENT, KDF_ALGORITHM_LEGACY):
+            raise SecurityError(
+                f"未知 KDF 算法（{algorithm!r}），疑似篡改，已拒绝")
+
         if algorithm == KDF_ALGORITHM_CURRENT:
-            if int(data.get("n", iterations)) < _KDF_MIN_SCRYPT_N:
+            if "n" not in data:
+                # v6.6.2：scrypt 参数缺 n 直接拒绝（此前落到 iterations
+                # 承载的 PBKDF2 语义，参数错乱且报错混乱）
+                raise SecurityError(
+                    "scrypt KDF 参数缺少 n 字段，密钥文件/密文头疑似损坏，已拒绝")
+            try:
+                n = int(data["n"])
+                r = int(data.get("r", SCRYPT_R_CURRENT))
+                p = int(data.get("p", SCRYPT_P_CURRENT))
+            except (TypeError, ValueError) as exc:
+                raise SecurityError(
+                    f"scrypt KDF 参数字段类型非法（n/r/p 解析失败：{exc}），"
+                    f"疑似篡改，已拒绝") from exc
+            # v6.5.6 安全修复：KDF 成本下限（防降级攻击）——密钥文件/密文头
+            # 是外部可篡改输入，攻击者把参数改小（如 iterations=100 或
+            # scrypt n=1024）可使暴力破解成本骤降。from_dict 是唯一入口，
+            # 此处强制下限：PBKDF2 ≥ 60k（legacy 下限）、scrypt n ≥ 4096。
+            # 真实历史数据全部满足（60k/600k/2^16），不影响兼容读取。
+            if n < _KDF_MIN_SCRYPT_N:
                 raise SecurityError(
                     f"KDF 参数低于安全下限（scrypt n={data.get('n')} < "
                     f"{_KDF_MIN_SCRYPT_N}），疑似降级攻击，已拒绝")
-        elif iterations < PBKDF2_ITERATIONS_LEGACY:
-            raise SecurityError(
-                f"KDF 参数低于安全下限（PBKDF2 iterations={iterations} < "
-                f"{PBKDF2_ITERATIONS_LEGACY}），疑似降级攻击，已拒绝")
-        if algorithm == KDF_ALGORITHM_CURRENT:
+            # v6.6.2：成本上限（防内存/CPU DoS）
+            if n > _KDF_MAX_SCRYPT_N:
+                raise SecurityError(
+                    f"KDF 参数超过安全上限（scrypt n={n} > "
+                    f"{_KDF_MAX_SCRYPT_N}），疑似资源耗尽攻击，已拒绝")
+            # v6.6.2：n 必须为 2 的幂（scrypt 硬性要求，提前明确报错）
+            if n <= 0 or (n & (n - 1)) != 0:
+                raise SecurityError(
+                    f"scrypt n={n} 不是 2 的幂，KDF 参数非法，已拒绝")
+            # v6.6.2：r 白名单 / p 范围——r、p 参与派生，篡改既降级又让
+            # 原密文不可解（狩猎报告 C5 实测）
+            if r not in _KDF_ALLOWED_SCRYPT_R:
+                raise SecurityError(
+                    f"scrypt r={r} 不在允许集合 {_KDF_ALLOWED_SCRYPT_R} 中，"
+                    f"疑似降级/篡改，已拒绝")
+            if p < 1 or p > _KDF_MAX_SCRYPT_P:
+                raise SecurityError(
+                    f"scrypt p={p} 超出允许范围 [1, {_KDF_MAX_SCRYPT_P}]，"
+                    f"疑似篡改，已拒绝")
             # scrypt：iterations 承载 N（信息性）；实际派生用 n/r/p
-            n = int(data.get("n", iterations))
             return cls(
                 algorithm=algorithm,
                 iterations=n,
-                salt_length=int(data.get("salt_length", 16)),
+                salt_length=salt_length,
                 n=n,
-                r=int(data.get("r", SCRYPT_R_CURRENT)),
-                p=int(data.get("p", SCRYPT_P_CURRENT)),
+                r=r,
+                p=p,
             )
+        # PBKDF2（含 legacy 缺 algorithm 的向后兼容路径）
+        if iterations < PBKDF2_ITERATIONS_LEGACY:
+            raise SecurityError(
+                f"KDF 参数低于安全下限（PBKDF2 iterations={iterations} < "
+                f"{PBKDF2_ITERATIONS_LEGACY}），疑似降级攻击，已拒绝")
+        # v6.6.2：成本上限（防 CPU DoS）
+        if iterations > _KDF_MAX_PBKDF2_ITERATIONS:
+            raise SecurityError(
+                f"KDF 参数超过安全上限（PBKDF2 iterations={iterations} > "
+                f"{_KDF_MAX_PBKDF2_ITERATIONS}），疑似资源耗尽攻击，已拒绝")
         return cls(
             algorithm=algorithm,
             iterations=iterations,
-            salt_length=int(data.get("salt_length", 16)),
+            salt_length=salt_length,
             n=SCRYPT_N_CURRENT,
             r=SCRYPT_R_CURRENT,
             p=SCRYPT_P_CURRENT,
@@ -183,6 +252,12 @@ class SecurityError(Exception):
     pass
 
 
+# v6.6.2（C7）：密文算法白名单——algorithm 标签只认 AES-256-GCM，
+# 任何其他标签（含未来格式占位，如 "AES-256-GCM-v9-future"）一律拒绝，
+# 防止算法标识语义漂移静默接受未知密文格式
+_BLOB_ALLOWED_ALGORITHMS = ("AES-256-GCM",)
+
+
 @dataclass
 class EncryptedBlob:
     """加密数据块
@@ -211,15 +286,41 @@ class EncryptedBlob:
 
     @classmethod
     def from_dict(cls, data: dict) -> "EncryptedBlob":
+        """从字典构造（v6.6.2/C7 鲁棒性加固）
+
+        - 缺 ciphertext/nonce/salt 字段、坏 base64 统一包装为 SecurityError
+          （此前裸抛 KeyError/binascii.Error，调用方收到原始 traceback）；
+        - algorithm 非 AES-256-GCM 白名单一律拒绝（此前任意标签静默接受，
+          且 algorithm 不参与 AAD，未来换算法时无任何拦载点）。
+        to_dict/from_dict 往返与既有密文格式不变。
+        """
+        if not isinstance(data, dict):
+            raise SecurityError("EncryptedBlob 数据必须是 dict，疑似损坏")
+        for field in ("ciphertext", "nonce", "salt"):
+            if field not in data or data[field] is None:
+                raise SecurityError(
+                    f"EncryptedBlob 缺少 {field} 字段，密文疑似损坏，已拒绝")
+        algorithm = data.get("algorithm", "AES-256-GCM")
+        if algorithm not in _BLOB_ALLOWED_ALGORITHMS:
+            raise SecurityError(
+                f"未知加密算法标识（{algorithm!r}），疑似篡改/格式漂移，已拒绝")
+        try:
+            ciphertext = base64.b64decode(data["ciphertext"])
+            nonce = base64.b64decode(data["nonce"])
+            salt = base64.b64decode(data["salt"])
+            tag = base64.b64decode(data["tag"]) if data.get("tag") else None
+        except Exception as exc:
+            raise SecurityError(
+                f"EncryptedBlob base64 解码失败，密文疑似损坏：{exc}") from exc
         kdf_params = None
         if "kdf_params" in data and data["kdf_params"]:
             kdf_params = KDFParams.from_dict(data["kdf_params"])
         return cls(
-            ciphertext=base64.b64decode(data["ciphertext"]),
-            nonce=base64.b64decode(data["nonce"]),
-            salt=base64.b64decode(data["salt"]),
-            tag=base64.b64decode(data["tag"]) if data.get("tag") else None,
-            algorithm=data.get("algorithm", "AES-256-GCM"),
+            ciphertext=ciphertext,
+            nonce=nonce,
+            salt=salt,
+            tag=tag,
+            algorithm=algorithm,
             kdf_params=kdf_params,
         )
 
@@ -442,6 +543,37 @@ def _verify_key_password(engine: EncryptionEngine, key_data: dict,
         return False
 
 
+def _verify_key_password_strict(engine: EncryptionEngine, key_data: dict) -> None:
+    """v6.6.2（C6）：init 路径的 verify_blob 校验，失败时区分两种定性。
+
+    - verify_blob 本身缺字段/坏 base64（EncryptedBlob.from_dict 拒绝）
+      → SecurityError，消息注明「校验材料损坏」——此时密码可能正确，
+      误报「密码错误」会把用户困在死局（引擎/盐完好，数据本可解）；
+    - 令牌解密失败或常量时间比较不匹配 → SecurityError「密码错误」，
+      并提示若密码确认无误则可能是校验材料损坏（GCM 认证失败在密码
+      学上无法区分两者，消息同时列出两种可能并给出恢复建议）。
+
+    legacy 文件（无 verify_blob）不在此处理，保持 v5.7.3 的只读加载语义。
+    """
+    if "verify_blob" not in key_data:
+        return  # legacy 文件：由 init_engine 的 legacy 分支处理
+    try:
+        blob = EncryptedBlob.from_dict(key_data["verify_blob"])
+    except SecurityError as exc:
+        raise SecurityError(
+            "密钥文件校验材料损坏（verify_blob 无法解析）——密码可能正确，"
+            f"请从备份恢复密钥文件后再试：{exc}") from exc
+    try:
+        decrypted = engine.decrypt(blob)
+        if hmac.compare_digest(decrypted, _KEY_VERIFY_TOKEN):
+            return
+    except SecurityError:
+        pass
+    raise SecurityError(
+        "密码错误（若确认密码无误，则可能是密钥文件校验材料损坏，"
+        "请从备份恢复密钥文件后重试）")
+
+
 def get_key_params(key_file: str) -> Optional[KDFParams]:
     """读取密钥文件中的 KDF 参数
 
@@ -484,12 +616,30 @@ def init_engine(password: str, key_file: str = "./data/.key") -> EncryptionEngin
         key_path.parent.mkdir(parents=True, exist_ok=True)
 
         if key_path.exists():
-            with open(key_path, "r", encoding="utf-8") as f:
-                key_data = json.load(f)
-            salt = base64.b64decode(key_data["salt"])
+            # v6.6.2（C6）：密钥文件级损坏（坏 JSON/缺 salt/坏 base64）
+            # 统一包装为 SecurityError，消息注明密钥文件损坏——此前裸抛
+            # JSONDecodeError/KeyError/binascii.Error，调用方收到原始 traceback
+            try:
+                with open(key_path, "r", encoding="utf-8") as f:
+                    key_data = json.load(f)
+                salt = base64.b64decode(key_data["salt"])
+            except SecurityError:
+                raise
+            except Exception as exc:
+                raise SecurityError(
+                    f"密钥文件损坏（{key_file}）：JSON 解析失败或 salt 字段"
+                    f"缺失/非法——{exc}") from exc
 
             # v5.6.0: 从密钥文件读取 KDF 参数，向后兼容
-            kdf_params = get_key_params(key_file)
+            # v6.6.2：KDF 参数非法（如 scrypt 缺 n）由 KDFParams.from_dict
+            # 统一抛 SecurityError；读取层的意外异常同样包装为密钥文件损坏
+            try:
+                kdf_params = get_key_params(key_file)
+            except SecurityError:
+                raise
+            except Exception as exc:
+                raise SecurityError(
+                    f"密钥文件损坏（{key_file}）：读取 KDF 参数失败——{exc}") from exc
             if kdf_params is None:
                 kdf_params = KDFParams(
                     algorithm=KDF_ALGORITHM_LEGACY,
@@ -502,8 +652,8 @@ def init_engine(password: str, key_file: str = "./data/.key") -> EncryptionEngin
             )
 
             # v5.6.0: 验证密码正确性（有 verify_blob 时才验证）
-            if not _verify_key_password(engine, key_data):
-                raise SecurityError("密码错误")
+            # v6.6.2（C6）：改用严格校验，区分「密码错误」与「校验材料损坏」
+            _verify_key_password_strict(engine, key_data)
 
             # v5.7.3 安全修复：legacy 密钥文件（无 verify_blob）不再自动升级重写。
             # 原实现：legacy 文件 _verify_key_password 恒返回 True → 密码即使错误也会
@@ -535,6 +685,13 @@ def rekey_engine(
     new_iterations: Optional[int] = None,
 ) -> Tuple[EncryptionEngine, EncryptionEngine]:
     """更换密钥（密码变更或 KDF 参数升级）
+
+    .. warning::
+        v6.6.2（C9）：本函数仍是「先换密钥文件、后重加密」的危险顺序，
+        仅限测试/内部使用；生产路径一律走 MindForge.rekey()（先重加密
+        事务、后原子替换密钥文件）。直接调用本函数的调用方必须自行完成
+        全库重加密——否则库中密文与密钥文件不一致（旧密码被新密钥文件
+        拒绝、新密钥解不开旧密文），数据不可恢复。
 
     生成新的加密密钥并更新密钥文件，同时返回新旧引擎供调用者
     对已加密数据进行重加密。

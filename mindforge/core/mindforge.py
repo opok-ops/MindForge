@@ -29,10 +29,12 @@ from .encryption import (
     EncryptionEngine,
     SecurityError,
     init_engine as _init_engine,
-    rekey_engine as _rekey_engine,
     get_key_params,
     PBKDF2_ITERATIONS_CURRENT,
 )
+# v6.6.2（C9）：删除死 import rekey_engine——全仓无生产调用点，且
+# rekey_engine 仍是「先换密钥文件、后重加密」的危险顺序，仅限测试/内部
+# 使用；生产路径走门面 rekey()（先重加密事务、后原子替换密钥文件）
 from .indexer import IndexEngine
 from .query import QueryEngine
 from .embedding import EmbeddingEngine
@@ -404,8 +406,13 @@ class MindForge:
         真实密文判断库侧状态：
         - tmp 能解开库中密文 → 库已是新密文：把 tmp 原子替换为正式
           密钥文件，恢复完成，返回 True；
-        - tmp 解不开 → 崩溃发生在 commit 之前，库仍是旧密文：tmp 是
-          垃圾，删除后按旧密钥正常初始化，返回 False。
+        - tmp 解不开（SecurityError，确定性失败）→ 崩溃发生在 commit
+          之前，库仍是旧密文：tmp 是垃圾，删除后按旧密钥正常初始化，
+          返回 False；
+        - v6.6.2（C2，P1）：密码验证通过后，试探/替换阶段遇到非解密类
+          异常（DB 被锁 OperationalError、I/O 故障等环境问题）→ 库侧
+          状态不明：此时 tmp 是唯一新密钥副本，绝不能删——保留 tmp
+          留待下次 init_with_password 重试，返回 False。
         """
         import os as _os
         import base64 as _b64
@@ -427,8 +434,24 @@ class MindForge:
                 password, salt, kdf_params=params)
             if not _verify_key_password(engine, key_data):
                 return False  # 密码不对，保留 tmp 等下次（可能只是打错密码）
+        except Exception as e:
+            # 阶段 1（读 tmp/验证密码）失败：tmp 不可用（文件损坏/参数
+            # 非法）或密码不对——按旧密钥继续。密码未验证通过，不涉及
+            # C2 的「唯一新密钥副本」保护。
+            logger.warning("rekey 残留恢复未生效（%s），按旧密钥继续", e)
+            try:
+                tmp_key.unlink()
+            except OSError:
+                pass
+            return False
 
-            # 试探解密：库中有加密行则必须能用 tmp 引擎解开
+        # 阶段 2：试探解密（密码已通过 tmp 的 verify_blob 验证）。
+        # v6.6.2（C2，P1）：此处必须区分解密失败与环境故障——
+        # 解密失败（SecurityError）= 确定性结论：库中密文不是 tmp 密钥的
+        #   密文 = 崩溃发生在 commit 之前，库仍是旧密文，tmp 是垃圾可删；
+        # 其余异常（sqlite3.OperationalError/IO 等）= 环境故障，库侧状态
+        #   不明：tmp 是唯一新密钥副本，删掉 = 全库永久不可恢复，必须保留。
+        try:
             db_file = Path(self.config.db_path)
             if db_file.exists():
                 conn = _sqlite3.connect(str(db_file))
@@ -443,21 +466,33 @@ class MindForge:
                     blob = EncryptedBlob(
                         ciphertext=row[0], nonce=row[1], salt=row[2],
                         kdf_params=params or engine.kdf_params)
-                    engine.decrypt(blob)  # 失败抛异常 → 走下方 discard
-            _os.replace(str(tmp_key), str(key_path))
+                    engine.decrypt(blob)  # 失败抛 SecurityError → 走下方 discard
+        except SecurityError as e:
             logger.warning(
-                "检测到 rekey 中断残留（%s）：库已是新密文，已自动完成"
-                "密钥文件恢复", tmp_key)
-            return True
-        except Exception as e:
-            # 解不开/文件损坏：库仍是旧密文（或状态不明），删除 tmp 按
-            # 旧密钥初始化。旧密钥能正常解开库即无损失。
-            logger.warning("rekey 残留恢复未生效（%s），按旧密钥继续", e)
+                "rekey 残留试探解密失败（%s）：库仍是旧密文，删除残留 tmp", e)
             try:
                 tmp_key.unlink()
             except OSError:
                 pass
             return False
+        except Exception as e:
+            logger.warning(
+                "rekey 残留恢复遇到环境故障（%s），库侧状态不明：保留 %s，"
+                "将在下次 init_with_password 时重试", e, tmp_key)
+            return False
+
+        # 阶段 3：原子替换密钥文件。替换失败同样是环境故障，不得删 tmp。
+        try:
+            _os.replace(str(tmp_key), str(key_path))
+        except OSError as e:
+            logger.warning(
+                "rekey 残留密钥文件替换失败（%s）：保留 %s 留待下次重试",
+                e, tmp_key)
+            return False
+        logger.warning(
+            "检测到 rekey 中断残留（%s）：库已是新密文，已自动完成"
+            "密钥文件恢复", tmp_key)
+        return True
 
     def init_with_password(self, password: str):
         """使用密码初始化加密引擎
@@ -487,6 +522,12 @@ class MindForge:
         self._pending_encryption = False
 
         # 完成延迟的初始化链
+        # v6.6.2（C8）：init_with_password 重入时先关闭旧 storage——
+        # 此前无条件 _init_storage() 重建，旧 StorageEngine 的线程连接
+        # 泄漏（Windows 下还会锁住 db 文件）；与 _init_index/_init_query
+        # 的 None 守卫同语义
+        if self._storage is not None:
+            self._storage.close()
         self._init_storage()
         if self._index is None:
             self._init_index()
@@ -1325,6 +1366,11 @@ class MindForge:
                         "importance": updated_entry.importance.value if hasattr(updated_entry.importance, 'value') else str(updated_entry.importance),
                     }
                     self._index.index_memory(memory_id, idx_content, metadata=idx_meta)
+                    # v6.6.2（B-3）：UPDATE 改内容不改 rowid，FTS df 剪枝
+                    # 缓存以 max(rowid) 为失效标记无法感知，必须显式失活，
+                    # 否则 stale df 会把目标词误剪导致 FTS 路丢文档。
+                    if hasattr(self._index, "invalidate_fts_vocab_cache"):
+                        self._index.invalidate_fts_vocab_cache()
             except Exception as e:
                 logger.warning("Failed to re-index memory %s after update: %s", memory_id, e)
 

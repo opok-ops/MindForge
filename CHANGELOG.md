@@ -3,6 +3,68 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.6.2] - 2026-11-17
+
+终极稳定版：四路并行深查（加密面/检索链路/接口面/并发面），1 项 P0 + 3 项 P1 + 12 项 P2 + 7 项低危全部落地，每项带契约测试与复现转绿。
+
+- **P0：MemoryCompressor 的 STRICT 守卫完全失效（隐私 fail-closed 打破）。**
+  `entry.privacy == "STRICT"` 与枚举比较恒 False，两处守卫逻辑反向——实测 3 条
+  STRICT（绝密）记忆全部被压缩进一条 INTERNAL 级摘要，明文入摘要。修复：归一化
+  枚举值比较，STRICT 永不参与压缩（实测转绿）。
+- **P1：rekey 引擎切换窗口无写冻结——窗口内 add 用旧引擎加密，切钥后该行不可恢复。**
+  实测单线程交错复现：窗口内写入的行旧密码被新密钥文件拒绝、新密码解不开（行级
+  丢失）。修复：StorageEngine 新增 `_write_gate` RLock——rekey_memories 全程持闸
+  并在闸内完成引擎切换，add/update/batch_add 加密+落库全程持闸。
+- **P1：`_maybe_recover_rekey` 把瞬时环境异常当"库是旧密文"，删除唯一新密钥副本。**
+  v6.6.1 的崩溃恢复路径在探测遇到 DB 锁/I/O 故障时 unlink `.rekey-tmp`——实测
+  该副本是库已换新密文后的唯一救星。修复：密码验证通过后，非解密类异常一律保留
+  tmp 留待下次恢复（实测瞬时锁注入 → tmp 保留 → 下次 init 自动恢复成功）。
+- **P1：IndexEngine/VectorIndex 全程无锁。** REST 是 ThreadingHTTPServer 共享
+  同一索引，并发 search×index_memory 实测打出 `RuntimeError: dictionary changed
+  size during iteration`（3 万 docs），且 add/remove 交错可静默污染倒排链产生
+  错误评分。修复：IndexEngine 加 RLock 包住全部内存结构读写。
+- **P2 批（核心）**：①缺陷 #7 实测收口——`_flush_all_access` commit 失败恢复
+  `_search_audit_dirty` 并回滚线程事务（消除审计无账可查与访问计数双写）；
+  ②`record_search` 改立即短事务（消除搜索期间写锁长持有导致的并发
+  `database is locked` 与跨线程审计丢失）；③`rekey_memories` 显式 BEGIN 前先
+  commit 挂账事务（"先搜索后 rekey 必然失败"修复）；④TF-IDF df/doc_count
+  漂移（update 重复计数、remove 不回收）；⑤FTS df 剪枝缓存对 UPDATE 失活
+  （新增 invalidate_fts_vocab_cache，update_memory 接线）；⑥graph 路 `w or 1.0`
+  把 weight=0 边反转成最强权重；⑦temporal 盲分覆盖真实分数且 explain
+  winner/final 不更新；⑧expand_context 加密邻居不解密产出空串；⑨「二十天前」
+  被算成 30 天（中文 X十 分支）；⑩auto_archive 两处空值 FTS delete（幽灵行 +
+  malformed 风险，与 v6.6.1 cleanup_expired 同款修复）。
+- **P2 批（加密）**：KDFParams.from_dict 反降级补全（r 白名单 {1,8}、p≤8、
+  n≤2^22、PBKDF2 iterations≤2^21、类型异常转 SecurityError）；密钥文件损坏
+  统一 SecurityError 且 verify_blob 失败消息区分"密码错误"与"校验材料损坏"；
+  EncryptedBlob.from_dict 鲁棒性 + algorithm 白名单；init_with_password 重入
+  先 close 旧 storage（连接泄漏修复）。
+- **P2 批（接口）**：MCP 非 dict JSON 消息杀死服务进程（回 -32600）；daemon
+  同类畸形输入杀死常驻进程（宽异常兜底）；CLI daemon 入口对加密库静默以明文
+  打开返回空结果（改 fail-closed 报错）；MCP JSON-RPC 错误码归位（未知工具/
+  坏 params → -32602，坏 JSON → -32700）；去掉多余的 notifications/initialized
+  回发；daemon stdin 强制 UTF-8（中文 Windows cp936 下中文请求必然失败）；MCP
+  退出路径补 mf.close()。
+- **低危批**：`/api/compress` 非法参数 400 化；限流器逐出改按最久未活跃；
+  cmd_import_chat 接入路径安全校验；KnowledgeGraph 写路径加锁；
+  AdaptiveContextEngine._windows 上限淘汰（会话 ID 客户端可控的内存无界增长）；
+  CJK gram 顺序截断改均匀采样（长 token 尾部仍可搜）；删除 rekey_engine 死
+  import 并标注"仅测试用"。
+
+### Tests
+
+- 新增 `tests/test_v662_stability.py`（15）+ `tests/test_v662_search.py`（19）+
+  `tests/test_v662_crypto.py`（37）+ `tests/test_v662_iface.py`（16）= 87 项契约。
+- 四份狩猎报告的全部实测复现转绿（rekey 窗口/恢复/BEGIN 碰撞、STRICT、并发
+  索引、审计丢失、MCP/daemon 畸形输入、daemon 加密库、flush 双写）。
+- 全量 **1441** 项（1435 通过 + 6 项 CLI e2e 环境性既有失败：子进程
+  `python -m mindforge.cli.main` 在未安装仓库下 ModuleNotFoundError，与本版
+  改动无关；v6.6.1 基线同样 6 项失败、1348 通过）。
+- 冒烟 12 问 recall@5 0.8333 / MRR@5 0.7917（与 v6.6.1 持平，检索修复无回归）。
+- 未验证：向量融合路（sentence-transformers 未安装，检视级）；真实磁盘满
+  errno 行为（注入模拟）；rekey 真实多线程压测（单线程确定性交错证明）。
+
+
 ## [6.6.1] - 2026-11-16
 
 Bug 修复 + LLM 判官接线 + 检索兜底。缺陷狩猎报告 8 项（5 项实测复现），本轮修复 6 项，全部带契约测试。

@@ -7,6 +7,7 @@ import re
 import json
 import uuid
 import time
+import threading
 import sqlite3  # v5.4.7 修复 C-3：异常处理中引用 sqlite3.OperationalError 需要此导入
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple
@@ -97,6 +98,10 @@ class KnowledgeGraph:
         self._adjacency: Dict[str, List[Tuple[str, str, float]]] = defaultdict(list)
         # v5.7.9：同进程内已抽取记忆 ID（防抖，避免全库增量重复建关系）
         self._processed_memory_ids: set = set()
+        # v6.6.2（P3）：实体/关系内存结构的写保护——add_entity/add_relation/
+        # _get_or_create_entity 并发时 dict 与 _adjacency 交错变更；
+        # RLock 可重入（add_relation 内部调 _get_or_create_entity）
+        self._lock = threading.RLock()
         if self.storage is not None and auto_load:
             self._ensure_tables()
             self._load_from_db()
@@ -290,77 +295,80 @@ class KnowledgeGraph:
     def add_entity(self, name: str, entity_type: str = "general",
                    description: str = "", metadata: Optional[Dict] = None) -> KnowledgeEntity:
         """添加实体"""
-        entity_id = str(uuid.uuid4())
-        now = time.time()
+        with self._lock:
+            entity_id = str(uuid.uuid4())
+            now = time.time()
 
-        entity = KnowledgeEntity(
-            id=entity_id,
-            name=name,
-            entity_type=entity_type,
-            description=description,
-            metadata=metadata or {},
-            created_at=now,
-        )
+            entity = KnowledgeEntity(
+                id=entity_id,
+                name=name,
+                entity_type=entity_type,
+                description=description,
+                metadata=metadata or {},
+                created_at=now,
+            )
 
-        self.entities[entity_id] = entity
+            self.entities[entity_id] = entity
 
-        if self.storage:
-            try:
-                conn = self.storage._get_conn()
-                conn.execute("""
-                    INSERT OR IGNORE INTO knowledge_graph (id, entity, entity_type, description, metadata, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (entity_id, name, entity_type, description,
-                      json.dumps(metadata or {}, ensure_ascii=False), now))
-                conn.commit()
-            except sqlite3.OperationalError as _kg_err:
-                logger.warning("写入知识图谱实体失败: %s", _kg_err)
+            if self.storage:
+                try:
+                    conn = self.storage._get_conn()
+                    conn.execute("""
+                        INSERT OR IGNORE INTO knowledge_graph (id, entity, entity_type, description, metadata, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (entity_id, name, entity_type, description,
+                          json.dumps(metadata or {}, ensure_ascii=False), now))
+                    conn.commit()
+                except sqlite3.OperationalError as _kg_err:
+                    logger.warning("写入知识图谱实体失败: %s", _kg_err)
 
-        return entity
+            return entity
 
     def add_relation(self, from_name: str, to_name: str, relation_type: str,
                      weight: float = 1.0, memory_id: str = "") -> KnowledgeRelation:
         """添加关系"""
-        from_entity = self._get_or_create_entity(from_name)
-        to_entity = self._get_or_create_entity(to_name)
+        with self._lock:
+            from_entity = self._get_or_create_entity(from_name)
+            to_entity = self._get_or_create_entity(to_name)
 
-        rel_id = str(uuid.uuid4())
-        now = time.time()
+            rel_id = str(uuid.uuid4())
+            now = time.time()
 
-        relation = KnowledgeRelation(
-            id=rel_id,
-            from_entity=from_entity.id,
-            to_entity=to_entity.id,
-            relation_type=relation_type,
-            weight=weight,
-            memory_ids=[memory_id] if memory_id else [],
-            created_at=now,
-        )
+            relation = KnowledgeRelation(
+                id=rel_id,
+                from_entity=from_entity.id,
+                to_entity=to_entity.id,
+                relation_type=relation_type,
+                weight=weight,
+                memory_ids=[memory_id] if memory_id else [],
+                created_at=now,
+            )
 
-        self.relations[rel_id] = relation
-        self._adjacency[from_entity.id].append((to_entity.id, relation_type, weight))
-        self._adjacency[to_entity.id].append((from_entity.id, relation_type, weight))
+            self.relations[rel_id] = relation
+            self._adjacency[from_entity.id].append((to_entity.id, relation_type, weight))
+            self._adjacency[to_entity.id].append((from_entity.id, relation_type, weight))
 
-        if self.storage:
-            try:
-                conn = self.storage._get_conn()
-                conn.execute("""
-                    INSERT INTO graph_relations (id, from_entity, to_entity, relation_type, weight, memory_ids, metadata, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (rel_id, from_entity.id, to_entity.id, relation_type,
-                      weight, json.dumps([memory_id] if memory_id else []),
-                      json.dumps({}), now))
-                conn.commit()
-            except sqlite3.OperationalError as _kg_err:
-                logger.warning("写入知识图谱关系失败: %s", _kg_err)
+            if self.storage:
+                try:
+                    conn = self.storage._get_conn()
+                    conn.execute("""
+                        INSERT INTO graph_relations (id, from_entity, to_entity, relation_type, weight, memory_ids, metadata, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (rel_id, from_entity.id, to_entity.id, relation_type,
+                          weight, json.dumps([memory_id] if memory_id else []),
+                          json.dumps({}), now))
+                    conn.commit()
+                except sqlite3.OperationalError as _kg_err:
+                    logger.warning("写入知识图谱关系失败: %s", _kg_err)
 
-        return relation
+            return relation
 
     def _get_or_create_entity(self, name: str) -> KnowledgeEntity:
-        for entity in self.entities.values():
-            if entity.name.lower() == name.lower():
-                return entity
-        return self.add_entity(name)
+        with self._lock:
+            for entity in self.entities.values():
+                if entity.name.lower() == name.lower():
+                    return entity
+            return self.add_entity(name)
 
     def process_memory(self, memory_id: str, content: str) -> Tuple[List[KnowledgeEntity], List[KnowledgeRelation]]:
         """处理一条记忆，提取实体和关系"""

@@ -276,6 +276,16 @@ See [SECURITY.md](SECURITY.md) for the full security policy.
 - [Contributing guide](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
 
+## About the Author
+
+Solo maintainer building **open-source memory infrastructure for AI agents** — systems that remember, forget, and retrieve knowledge the way humans do.
+
+Focus areas: agent memory architecture · local-first AI infrastructure (no cloud lock-in) · privacy-preserving AI (encryption, access control, on-device data) · hybrid retrieval (vector + lexical + graph + fuzzy).
+
+Tech stack: `Python` · `TypeScript` · `SQLite` · `FastAPI` · `MCP` · `Embeddings` · `Knowledge Graphs`
+
+Official plugin: [dsh-mindforge](https://github.com/opok-ops/dsh-mindforge) — encrypted memory bridge for DeepSeek Harness.
+
 ## License
 
 [MIT](LICENSE) — Copyright (c) 2026 MindForge Project. If MindForge is useful to you, consider starring it on GitHub — it helps the project stay active and visible.

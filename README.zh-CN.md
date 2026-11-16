@@ -255,6 +255,16 @@ memory:
 - [贡献指南](CONTRIBUTING.md)
 - [安全策略](SECURITY.md)
 
+## 关于作者
+
+独立维护者，专注构建面向 AI Agent 的**开源记忆基础设施**——让 AI 像人一样记忆、遗忘、检索知识。
+
+研究方向：Agent 记忆架构 · 本地优先基础设施（不锁定云服务） · 隐私保护 AI（加密、访问控制、端侧数据） · 混合检索（向量 + 词法 + 图 + 模糊）。
+
+技术栈：`Python` · `TypeScript` · `SQLite` · `FastAPI` · `MCP` · `Embeddings` · `知识图谱`
+
+官方插件：[dsh-mindforge](https://github.com/opok-ops/dsh-mindforge) — DeepSeek Harness 的加密记忆桥接。
+
 ## 许可证
 
 [MIT](LICENSE) — Copyright (c) 2026 MindForge Project。如果 MindForge 对你有用，欢迎在 GitHub 上点亮 Star，这会让项目保持活跃与可见。

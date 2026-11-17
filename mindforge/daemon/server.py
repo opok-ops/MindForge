@@ -290,7 +290,12 @@ def run_daemon(db_path: str, key_file: str | None = None, encrypted: bool = Fals
             # v6.6.3（次要-2）：handler 返回的 dict 若自带 error 字段（如
             # memory-recall/memory-context 在 agent 为空时返回的错误 dict），
             # 是调用方配置错误，不能包装成 ok:true 静默吞掉——转 ok:false。
-            if isinstance(data, dict) and "error" in data and "ok" not in data:
+            # v6.6.4 修复（缺陷 #11）：判定收紧为 error 非空——compress 域
+            # （decompress 等）的返回契约里 error 是状态位，成功时为空串，
+            # v6.6.3 的存在性判定把这类成功响应误转成 ok:false + 空 error，
+            # e2e「decompress 可逆原子契约」因此拿不到 restored_count 而
+            # 失败（376dad1 起 CI e2e 红的根因）。非空 error 才是失败。
+            if isinstance(data, dict) and "ok" not in data and data.get("error"):
                 sys.stdout.write(
                     json.dumps(
                         {"id": rid, "ok": False, "error": str(data.get("error"))},

@@ -5,7 +5,7 @@ All notable changes to MindForge will be documented in this file.
 
 ## [6.6.3] - 2026-11-17
 
-终极修复版 + 检索增强：外审稳定性狩猎 3 项必修 + 2 项次要全清偿，temporal 解析六项修复（含一个 v6.5.7 既有量级 bug），检索层新增链式两跳 / 图路径感知 / open-domain 召回入口（named v6.6 targets 落地）。36 项新契约测试（tests/test_v663_fixes.py），全量 1477 项测试通过。
+终极修复版 + 检索增强：外审稳定性狩猎 3 项必修 + 2 项次要全清偿，temporal 解析六项修复（含一个 v6.5.7 既有量级 bug），检索层新增链式两跳 / 图路径感知 / open-domain 召回入口（named v6.6 targets 落地）。36 项新契约测试（tests/test_v663_fixes.py），全量 1481 项测试通过。
 
 ### Bug 修复（稳定性狩猎）
 
@@ -35,7 +35,8 @@ All notable changes to MindForge will be documented in this file.
 ### 测试
 
 - 新增 `tests/test_v663_fixes.py`：36 项契约（temporal 解析 15、lone surrogate 2、rekey 互斥 2、daemon 2、REST 413 单响应 1、图路径 3、链式/拆解/宽泛 9、T6 证据加权 1），全绿。
-- 全量回归：**1477 passed, 0 failed**（1441 既有 + 36 新增）。
+- 全量回归：**1481 passed, 0 failed**（1441 既有 + 36 契约 + 4 守卫）。
+- **同版追加：benchmarks/repro_benchmark.py 头部回归修复（外部反馈）**。该脚本入仓时（v6.5.12–v6.6.2 窗口）头部常量与 import 整块缺失（DEFAULT_N / _REPO / MindForge / MemoryConfig / time / threading / pathlib.Path / CONTENT_TMPL / QUERY_CN），任何人按文档命令直接运行都在 main() 处 NameError。修复：按文件头注释口径重建全部定义（N=400 × 2 轮，延迟 50 轮），--quick 与全量两种模式均实测跑通；新增 tests/test_v663_bench_header.py 4 项静态守卫防再次回归。
 
 
 ## [6.6.2] - 2026-11-17

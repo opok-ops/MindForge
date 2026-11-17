@@ -31,6 +31,28 @@ import shutil
 import statistics
 import sys
 import tempfile
+import time
+import threading
+from pathlib import Path
+
+# v6.6.3 修复：以下头部定义此前整块缺失（入仓时即断），按文件头注释
+# 的口径重建——任何缺失项都会让文档命令直接 NameError。
+from mindforge import MindForge
+from mindforge.core.types import MemoryConfig
+
+_REPO = Path(__file__).resolve().parent.parent
+
+DEFAULT_N = 400                 # 每轮写入条数（v6.4.2 A/B 同口径）
+DEFAULT_ROUNDS = 2              # 明文/加密交替轮数
+DEFAULT_LATENCY_ROUNDS = 50     # 延迟采样轮数（P50/P95）
+
+# 语料模板：中英混合，含「Python 并发」供 fuzzy 纠错路径命中，
+# 含中文词供 QUERY_CN 命中——等参数对照的语料口径。
+CONTENT_TMPL = (
+    "性能基准条目 {i}：Python 并发 检索 中文混合内容，"
+    "覆盖 memory system benchmark 与等参数对照语料，编号 {i}。"
+)
+QUERY_CN = "中文 并发 检索"
 
 
 def _pkg_version() -> str:

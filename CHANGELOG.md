@@ -3,6 +3,19 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.6.4] - 2026-11-17
+
+并发登记与 daemon 契约修复：根除 v6.5.7 / v6.6.1 缺陷 #5 / v6.6.2 P3-7 三轮 Windows 文件锁修复的残余（pthread handle 复用使 ident 判活系统性误判），修复 v6.6.3「次要-2」回归（decompress 可逆契约恢复绿）。全量 1487 项测试通过。
+
+### Bug 修复
+
+- **缺陷 #10（高）：pthread handle 复用让死线程连接永久悬挂。** 实测连续 5 个线程 ident 全同——pthread handle 回收复用是常态资源。ThreadingHTTPServer 每请求一线程，死线程连接的属主 ident 会被下一个请求线程撞上，`_close_conns` 的 enumerate().ident 判活把它误判「属主存活」→ skip → 连接永久悬挂：Windows WinError 32 文件锁只是概率性躲过、从未根除。修复：`_conn_owners` 改存 Thread 对象，判活用 `owner.is_alive()`（基于 tstate_lock 状态，与 ident 复用无关）。契约：tests/test_v663_conn_registry.py 六项登记守护（死连接回收、存活登记保留、源码级防倒退）。
+- **缺陷 #11（中）：daemon error 字段存在性判定误伤成功响应。** v6.6.3「次要-2」把返回 dict 含 error 键一律转 ok:false——decompress 成功返回 `{"decompressed": true, "restored_count": N, "error": ""}`（error 是压缩域状态位，空串 = 无错）被误转成 `ok:false, error:""`，e2e「decompress 可逆原子契约」自 376dad1 起红灯。修复：判定收紧为 error 非空才转失败。探针：e2e daemon 13/13 全绿。
+
+### 文档
+
+- 官网测试计数 1481 → 1487（六项连接登记契约）；中文 README 全量口径 1441 → 1447。
+
 ## [6.6.3] - 2026-11-17
 
 终极修复版 + 检索增强：外审稳定性狩猎 3 项必修 + 2 项次要全清偿，temporal 解析六项修复（含一个 v6.5.7 既有量级 bug），检索层新增链式两跳 / 图路径感知 / open-domain 召回入口（named v6.6 targets 落地）。36 项新契约测试（tests/test_v663_fixes.py），全量 1481 项测试通过。

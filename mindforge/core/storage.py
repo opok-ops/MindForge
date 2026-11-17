@@ -832,7 +832,10 @@ class StorageEngine:
                 # v6.6.1：记录属主线程——_close_conns 只关属主已死亡的
                 # 遗留连接，绝不从外部关闭存活线程正在使用的连接
                 # （实测会触发 SQLite 原生层 access violation）。
-                self._conn_owners[id(conn)] = threading.get_ident()
+                # v6.6.4（缺陷 #10）：存 Thread 对象而非 ident——pthread
+                # handle 复用会让死线程 ident 撞上新线程（实测 5 连发全
+                # 同），ident 判活系统性误判；is_alive() 与复用无关。
+                self._conn_owners[id(conn)] = threading.current_thread()
             except Exception:
                 pass
             conn.row_factory = sqlite3.Row
@@ -7799,11 +7802,17 @@ class StorageEngine:
         # 层 access violation 硬崩溃，test_v576 TestAPI 复现）；存活线程
         # 的连接由其自己的 close_thread_conn 关闭。
         with self._access_lock:
-            _live_idents = {t.ident for t in threading.enumerate()}
+            # v6.6.4 修复（缺陷 #10）：属主存活判定不得用 enumerate().ident。
+            # 实测 pthread handle 复用是常态（连续 5 线程 ident 全同）——
+            # ThreadingHTTPServer 每请求一线程，死线程的连接属主 ident 会
+            # 被下一个请求线程撞上 → 误判「属主存活」→ skip → 连接永久
+            # 悬挂，Windows WinError 32 只是概率性躲过、未根除（v6.6.1
+            # 缺陷 #5 / v6.6.2 P3-7 的残余）。改为存 Thread 对象 +
+            # is_alive()（基于 tstate_lock 状态，与 ident 复用无关）。
             owners = getattr(self, "_conn_owners", None) or {}
             for c in list(getattr(self, "_all_conns", ()) or ()):
                 owner = owners.get(id(c))
-                if owner is not None and owner in _live_idents:
+                if owner is not None and owner.is_alive():
                     continue  # 属主存活：留给它自己关
                 try:
                     c.close()

@@ -32,6 +32,7 @@ Source = "https://github.com/opok-ops/MindForge"
 [project.scripts]
 MindForge = "mindforge.cli.main:main"
 MindForge-mcp = "mindforge.mcp.server:main"
+MindForge-bench = "mindforge.bench.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-cov"]

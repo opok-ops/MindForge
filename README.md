@@ -12,7 +12,7 @@ MindForge gives AI agents a persistent, structured long-term memory: a four-tier
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-6.6.4-green.svg)](https://github.com/opok-ops/MindForge/releases)
+[![Version](https://img.shields.io/badge/version-6.7.0-green.svg)](https://github.com/opok-ops/MindForge/releases)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
 [![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
@@ -66,6 +66,25 @@ MindForge search "what does user like"
 MindForge stats
 ```
 
+
+## Benchmark Suite (v6.7.0, `mindforge.bench`)
+
+Open standardized evaluation pipeline for agent memory systems — three-stage decoupled design: **Backend (retrieval) → Answerer (generation) → Judge (scoring)**. MindForge is just one built-in backend; any system implementing the `BaseBackend` protocol (add/search) competes on equal footing.
+
+```bash
+# Zero-cost pipeline: no API key needed, reproducible
+MindForge-bench run                                        # smoke set (12 zh questions)
+MindForge-bench run --backend context_window               # bare context-window baseline
+MindForge-bench report out1.json out2.json --out cmp.md    # comparison table
+
+# Full pipeline (same protocol as the 58.4% LoCoMo full-suite report)
+MindForge-bench run --dataset locomo --data locomo10.json \
+    --judge llm --answerer llm --judge-api-key sk-xxx
+```
+
+- Datasets: built-in zh smoke set (12 questions, singlehop/multihop/temporal) + LoCoMo loader (1,986 questions / 10 conversations; category map aligned bucket-by-bucket with the v6.5.12 full-suite report). LoCoMo data file not bundled — download from `snap-research/locomo`.
+- Judges: `deterministic` (keyword / gold-substring matching, zero cost) and `llm` (1–10 score, **≥9 = correct** — the exact protocol of the 58.4% full-suite report).
+- Guardrails: per-conversation isolated memory stores; answerer never touches gold answers (interface-level leak prevention); judge failures are counted explicitly in reports, never silently dropped.
 
 ## Scale & Quality Benchmarks (v6.4.9, measured)
 
@@ -165,7 +184,7 @@ v6.1.3 – v6.6.3 shipped in two weeks (2026-11-01 → 11-17), guarded by **1,40
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│           MindForge v6.6.4            │
+│           MindForge v6.7.0            │
 │  Cognitive Layer  Personality · KnowledgeGraph       │
 │                   MemoryEvolution · FederatedMemory  │
 ├──────────────────────────────────────────────────────┤

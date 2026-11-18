@@ -10,7 +10,7 @@ MindForge 为 AI Agent 提供持久、结构化的长期记忆：四层记忆生
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-6.6.4-green.svg)](https://github.com/opok-ops/MindForge/releases)
+[![Version](https://img.shields.io/badge/version-6.7.0-green.svg)](https://github.com/opok-ops/MindForge/releases)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
 [![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
@@ -22,6 +22,25 @@ MindForge 为 AI Agent 提供持久、结构化的长期记忆：四层记忆生
 
 ---
 
+
+## 标准化评测工具集（v6.7.0，`mindforge.bench`）
+
+开放横向对比 Agent 记忆系统的标准化评测管道——三段式解耦：**Backend（检索）→ Answerer（生成）→ Judge（评分）**。MindForge 只是内置 backend 之一，任何实现 `BaseBackend` 协议（add/search）的系统同等地位参赛。
+
+```bash
+# 零成本链路：无需任何 API key，可复现
+MindForge-bench run                                        # 冒烟集（12 条中文问题）
+MindForge-bench run --backend context_window               # 裸上下文窗口基线
+MindForge-bench report out1.json out2.json --out cmp.md    # 对比表
+
+# 完整链路（与 58.4% LoCoMo 全量报告同口径）
+MindForge-bench run --dataset locomo --data locomo10.json \
+    --judge llm --answerer llm --judge-api-key sk-xxx
+```
+
+- 数据集：内置中文冒烟集（12 问，singlehop/multihop/temporal）+ LoCoMo 加载器（1986 问 / 10 会话；类别映射与 v6.5.12 全量报告逐类核对）。LoCoMo 数据文件不随包分发，自备下载（`snap-research/locomo`）。
+- 判官：`deterministic`（关键词 / 金标子串匹配，零成本）与 `llm`（1-10 分，**≥9 记正确**——58.4% 全量报告的同一口径）。
+- 防泄漏：会话隔离记忆库（防跨会话串记忆）；生成器接口层不接触金标准答案；判官失败显式计数进报告，绝不静默漂白。
 
 ## 规模与质量实测（v6.4.9）
 

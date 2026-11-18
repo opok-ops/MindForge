@@ -3,6 +3,18 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.7.0] - 2026-11-18
+
+标准化评测工具集：`mindforge.bench` 开放横向对比 Agent 记忆系统的统一基准。三段式解耦管道（Backend 检索 → Answerer 生成 → Judge 评分），MindForge 只是内置 backend 之一——任何实现 BaseBackend 协议的系统同等地位参赛。19 项契约测试，全量 1506 项测试通过。
+
+### 新增
+
+- **CLI `MindForge-bench`**（run / report 子命令）：零成本链路开箱即跑——`MindForge-bench run` 无需任何 API key（冒烟集 + 抽取式生成 + deterministic 判官）；`report` 多 run 聚合出 Markdown 对比表（总 acc / 类别 acc / Recall@K / MRR@K / 延迟分位）。
+- **数据集**：内置中文冒烟集（12 问，singlehop/multihop/temporal 三类）+ LoCoMo 加载器（1986 问 / 10 会话，用户自备数据文件）。LoCoMo 官方类别数字映射（1→temporal / 2→multihop / 3→open_domain / 4→singlehop / 5→adversarial）已与 v6.5.12 全量报告类别分布逐项核对（113/282、39/321、558/841、425/446）。
+- **判官双模式**：deterministic（must_have 关键词全命中；QA 式数据自动切换金标子串匹配，短答案支持反向命中）与 LLM（1-10 分，**≥9 记正确**——与 58.4% LoCoMo 全量报告同一口径，DeepSeek/OpenAI/本地 vLLM 等 OpenAI 兼容接口均可）。判官失败显式记 0 分并计数进报告，绝不静默漂白。
+- **评测防泄漏**（接口层硬边界）：按会话分组独立记忆库（防跨会话串记忆，与全量管道同口径）；生成器只见「片段+问题」，接口层不接触金标准答案；每份报告自带环境声明（版本/Python/平台/seed/数据集/后端/判官）。
+- **基线后端**：`context_window` 裸上下文窗口基线（不做检索，全部轮次直接当片段）——量化记忆系统的增量价值（冒烟集实测：MindForge 58.3% vs 基线 25.0%，MRR 0.792 vs 0.204）。
+
 ## [6.6.4] - 2026-11-17
 
 并发登记与 daemon 契约修复：根除 v6.5.7 / v6.6.1 缺陷 #5 / v6.6.2 P3-7 三轮 Windows 文件锁修复的残余（pthread handle 复用使 ident 判活系统性误判），修复 v6.6.3「次要-2」回归（decompress 可逆契约恢复绿）。全量 1487 项测试通过。

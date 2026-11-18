@@ -11,6 +11,7 @@
 import json
 import os
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -186,25 +187,44 @@ class TestReportAndCLI(unittest.TestCase):
         rep = run_benchmark(items[:4], backend, ExtractiveAnswerer(),
                             DeterministicJudge(), k=2, dataset_id="smoke")
         backend.close()
-        path = "/tmp/bench_test_run.json"
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(rep, f)
-        md = aggregate_markdown([path])
-        self.assertIn("| 指标 |", md)
-        self.assertIn("acc%", md)
-        self.assertIn("## 环境声明", md)
+        # Windows CI 无 /tmp——报告落盘一律走 tempfile
+        fd, path = tempfile.mkstemp(suffix=".json")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(rep, f)
+            md = aggregate_markdown([path])
+            self.assertIn("| 指标 |", md)
+            self.assertIn("acc%", md)
+            self.assertIn("## 环境声明", md)
+        finally:
+            os.remove(path)
 
     def test_cli_report_cmd(self):
-        rc = cli_main(["report", "/tmp/bench_test_run.json"])
-        self.assertEqual(rc, 0)
+        items = load_dataset("smoke")
+        backend = ContextWindowBackend()
+        rep = run_benchmark(items[:2], backend, ExtractiveAnswerer(),
+                            DeterministicJudge(), k=2, dataset_id="smoke")
+        backend.close()
+        fd, path = tempfile.mkstemp(suffix=".json")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(rep, f)
+            rc = cli_main(["report", path])
+            self.assertEqual(rc, 0)
+        finally:
+            os.remove(path)
 
     def test_cli_run_smoke_json(self):
-        out = "/tmp/bench_test_cli.json"
-        rc = cli_main(["run", "--json", out, "--k", "2"])
-        self.assertEqual(rc, 0)
-        with open(out, encoding="utf-8") as f:
-            d = json.load(f)
-        self.assertEqual(d["aggregate"]["count"], 12)
+        fd, out = tempfile.mkstemp(suffix=".json")
+        os.close(fd)
+        try:
+            rc = cli_main(["run", "--json", out, "--k", "2"])
+            self.assertEqual(rc, 0)
+            with open(out, encoding="utf-8") as f:
+                d = json.load(f)
+            self.assertEqual(d["aggregate"]["count"], 12)
+        finally:
+            os.remove(out)
 
     def test_cli_unknown_subcmd_exit_2(self):
         rc = cli_main(["不存在"])

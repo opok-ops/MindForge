@@ -955,6 +955,27 @@ class QueryEngine:
         except Exception:
             strategy_used = "tfidf+fuzzy"
 
+        # 路 3b：跨语种锚点补盲（v6.7.1 P3）。触发条件：FTS 主查询（含
+        # OR 降级）为空 + query 含锚点 token（≥2 位数字串 / ≥2 字母拉丁
+        # 词，形态跨语种不变）→ 以锚点 OR 串补一次 FTS 查询，命中按
+        # 0.5 固定分入 map（补盲级别：低于四路典型命中、与图路 1 跳
+        # 0.55 同档）。零翻译模型条件下的跨语种最小召回路径；query 与
+        # 语料同语种或无锚点时本路零动作直通，对既有契约零影响。
+        try:
+            if not any(score_map.values()):
+                from mindforge.core.lang import cross_lang_anchor_terms
+                anchor_terms = cross_lang_anchor_terms(query)
+                if anchor_terms:
+                    conn_a = self.storage._get_conn()
+                    for _at in anchor_terms[:5]:  # 锚点上限 5，防超宽查询
+                        for doc_id, _s in self.index.fts_search(
+                                conn_a, _at, top_k=max_results):
+                            # 0.5 固定分：补盲级别，与图路 1 跳 0.55 同档
+                            if 0.5 > score_map.get(doc_id, 0.0):
+                                score_map[doc_id] = 0.5
+        except Exception:
+            pass
+
         # 路 4：向量召回（v5.4.5 新增，v5.4.8 P2-002/P3-003 修复）
         global _vector_degradation_warned
         if use_embedding:

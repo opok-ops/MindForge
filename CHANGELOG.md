@@ -3,6 +3,34 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.7.1] - 2026-11-19
+
+海量记忆检索优化 + 多语种记忆对齐 + 端侧部署自检。检索 p50 全规模段下降约 16%（40k 库实测 67.3 → 56.3ms）；`metadata.lang` 语种元数据 + 跨语种锚点召回打通「英文查询 × 中文记忆库」中含版本号/数字形态的最小召回路径；`mindforge deploy` 环境自检让中小企业与独立开发者的本地化部署前置检查一条命令完成。26 项新契约（tests/test_v671_retrieval_i18n.py），全量 1532 项测试通过。
+
+### 新增
+
+- **多语种记忆对齐（P3，零依赖最小可行）**：`mindforge.core.lang` 三件套——`detect_language`（zh/en/mixed 双显著判定）、`normalize_cjk_variant` / `to_traditional_candidates`（繁简高频字归一）、`cross_lang_anchor_terms`（跨语种锚点抽取）。`add` 自动注入 `metadata.lang`（显式传入优先）；`search` 跨语种锚点补盲路：四路+FTS 全空且 query 含数字锚（v6.7.1 / 42 / 2026）时按 0.5 补盲分召回——中文库 × 英文查询的版本号/编号事实实测打通。
+- **端侧部署自检（P4）**：CLI `mindforge deploy`（`--json` 供脚本消费）——python/sqlite FTS5 trigram/磁盘/加密依赖/嵌入引擎五项只读检查，零云依赖声明与快速开始指引。
+- **规模延迟回归护栏**：test_search_latency_at_scale 以 4k 库 p50<70ms 守门（40k 同比例基线 67.3ms）。
+
+### 优化
+
+- **FTS5 检索（P1a probe 两阶段）**：AND 多词查询先以 df 上界最小的词做单链 probe（M1 计划）+ Python 层连续子串共现验证（trigram 短语语义严格等价），数学上 AND 共现行 ⊆ 任一词命中集；probe 候选不足/短词/OR/括号任一触发即回退原 M3 全链路，召回不劣化。真实低 df 多词查询为主要受益场景。
+- **FTS5 检索（P1b 子查询先截断）**：原形态对全匹配行 JOIN memories 后才 LIMIT，JOIN 放大随库容线性涨；改为内层 LIMIT 后再 JOIN（40k 库 micro-bench 44.4 → 33.0ms，-26%）。trash 过滤保留在外层。
+- **写入事务合并（P2）**：`add` 的审计 INSERT 并入主写事务（`commit=False`）——synchronous=FULL 配置下每条 add 少 1 次 fsync；审计 fail-closed 语义不变（"add" 非高敏动作，失败仅告警，主事务原子提交）。
+
+### 诚实边界
+
+- 无翻译模型，跨语种**语义**对齐不做——锚点召回仅覆盖含数字/编号形态的混合语料（v6.7.1 / 42 / 2026）；纯中文↔纯英文语义查询在降级检索下仍不可达，待向量引擎多语模型接线。
+- 繁简归一为高频字表（~250 字对），非 OpenCC 全量映射；存储内容不做变体改写，归一只发生在查询侧。
+- audit 合并在 SQLite WAL + synchronous=NORMAL 默认配置下收益≈0（commit 不 fsync），FULL 模式下才有 fsync 级收益——不夸大。
+
+### 实测数据（v6.7.1 验收）
+
+- 检索 p50：5k 9.9→8.3 / 10k 18.0→15.1 / 20k 34.6→28.8 / 40k 67.3→56.3ms（全规模段 -16%，p95 -12%）
+- 写入：add p50 1.82→1.81ms（WAL-NORMAL 下 audit 合并收益≈0，如实记录）
+- 全量 1532 项测试（1506 存量 + 26 新契约）
+
 ## [6.7.0] - 2026-11-18
 
 标准化评测工具集：`mindforge.bench` 开放横向对比 Agent 记忆系统的统一基准。三段式解耦管道（Backend 检索 → Answerer 生成 → Judge 评分），MindForge 只是内置 backend 之一——任何实现 BaseBackend 协议的系统同等地位参赛。19 项契约测试，全量 1506 项测试通过。
@@ -13,7 +41,7 @@ All notable changes to MindForge will be documented in this file.
 - **数据集**：内置中文冒烟集（12 问，singlehop/multihop/temporal 三类）+ LoCoMo 加载器（1986 问 / 10 会话，用户自备数据文件）。LoCoMo 官方类别数字映射（1→temporal / 2→multihop / 3→open_domain / 4→singlehop / 5→adversarial）已与 v6.5.12 全量报告类别分布逐项核对（113/282、39/321、558/841、425/446）。
 - **判官双模式**：deterministic（must_have 关键词全命中；QA 式数据自动切换金标子串匹配，短答案支持反向命中）与 LLM（1-10 分，**≥9 记正确**——与 58.4% LoCoMo 全量报告同一口径，DeepSeek/OpenAI/本地 vLLM 等 OpenAI 兼容接口均可）。判官失败显式记 0 分并计数进报告，绝不静默漂白。
 - **评测防泄漏**（接口层硬边界）：按会话分组独立记忆库（防跨会话串记忆，与全量管道同口径）；生成器只见「片段+问题」，接口层不接触金标准答案；每份报告自带环境声明（版本/Python/平台/seed/数据集/后端/判官）。
-- **基线后端**：`context_window` 裸上下文窗口基线（不做检索，全部轮次直接当片段）——量化记忆系统的增量价值（冒烟集实测：MindForge 58.3% vs 基线 25.0%，MRR 0.792 vs 0.204）。
+- **基线后端**：`context_window` 裸上下文窗口基线（不做检索，全部轮次直接当片段）——量化记忆系统的增量价值（冒烟集实测：MindForge 58.3% vs 基线 16.7%，MRR 0.792 vs 0.167）。
 
 ## [6.6.4] - 2026-11-17
 

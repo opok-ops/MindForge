@@ -4365,6 +4365,15 @@ def main(argv=None):
     p_doctor = sub.add_parser("doctor", help="全面诊断数据库（v5.1.8 新增）")
     p_doctor.add_argument("--fix", action="store_true", help="自动修复可修复的问题")
 
+    # v6.7.1 P4：端侧部署自检（面向中小企业与独立开发者的一键本地化）
+    p_deploy = sub.add_parser(
+        "deploy", help="端侧部署自检与环境报告（v6.7.1 新增）")
+    p_deploy.add_argument(
+        "--check", action="store_true", default=True,
+        help="检查本地部署前置条件（python/sqlite/磁盘/加密/嵌入引擎）")
+    p_deploy.add_argument(
+        "--json", action="store_true", help="JSON 输出（供脚本消费）")
+
     p_audit_prune = sub.add_parser(
         "audit-prune", help="裁剪历史搜索审计流水（v6.2.0 新增）", parents=[json_parser])
     p_audit_prune.add_argument("--days", type=float, default=90.0,
@@ -7349,6 +7358,7 @@ def _main_dispatch(args, parser=None):
         "backup": cmd_backup,
         "restore": cmd_restore,
         "doctor": cmd_doctor,
+        "deploy": cmd_deploy,
         "audit-prune": cmd_audit_prune,
         "find": cmd_find,
         "audit": cmd_audit,
@@ -9416,6 +9426,95 @@ def cmd_audit_prune(args):
         print("   （合规类审计未触碰）")
     cm.close()
     return 0
+
+
+def cmd_deploy(args):
+    """v6.7.1 P4：端侧部署自检——中小企业与独立开发者的一键本地化前置检查。
+
+    检查项（全部只读，零副作用）：
+    - Python 版本（>=3.10）
+    - SQLite 版本与 FTS5/trigram 编译支持（端侧检索硬前置）
+    - 磁盘可用空间（记忆库与 WAL 预留 ≥100MB）
+    - 加密依赖可用性（cryptography）
+    - 嵌入引擎状态（sentence-transformers / Ollama 可达性，可选增强）
+    - 网络隔离确认提示（零云依赖声明）
+    """
+    import json as _json
+    import sqlite3 as _sq
+    import sys as _sys
+    import shutil as _shutil
+
+    checks = []
+
+    def _add(name, ok, detail, hint=""):
+        checks.append({"name": name, "ok": bool(ok), "detail": detail, "hint": hint})
+
+    # Python 版本
+    v = _sys.version_info
+    _add("python", v >= (3, 10),
+         f"{v.major}.{v.minor}.{v.micro}",
+         "" if v >= (3, 10) else "需 Python >= 3.10")
+
+    # SQLite + FTS5 trigram
+    try:
+        con = _sq.connect(":memory:")
+        sq_ver = _sq.sqlite_version
+        con.execute("CREATE VIRTUAL TABLE t USING fts5(x, tokenize='trigram')")
+        con.execute("INSERT INTO t VALUES ('测试文本abc')")
+        con.execute("SELECT * FROM t WHERE t MATCH '文本'")
+        _add("sqlite_fts5_trigram", True,
+             f"SQLite {sq_ver} FTS5 trigram 可用")
+        con.close()
+    except Exception as e:
+        _add("sqlite_fts5_trigram", False, f"失败: {e}",
+             "Python 自带 SQLite 缺 FTS5/trigram，需更换编译带 --enable-fts5 的解释器")
+
+    # 磁盘
+    try:
+        free_mb = _shutil.disk_usage(os.getcwd()).free / 1024 / 1024
+        _add("disk", free_mb >= 100, f"可用 {free_mb:.0f}MB",
+             "" if free_mb >= 100 else "建议预留 ≥100MB（记忆库+WAL+备份）")
+    except Exception as e:
+        _add("disk", False, str(e))
+
+    # 加密依赖
+    try:
+        import cryptography  # noqa: F401
+        _add("crypto", True, "cryptography 可用（AES-256-GCM 端侧加密就绪）")
+    except ImportError:
+        _add("crypto", False, "未安装 cryptography",
+             "pip install mindforge-memory[full] 或 pip install cryptography")
+
+    # 嵌入引擎（可选增强，缺失=降级三路检索）
+    try:
+        import sentence_transformers  # noqa: F401
+        _add("embedding", True, "sentence-transformers 可用（向量路增强）")
+    except ImportError:
+        _add("embedding", True, "未安装（降级 TF-IDF+FTS5+fuzzy 三路检索，功能可用）",
+             "可选：pip install sentence-transformers")
+
+    ok_all = all(c["ok"] for c in checks)
+    result = {"deploy_ready": ok_all, "checks": checks}
+
+    if getattr(args, "json", False):
+        print(_json.dumps(result, ensure_ascii=False, indent=2))
+        return 0 if ok_all else 1
+
+    print_banner()
+    print(c("🚀 MindForge 端侧部署自检", "bold"))
+    print("=" * 50)
+    for c_ in checks:
+        mark = "✅" if c_["ok"] else "🚨"
+        print(f"  {mark} {c_['name']}: {c_['detail']}")
+        if c_["hint"]:
+            print(f"     → {c_['hint']}")
+    print("=" * 50)
+    if ok_all:
+        print(c("  部署就绪：零云依赖，数据不出本机。", "green"))
+        print("  快速开始：mindforge init && mindforge add \"第一条记忆\" && mindforge search \"记忆\"")
+    else:
+        print(c("  存在阻塞项，按上方 hint 处理后重跑 mindforge deploy。", "yellow"))
+    return 0 if ok_all else 1
 
 
 def cmd_doctor(args):

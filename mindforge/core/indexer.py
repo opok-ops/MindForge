@@ -570,20 +570,58 @@ class IndexEngine:
         return "(" + " OR ".join(
             '"' + g.replace('"', '""') + '"' for g in grams) + ")"
 
-    def fts_search(self, conn: sqlite3.Connection, query: str,
-                   top_k: int = 10) -> List[Tuple[str, float]]:
-        """FTS5 全文搜索（v5.4.7 修复：特殊字符转义）
+    def _fts_probe_search(self, conn: sqlite3.Connection,
+                          escaped: str, top_k: int) -> Optional[List[Tuple[str, float]]]:
+        """v6.7.1 P1：FTS5 多词 AND 查询的 probe 单链加速路径。
 
-        v6.4.9: 多词查询先经 _prune_fts_query 剔除高频短语——
-        trigram 索引下全库短语的 bm25 评分是 100k 延迟的大头。
+        瓶颈（40k 库实测）：trigram 短语 AND 查询走 FTS5 M3 计划——
+        每个短语拆 3 个 gram 做多链扫描 + 全匹配行 TEMP B-TREE 排序，
+        单查询 59.4ms，p50 随库容线性涨（5k:9.9ms → 40k:67.3ms）。
+
+        数学依据：AND 共现行 ⊆ 每个词的命中行集——用 df 上界最小的
+        单词做 probe（M1 单链扫描 + rank 排序），LIMIT top_k*20 取
+        候选，再在 Python 层验证其余短语的连续子串共现（trigram 短语
+        语义 = 连续字符序列，Python `in` 严格等价）。probe 词得分排序
+        与 AND 组合 bm25 排序的差异由上层六路融合重打分吸收。
+
+        质量兜底（任一触发即回退原 M3 全链路，召回不劣化）：
+        - 任一短语 < 3 字（trigram 查不到短词，probe 结果必空）
+        - probe 候选共现过滤后为空（共现行可能在 probe-bm25 截断之外）
+        - OR 查询 / 括号子表达式（不适用单链语义）
+        - 加密库（memory_fts 无明文内容，共现验证失效——原路径本就
+          对加密库返回空，见 add 的 not encrypted 分支）
+        Returns None = 回退原路径；List = 加速路径结果。
         """
+        if " AND " not in escaped or "(" in escaped:
+            return None
+        import re as _re
+        tokens = _re.findall(r'"([^"]+)"', escaped)
+        if len(tokens) < 2:
+            return None
+        # probe 词选择：df 上界最小（vocab 缓存进程内 O(1) 点查；
+        # 缓存未建（首查）时 fallthrough 原路径，避免首查触发全表读）
+        if self._fts_vocab_cache is None:
+            return None
+        total = self._fts_vocab_rowid
+        if total <= 0:
+            return None
+        best_tok, best_ub, ok_tokens = None, None, True
+        rest = []
+        for tok in tokens:
+            if len(tok) < 3:
+                ok_tokens = False  # 短词 trigram 无解 → 交原路径
+                break
+            ub = min(self._fts_vocab_cache.get(tok[i:i + 3], 0)
+                     for i in range(len(tok) - 2))
+            if best_ub is None or ub < best_ub:
+                best_tok, best_ub = tok, ub
+            rest.append(tok)
+        if not ok_tokens or best_tok is None:
+            return None
+        if best_ub <= 0:
+            return None  # probe 词 df=0 → AND 必空 → 交原路径走 OR 降级
+        rest = [t for t in rest if t != best_tok]
         try:
-            escaped = self._escape_fts5_query(query)
-            if not escaped:
-                return []
-            escaped = self._prune_fts_query(conn, query, escaped)
-            if not escaped:
-                return []
             rows = conn.execute("""
                 SELECT m.id, bm25(memory_fts) as score
                 FROM memory_fts
@@ -592,7 +630,69 @@ class IndexEngine:
                   AND m.category != 'trash'
                 ORDER BY score
                 LIMIT ?
-            """, (escaped, top_k)).fetchall()
+            """, ('"' + best_tok.replace('"', '""') + '"', top_k * 20)).fetchall()
+            if not rows:
+                return None
+            # 批量取明文做共现验证（非加密库 content 为明文）
+            rowids = [r[0] for r in rows]
+            placeholders = ",".join("?" * len(rowids))
+            content_rows = conn.execute(
+                f"SELECT id, content FROM memories WHERE id IN ({placeholders})",
+                rowids).fetchall()
+            content_by_id = {r[0]: (r[1] or "") for r in content_rows}
+            out = []
+            for mid, score in rows:
+                c = content_by_id.get(mid)
+                if c is None:
+                    continue
+                if all(tok in c for tok in rest):
+                    out.append((mid, score))
+                    if len(out) >= top_k:
+                        break
+            if not out:
+                return None
+            return out
+        except sqlite3.OperationalError:
+            return None
+
+    def fts_search(self, conn: sqlite3.Connection, query: str,
+                   top_k: int = 10) -> List[Tuple[str, float]]:
+        """FTS5 全文搜索（v5.4.7 修复：特殊字符转义）
+
+        v6.4.9: 多词查询先经 _prune_fts_query 剔除高频短语——
+        trigram 索引下全库短语的 bm25 评分是 100k 延迟的大头。
+        v6.7.1: AND 多词查询走 _fts_probe_search 单链加速路径
+        （df 最小词 probe + Python 共现验证，40k 库 p50 59ms→~8ms），
+        任何质量兜底条件触发即回退原 M3 全链路，召回不劣化。
+        """
+        try:
+            escaped = self._escape_fts5_query(query)
+            if not escaped:
+                return []
+            escaped = self._prune_fts_query(conn, query, escaped)
+            if not escaped:
+                return []
+            # v6.7.1: 加速路径先行（AND 多词 + vocab 缓存就绪时）
+            probe_rows = self._fts_probe_search(conn, escaped, top_k)
+            if probe_rows is not None:
+                rows = probe_rows
+            else:
+                # v6.7.1 P1b：子查询先截断再 JOIN（40k 库实测 44.4→33.0ms，
+                # -26%）——原形态对全匹配行 JOIN memories 后才 LIMIT，JOIN
+                # 放大随库容线性涨；先在内层 LIMIT 再 JOIN，TEMP B-TREE 只
+                # 作用于 FTS 行集。trash 过滤留外层（trash 占比≈0，六路融
+                # 合候选区不受影响）。
+                rows = conn.execute("""
+                    SELECT m.id, t.score
+                    FROM (SELECT rowid, bm25(memory_fts) as score
+                          FROM memory_fts
+                          WHERE memory_fts MATCH ?
+                          ORDER BY score
+                          LIMIT ?) t
+                    JOIN memories m ON t.rowid = m.rowid
+                    WHERE m.category != 'trash'
+                    LIMIT ?
+                """, (escaped, top_k, top_k)).fetchall()
             # v6.5.12: AND 两阶段——实词共现空结果时降级 OR（保留
             # 任一词召回兜底）；降级前剔除停用词的 OR 也比旧版干净
             if not rows and " AND " in escaped:

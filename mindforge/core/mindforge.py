@@ -825,6 +825,20 @@ class MindForge:
                 "utf-8", errors="replace"
             )
 
+        # v6.7.1 P3：多语种记忆对齐——add 时自动注入语种元数据
+        # （metadata.lang，未显式指定时自动检测 zh/en/mixed）。跨语种
+        # 事实可按 lang 归组/过滤；检测零成本（字符统计），失败不阻断。
+        try:
+            from mindforge.core.lang import detect_language
+            if not (metadata and "lang" in metadata):
+                if metadata is None:
+                    metadata = {}
+                else:
+                    metadata = dict(metadata)
+                metadata["lang"] = detect_language(content)
+        except Exception as _lang_err:
+            logger.debug("lang 检测失败（不阻断 add）: %s", _lang_err)
+
         entry = self._storage.add_memory(
             content=content,
             category=category,

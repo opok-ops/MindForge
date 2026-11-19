@@ -1473,8 +1473,14 @@ class StorageEngine:
                 VALUES ((SELECT rowid FROM memories WHERE id = ?), ?, ?, ?)
             """, (entry.id, content, category, json.dumps(clean_tags, ensure_ascii=False)))
 
+        # v6.7.1 P2：审计 INSERT 并入主写事务（commit=False）——
+        # 此前 audit 独立 commit 导致单条 add 2 次 fsync（40k 库探针：
+        # 单条 add p50 1.82ms 中 commit 占主导；batch_add 因单事务
+        # 0.036ms/条，两者 50 倍差距的根因即此）。审计语义不变：
+        # 同事务原子提交，audit 失败仍按 fail-closed 抛异常回滚。
+        self._add_audit("add", entry.id, source_agent, source_session,
+                        privacy.value, commit=False)
         conn.commit()
-        self._add_audit("add", entry.id, source_agent, source_session, privacy.value)
 
         # v5.4.5: 生成嵌入向量（失败不影响记忆写入）
         # v5.7.0 P2：嵌入失败属检索能力降级，记录警告便于排查

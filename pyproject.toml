@@ -35,7 +35,7 @@ MindForge-mcp = "mindforge.mcp.server:main"
 MindForge-bench = "mindforge.bench.cli:main"
 
 [project.optional-dependencies]
-dev = ["pytest", "pytest-cov"]
+dev = ["pytest", "pytest-cov", "pytest-timeout"]
 embedding = ["sentence-transformers>=2.7.0"]
 
 # 所有源码统一位于 mindforge.* 命名空间下（物理目录即包目录），
@@ -57,3 +57,10 @@ py-modules = ["MindForge"]
 # 版本号唯一真值：mindforge/core/version.py 的 __version__
 [tool.setuptools.dynamic]
 version = {attr = "mindforge.core.version.__version__"}
+
+# v6.7.2 hotfix 预备：Windows 3.12 CI 疑似测试挂死（Run tests 卡 30+min 无输出）。
+# pytest-timeout 让每个测试 180s 强制 fail 并打印挂点栈（thread 法，Windows 兼容）；
+# Linux 本地 118s 全量不受影响（最长单测试远低于 180s）。根因定位后移除。
+[tool.pytest.ini_options]
+timeout = 180
+timeout_method = "thread"

@@ -15,7 +15,7 @@ pytest-timeout==2.4.0
 # 惯例不变：后续再升级 bandit 仍须单独提交并复核 bandit -lll 输出。
 # security job 使用未固定安装的 bandit，不受此 pin 影响。
 bandit==1.9.4
-pip-audit==2.7.3
+pip-audit==2.10.1
 
 # 性能基准与 PDF 报告（benchmarks/）
 psutil==7.2.2
@@ -23,4 +23,4 @@ psutil==7.2.2
 # 运行时代码与 tests/ 均不导入。矩阵仍包含 3.10，故保留环境标记，
 # 使 3.10 CI 可正常安装并运行测试；需生成报告时在 Python 3.11+ 环境执行。
 matplotlib==3.11.2; python_version >= "3.11"
-reportlab==5.0.1
+reportlab==5.1.0

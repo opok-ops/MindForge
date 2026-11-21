@@ -3,6 +3,27 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.7.2] - 2026-11-21
+
+开发/构建依赖维护版：清偿全部 4 个开放依赖升级 Issues（#19 / #18 / #16 / #5），运行时依赖零变更（`cryptography==50.0.2` 锁定不动）。另随版发布 v6.7.1 tag 后的 Windows 3.12 CI 挂死取证补丁（pytest-timeout 180s 强制 fail 守护，3de69ff）。全量 1532 项测试通过（1530 passed + 2 skipped，0 failed，与 v6.7.1 基线完全一致）。
+
+### 依赖升级（#19 / #18 / #16 / #5，均为开发/构建工具链）
+
+- **reportlab 5.0.1 → 5.1.0（#19）**：`requirements-dev.txt` 锁定升级。reportlab 仅用于 `benchmarks/generate_report.py` 的 PDF 性能报告（运行时代码与 tests/ 均不导入）。升级后报告生成全流程冒烟实测通过（PDF 正常产出、日志无错误）；Python 3.10 wheel 可用，CI 矩阵最低档不受影响。
+- **setuptools >=61.0 → >=84.2.1（#18）**：`pyproject.toml [build-system]` 构建下限提升。61.0 是 2022 年首个 PEP 621 支持版，与最新版跨 23 个大版本；84.2.1 修复 wheel 标签与 stable-ABI 校验改用 sysconfig 数据、free-threaded 3.13/3.14 扩展后缀问题。升级后 `pip wheel` 构建 + editable 重装实测通过；setuptools 84.2.1 为 py3-none-any wheel，3.10 矩阵可装。
+- **bandit 1.8.6 → 1.9.4（#16，按锁定注释惯例单独提交）**：升级前后以 CI security 作业同款命令（`bandit -r . -x tests,.venv,venv,website,examples -lll`）复核：**High 级 0 → 0，门禁档零新增**；新增 2 条 Low 级 B105（`token_estimate` / `auth_secret` 键名启发式误报，值为 0 / None），低于 -lll 阈值、不影响 CI。原锁定 1.8.6 的顾虑（3.9 矩阵）已随最低支持版升至 3.10 消除；security 作业本就使用未固定安装的最新 bandit，本次升级使本地锁定与 CI 实际行为对齐。
+- **pip-audit 2.7.3 → 2.10.1（#5）**：`requirements-dev.txt` 锁定升级。2.10.x 修复 OSV 漏洞记录缺 `ranges` 字段时的 KeyError 崩溃、新增 `--osv-url` 自定义 OSV 源支持。升级后以 CI 同款步骤（pyproject dependencies 提取 + `pip-audit --strict -r`）实测：No known vulnerabilities found；Python 3.10 wheel 可用。
+
+### 诚实边界
+
+- 本版无运行时代码改动、无新增契约测试（纯依赖维护版，同 v6.5.3 发版工程版先例）；验证方式为逐项工具链冒烟（bandit -lll 前后对比 / PDF 报告生成 / wheel 构建 + editable 重装 / pip-audit 审计）+ 全量回归。
+- bandit 1.9.4 新增的 2 条 Low 级 B105 误报如实记录（见上），未加 `# nosec` 压制——低于门禁阈值，留待后续规则基线统一治理。
+
+### Tests
+
+- 全量 1532 项（1530 passed + 2 skipped，0 failed；2 项 skip 为设计内环境条件跳过：LoCoMo 本地数据集缺失、openpyxl 已装走 xlsx 路径），2026-11-21 实测。
+- 版本钉/文档一致性：`scripts/release.py bump` 预检（docs consistency guard + 7 文件版本钉测试组）全绿。
+
 ## [6.7.1] - 2026-11-19
 
 海量记忆检索优化 + 多语种记忆对齐 + 端侧部署自检。检索 p50 全规模段下降约 16%（40k 库实测 67.3 → 56.3ms）；`metadata.lang` 语种元数据 + 跨语种锚点召回打通「英文查询 × 中文记忆库」中含版本号/数字形态的最小召回路径；`mindforge deploy` 环境自检让中小企业与独立开发者的本地化部署前置检查一条命令完成。26 项新契约（tests/test_v671_retrieval_i18n.py），全量 1532 项测试通过。

@@ -1,5 +1,8 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+# v6.7.2（Issue #18）：61.0（2022 年首个 PEP 621 支持）→ 84.2.1，
+# 消除跨 23 个大版本的构建链陈旧差距；84.2.1 修复 wheel 标签与
+# stable-ABI 校验改用 sysconfig 数据、free-threaded 3.13/3.14 扩展后缀问题。
+requires = ["setuptools>=84.2.1", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]

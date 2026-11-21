@@ -8,11 +8,13 @@ pytest==8.4.2
 pytest-cov==6.3.0
 # v6.7.2 hotfix 预备：Windows 3.12 CI 挂死取证——180s 强制 fail 并打印挂点栈
 pytest-timeout==2.4.0
-# bandit 固定在 1.8.6：矩阵最低版本已升至 3.10，1.9.x 在技术上已可用，
-# 但升级会引入新的扫描规则、可能使 security 作业出现新告警，故本轮保持锁定；
-# 如需升级应单独提交并复核 bandit -lll 输出。
+# bandit 升级到 1.9.4（v6.7.2，Issue #16）：升级前后以 CI 同款命令
+# （bandit -r . -x tests,.venv,venv,website,examples -lll）复核——
+# High 级 0 → 0，门禁档无新增；新增 2 条 Low 级 B105 误报
+# （token_estimate / auth_secret 键名启发式，值为 0 / None），低于 -lll 阈值。
+# 惯例不变：后续再升级 bandit 仍须单独提交并复核 bandit -lll 输出。
 # security job 使用未固定安装的 bandit，不受此 pin 影响。
-bandit==1.8.6
+bandit==1.9.4
 pip-audit==2.7.3
 
 # 性能基准与 PDF 报告（benchmarks/）

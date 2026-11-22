@@ -255,7 +255,9 @@ class SharedConflictResolver:
         incoming_ts = float(incoming_snapshot.get("timestamp", 0.0) or 0.0)
         from_peer = str(incoming_snapshot.get("from_peer", "") or row["incoming_peer"])
 
-        now = time.time()
+        # v6.7.3 清理：now 死变量——LWW 比较用 incoming_ts/local_ts
+        # （均为记录级 updated_at），解决动作的时间戳由 _mark/update_memory
+        # 内部各自生成
         if strategy == "lww":
             local_version = int(getattr(local, "consolidation_count", 0) or 0)
             local_ts = float(getattr(local, "updated_at", 0.0) or 0.0)

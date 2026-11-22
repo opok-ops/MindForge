@@ -6,13 +6,13 @@
 
 MindForge gives AI agents a persistent, structured long-term memory: a four-tier lifecycle model, knowledge graphs, hybrid retrieval, end-to-end encryption, and MCP / CLI / REST interfaces. All data stays on your machine.
 
-> **The story** — one developer, eight months, from v1.0 (March 2026) to v6.7.2: no team, no funding, 1,532 passing tests. [Read the journey →](https://opok-ops.github.io/MindForge/#developer)
+> **The story** — one developer, eight months, from v1.0 (March 2026) to v6.7.3: no team, no funding, 1,532 passing tests. [Read the journey →](https://opok-ops.github.io/MindForge/#developer)
 >
 > *Timeline note (v6.6.0):* "seven months" counts from project start (2026-03, pre-git prototyping era). Git history begins 2026-07-17 with the v5.7.x repository consolidation — earlier code lived outside this repo. The 416+ commits reflect consolidated history only.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-6.7.2-green.svg)](https://github.com/opok-ops/MindForge/releases)
+[![Version](https://img.shields.io/badge/version-6.7.3-green.svg)](https://github.com/opok-ops/MindForge/releases)
 [![Stars](https://img.shields.io/github/stars/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/stargazers)
 [![Forks](https://img.shields.io/github/forks/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/forks)
 [![Open Issues](https://img.shields.io/github/issues/opok-ops/MindForge.svg)](https://github.com/opok-ops/MindForge/issues)
@@ -184,7 +184,7 @@ v6.1.3 – v6.6.3 shipped in two weeks (2026-11-01 → 11-17), guarded by **1,40
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│           MindForge v6.7.2            │
+│           MindForge v6.7.3            │
 │  Cognitive Layer  Personality · KnowledgeGraph       │
 │                   MemoryEvolution · FederatedMemory  │
 ├──────────────────────────────────────────────────────┤

@@ -110,7 +110,9 @@ def apply_outcome(storage, memory_id: str, outcome: str = "success",
         "SELECT importance, outcome FROM memories WHERE id = ?", (memory_id,)).fetchone()
     if not row:
         return {"success": False, "error": "记忆不存在"}
-    old_importance, old_outcome = row[0] or "MEDIUM", row[1] or ""
+    # v6.7.3 清理：old_outcome 死变量（UPDATE 直接写新值，读出未消费）；
+    # old_importance 是返回体 importance_before 字段的真值来源，保留。
+    old_importance = row[0] or "MEDIUM"
     new_importance = _shift_importance(old_importance, outcome)
 
     now = time.time()

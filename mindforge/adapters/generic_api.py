@@ -66,7 +66,7 @@ class GenericAPIAdapter:
                 "success": False,
                 "error": str(e),
             }
-        except Exception as e:
+        except Exception:
             # 未预期的错误：脱敏返回，防止内部细节泄露
             import logging as _logging
             _logging.getLogger(__name__).exception("API handler error: %s", action)

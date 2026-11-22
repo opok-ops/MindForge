@@ -7,11 +7,18 @@ import re
 import json
 import uuid
 import time
+import logging
 import threading
 import sqlite3  # v5.4.7 修复 C-3：异常处理中引用 sqlite3.OperationalError 需要此导入
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple
 from collections import defaultdict, deque  # v5.4.7 修复 L-7：BFS 使用 deque
+
+# v6.7.3 修复：4 处 except 块引用了未定义的 logger（pyflakes F821）。
+# 一旦建表/加载/写入失败，NameError 会在 except 块内抛出并掩盖原始
+# sqlite3 异常。补上模块级 logger，与项目其他模块（storage/query/
+# api.server 等）保持同一惯例：logging.getLogger(__name__)。
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -203,7 +210,9 @@ class KnowledgeGraph:
         大小写影响，行为不变。
         """
         relations = []
-        text_lower = text.lower()
+        # v6.7.3 清理：text_lower 死变量——v6.5.7 修复后英文模式改用
+        # 原文 + IGNORECASE 匹配（见下方 re.findall），不再消费此值；
+        # _find_matching_entity 内部有同名局部变量，互不影响。
 
         for pattern, rel_type in RELATION_PATTERNS:
             # 英文模式含 [A-Z]（大写名锚定）：用原文 + IGNORECASE；

@@ -8,7 +8,6 @@ from pathlib import Path
 from datetime import datetime, timezone
 import json
 import csv
-import uuid
 import logging
 
 logger = logging.getLogger(__name__)
@@ -36,7 +35,12 @@ from .encryption import (
 # rekey_engine 仍是「先换密钥文件、后重加密」的危险顺序，仅限测试/内部
 # 使用；生产路径走门面 rekey()（先重加密事务、后原子替换密钥文件）
 from .indexer import IndexEngine
-from .query import QueryEngine
+# v6.7.3 修复：补上 RecallResult 顶部导入。此前 4 处方法签名的字符串
+# 注解 -> "RecallResult"（search_multi / search_chain / search_two_hop
+# 等）引用了未导入的名字（pyflakes F821）——运行时靠函数内局部导入
+# 兜底不崩，但 typing.get_type_hints() 反射与静态类型检查直接失败。
+# query 模块本就已在顶部导入（无循环导入风险），一并导入真名。
+from .query import QueryEngine, RecallResult
 from .embedding import EmbeddingEngine
 
 # v5.6.2 收敛：版本号唯一真值在 mindforge/core/version.py，
@@ -1077,7 +1081,7 @@ class MindForge:
                use_embedding: bool = True,
                explain: bool = False,
                expand_context: int = 0,
-               time_anchor: Optional[str] = None):
+               time_anchor: Optional[str] = None) -> "RecallResult":
         """搜索记忆
 
         v5.4.5 新增 use_embedding 参数：
@@ -1191,8 +1195,9 @@ class MindForge:
         """
         import time as _time
         start = _time.perf_counter()
-        empty = self._query_result_empty() if hasattr(
-            self, "_query_result_empty") else None
+        # v6.7.3 清理：empty 死赋值——_query_result_empty 全仓无定义
+        # （hasattr 恒 False，空兜底由下方 queries 直判与 0queries
+        # 策略标注承担），残留调用删除。
         if not queries:
             from mindforge.core.query import RecallResult as _RR
             return _RR(chunks=[], total_found=0,
@@ -1323,7 +1328,7 @@ class MindForge:
             chunks=fused.chunks,
             total_found=fused.total_found,
             query_time_ms=round(elapsed, 2),
-            strategy_used=f"chain:2hops",
+            strategy_used="chain:2hops",
             token_estimate=sum(len(c.content) for c in fused.chunks) // 4)
 
     def search_two_hop(self, query: str,
@@ -2542,9 +2547,11 @@ class MindForge:
                     except ValueError:
                         pass
 
-                new_id = str(uuid.uuid4()) if (skip_duplicates and existing) else (
-                    existing_id[:64] if existing_id else str(uuid.uuid4())
-                )
+                # v6.7.3 清理：new_id 死表达式删除。历史遗留——旧版
+                # add_memory 曾支持自定义 id，现行签名不支持（id 恒由
+                # 存储层生成），表达式算出的 new_id 从未消费且具误导性
+                # （暗示「导入保留源 id」，实际保留不了）。源数据的
+                # existing_id 仅用于上方 skip_duplicates 去重判断。
 
                 # v5.2.9 安全加固：截断 source_session / source_agent
                 session_raw = mem_data.get("source_session", "")
@@ -4769,7 +4776,11 @@ class MindForge:
             追剧统计结果
         """
         did = drama_id[:64] if (isinstance(drama_id, str) and drama_id) else None
-        return self._storage.drama_binge_stats(drama_id)
+        # v6.7.3 修复：did 归一后误传原值——本方法与其他短剧门面
+        # （list_lines_by_character / character_profile / drama_detail_stats
+        # 等）同一模式：drama_id[:64] 归一后应传 did。原实现传 drama_id
+        # 原值，超长 id / 非 str 边界行为偏离全部兄弟方法。
+        return self._storage.drama_binge_stats(did)
 
     def char_network(self,
                      drama_id: str) -> Dict[str, Any]:

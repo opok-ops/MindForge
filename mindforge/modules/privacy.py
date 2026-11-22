@@ -660,8 +660,16 @@ class PrivacyEngine:
         by_privacy = stats.get("by_privacy", {})
 
         audit_log = self.storage.get_audit_log(limit=1000)
-        access_count = sum(1 for a in audit_log if a.action == "access")
-        denied_count = 0
+        # v6.7.3 修复：合规报告两个恒零字段。
+        # - access_count 原来只统计 action=="access"，但全项目没有任何
+        #   写入点（pyflakes 暴露前恒为 0）——读访问审计实际动作为
+        #   "search"（v5.7.0 起落审计），一并纳入；
+        # - denied_count 原来硬编码 0 且未进返回 dict——审计白名单里
+        #   存在 "acl_deny"（federated_acl.check_access 实际写入），
+        #   改为真实统计并作为 denied_access_events 输出。
+        access_count = sum(
+            1 for a in audit_log if a.action in ("access", "search"))
+        denied_count = sum(1 for a in audit_log if a.action == "acl_deny")
 
         private_count = by_privacy.get("PRIVATE", 0) + by_privacy.get("STRICT", 0)
 
@@ -673,6 +681,7 @@ class PrivacyEngine:
             "public_memories": by_privacy.get("PUBLIC", 0),
             "active_grants": sum(len(g) for g in self._grants.values()),
             "total_access_events": access_count,
+            "denied_access_events": denied_count,
             "compliance_status": "PASS" if private_count == 0 else "REVIEW",
             "by_privacy": by_privacy,
             "encryption_enabled": self.storage.encrypted,

@@ -4073,11 +4073,10 @@ class StorageEngine:
         """
         conn = self._get_conn()
         now = time.time()
-        day_seconds = 86400
-
-        short_to_long_days = 1
-        long_to_perm_days = 7
-        stale_days = 30
+        # v6.7.3 清理：day_seconds / short_to_long_days / long_to_perm_days /
+        # stale_days 死变量——演化阈值已直接内联进下方 SQL（1 / 7 / 30 天
+        # 硬编码），与 docstring 规则一一对应。若未来要把阈值做成可配置，
+        # 应同步 SQL 与本处单一来源，不要只改变量。
 
         # 重新计算
         short_to_long = conn.execute(
@@ -4679,7 +4678,8 @@ class StorageEngine:
                 # 导入场次
                 for scene_data in drama_data.get("scenes", [])[:1000]:
                     try:
-                        s = self.add_scene(
+                        # v6.7.3 清理：返回值死赋值（s/c/l）——stats 手动计数
+                        self.add_scene(
                             drama_id=new_did,
                             title=str(scene_data.get("title", ""))[:512],
                             content=str(scene_data.get("description", ""))[:5000],
@@ -4696,7 +4696,7 @@ class StorageEngine:
                 # 导入角色
                 for char_data in drama_data.get("characters", [])[:500]:
                     try:
-                        c = self.add_character(
+                        self.add_character(
                             drama_id=new_did,
                             name=str(char_data.get("name", ""))[:128],
                             actor=str(char_data.get("actor_name", ""))[:128],
@@ -4711,7 +4711,7 @@ class StorageEngine:
                 # 导入台词
                 for line_data in drama_data.get("lines", [])[:50000]:
                     try:
-                        l = self.add_line(
+                        self.add_line(
                             drama_id=new_did,
                             scene_id=str(line_data.get("scene_id", ""))[:64],
                             character_id=str(line_data.get("character_id", ""))[:64],
@@ -6830,7 +6830,8 @@ class StorageEngine:
         avg_len = 0.0
 
         for r in rows:
-            mid, content, tags, category, importance, layer, created_at, access_count, privacy = r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8]
+            # v6.7.3 清理：mid 死赋值——解包首列 id 从未消费，移出解包
+            content, tags, category, importance, layer, created_at, access_count, privacy = r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8]
             layer = (layer or "SHORT_TERM").upper()
             imp = (importance or "MEDIUM").upper()
             cat = (category or "general").lower()
@@ -8688,7 +8689,7 @@ class StorageEngine:
             return False
 
         old_category = row["category"]
-        now = time.time()
+        # v6.7.3 清理：now 死变量——updated_at 由 update_memory 内部统一设置
 
         self.update_memory(
             entry_id=entry_id,
@@ -9300,10 +9301,12 @@ class StorageEngine:
             # 层级过滤
             if layers and entry.layer not in layers:
                 continue
-            # 解密内容
-            content_text = entry.content
-            if entry.encrypted:
-                content_text = self.decrypt_content(entry)
+            # v6.7.3 修复（性能）：此前的 per-result decrypt_content()
+            # 解密结果赋给 content_text 后从未被消费——加密库下每条
+            # 向量命中都白做一次 AES-GCM 解密（top_k*3 条）。唯一消费
+            # 方 query.search 融合阶段只读 entry.id/score，chunk 构造
+            # 时自行按需解密（见 query.py v5.6.2 注释），此处保持
+            # entry 密文态返回，docstring 未承诺明文。
             results.append({
                 "entry": entry,
                 "score": float(score),
@@ -9839,9 +9842,7 @@ class StorageEngine:
         Returns:
             {"today": [...], "yesterday": [...], "this_week": [...], "this_month": [...], "earlier": [...]}
         """
-        import time as _time
-        now = _time.time()
-        # 计算各时间边界（本地日期）
+        # v6.7.3 补清：now 死变量删除后残留的死 import（pyflakes F401）
         from datetime import datetime
         now_dt = datetime.now()
         today_start = datetime(now_dt.year, now_dt.month, now_dt.day).timestamp()
@@ -13384,12 +13385,9 @@ class StorageEngine:
             return {"success": False, "error": "记忆不存在"}
         old_content = row[1] or ""
         old_category = row[2] or ""
-        old_tags_raw = row[3]
-        old_importance = row[4] or ""
-        try:
-            old_tags = json.loads(old_tags_raw) if old_tags_raw and old_tags_raw.startswith("[") else []
-        except Exception:
-            old_tags = []
+        # v6.7.3 清理：old_importance/old_tags 死变量——演变快照
+        # （memory_evolutions）只记录 content/category 维度，
+        # importance/tags 变更由 update_memory 的版本快照承载。
 
         # 演变前版本号
         try:
@@ -14323,9 +14321,9 @@ class StorageEngine:
         overrated: List[Dict[str, Any]] = []
 
         for i, r in enumerate(rows):
-            mid, content, importance, access_count, created_at, category = (
-                r[0], r[1], r[2], r[3], r[4], r[5]
-            )
+            # v6.7.3 清理：created_at/category 解包死赋值——本聚合只用
+            # id/content/importance/access_count（类型分布维度）
+            mid, content, importance, access_count = r[0], r[1], r[2], r[3]
             imp = (importance or "MEDIUM").upper()
             if imp not in imp_dist:
                 imp = "MEDIUM"
@@ -14617,7 +14615,7 @@ class StorageEngine:
         # 情感时间线（按天）
         timeline: List[Dict[str, Any]] = []
         for day, counts in sorted(day_emotions.items()):
-            total = max(1, sum(counts.values()))
+            # v6.7.3 清理：total 死变量——distribution/total 输出的是原始值
             dom = max(counts, key=counts.get)
             timeline.append({
                 "date": day,
@@ -14692,7 +14690,8 @@ class StorageEngine:
         midpoint = len(rows) // 2
 
         for i, r in enumerate(rows):
-            title = r[1] or "未命名"
+            # v6.7.3 清理：title 死赋值——本函数只做类型/情感聚合，
+            # 输出键为 genre 维度，不携带剧名
             genre = (r[2] or "未分类").strip()
             rating = r[3] if isinstance(r[3], (int, float)) else 0
 
@@ -14760,7 +14759,8 @@ class StorageEngine:
         if not drow:
             return {"error": "短剧不存在"}
         title = drow[1] or "未命名"
-        total_eps = drow[2] if isinstance(drow[2], int) and drow[2] > 0 else 1
+        # v6.7.3 清理：total_eps 死变量——健康度四因子（节奏/张力/情感/
+        # 收视）均不依赖总集数；保留 title 供返回体使用
 
         # 因子 1: 节奏健康度（复用 drama_pacing 逻辑）
         pacing_result = self.drama_pacing(did, 3)
@@ -15202,8 +15202,10 @@ class StorageEngine:
         lessons: List[Dict[str, Any]] = []
 
         for i, r in enumerate(rows):
-            mid, content, category, tags_raw, importance, access_count, starred, created_at = (
-                r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7]
+            # v6.7.3 清理：created_at 解包死赋值——经验清单按类目/标签/
+            # 重要度聚合，时间维度不出现在输出里
+            mid, content, category, tags_raw, importance, access_count, starred = (
+                r[0], r[1], r[2], r[3], r[4], r[5], r[6]
             )
             cat = (category or "general").strip() or "general"
             cat_counts[cat] = cat_counts.get(cat, 0) + 1
@@ -15651,8 +15653,10 @@ class StorageEngine:
         thread_seq = 0
 
         for s in scenes:
-            sid, episode, scene_number, s_title, s_content, s_tags = (
-                s[0], s[1] or 0, s[2] or 0, s[3] or "", s[4] or "", s[5] or ""
+            # v6.7.3 清理：scene_number 解包死赋值——剧情线输出以
+            # episode 定位，场景序号不进入 threads/open_threads
+            sid, episode, s_title, s_content, s_tags = (
+                s[0], s[1] or 0, s[3] or "", s[4] or "", s[5] or ""
             )
             text_blob = " ".join(
                 [s_title, s_content, s_tags] + scene_lines.get(sid, [])
@@ -15944,7 +15948,8 @@ class StorageEngine:
         n = len(values)
         total_val = sum(values)
         if n > 0 and total_val > 0:
-            cumulative = 0.0
+            # v6.7.3 清理：cumulative 死变量——基尼系数已改用
+            # weighted_sum 等价闭式，不再需要逐步累加
             weighted_sum = 0.0
             for i, v in enumerate(values, start=1):
                 weighted_sum += i * v
@@ -19045,10 +19050,10 @@ class StorageEngine:
 
             if score_a >= score_b:
                 keep_id, remove_id = a_id, b_id
-                keep_entry, remove_entry = entry_a, entry_b
+                remove_entry = entry_a
             else:
                 keep_id, remove_id = b_id, a_id
-                keep_entry, remove_entry = entry_b, entry_a
+                remove_entry = entry_b
 
             conn.execute(
                 "UPDATE memories SET category = 'trash', updated_at = ? WHERE id = ?",

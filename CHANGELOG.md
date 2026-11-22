@@ -3,6 +3,49 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.7.3] - 2026-11-22
+
+终极修 bug 版：全仓静态审查（pyflakes F821/F841 全量清偿）+ 安全扫描逐条复核 + 死代码清理。8 处未定义名（运行时 NameError 级）与 20+ 处死赋值全部修复/清偿，bandit 中高危告警逐条人工定性（全部为误报或防护已完备）。15 项新契约（tests/test_v673_fixes.py），全量 1547 项测试通过。
+
+### Bug 修复（pyflakes F821，运行时 NameError 级）
+
+- **K1（高）：knowledge_graph 4 处 except 块引用未定义 logger。** `_ensure_tables` / `_load_from_db` / 实体与关系写入路径的 `except sqlite3.OperationalError` 处理块全部调用 `logger.warning(...)`，但模块从未定义 logger——一旦建表/加载/写入失败，`NameError` 在 except 块内抛出并**掩盖原始 sqlite3 异常**，且该路径是静默降级设计（fail-safe），NameError 会把降级变成崩溃。修复：补模块级 `logger = logging.getLogger(__name__)`（与 storage/query/api.server 等全项目同一惯例）。契约：BrokenConn 注入 disk I/O error，无 NameError + warning 确实落日志（test_v673_fixes.TestKnowledgeGraphLogger）。
+- **K2（中）：门面 5 处方法签名字符串注解引用未导入的 RecallResult。** `search` / `search_multi` / `search_chain` / `search_two_hop` 的返回注解 `-> "RecallResult"` 引用了从未导入的名字——运行时靠函数内局部导入兜底不崩，但 `typing.get_type_hints()` 反射与静态类型检查直接 KeyError/F821。修复：顶部导入 `from .query import QueryEngine, RecallResult`（query 本就在顶部导入，无循环导入风险），`search` 方法签名补上缺失的返回注解。契约：四个方法 `get_type_hints` 全部可解析且 return 注解为 RecallResult。
+
+### Bug 修复（pyflakes F841 暴露的功能缺失/性能）
+
+- **K3（高）：隐私合规报告两个恒零字段。** `generate_compliance_report` 的 `total_access_events` 只统计 `action=="access"` 的审计——全项目没有任何 `_add_audit("access", ...)` 写入点，该字段**自诞生起恒为 0**；`denied_count` 硬编码 0 且不进返回 dict。修复：读访问统计纳入实际落审计的动作（`access`/`search`），拒绝事件改为真实统计 `acl_deny`（federated_acl.check_access 的实际写入点），并作为新字段 `denied_access_events` 输出。契约：search 后计数增长 + ACL deny 规则命中后 denied_access_events ≥ 1（test_v673_fixes.TestComplianceReport）。
+- **K4（中）：drama_binge 门面 did 归一后误传原值。** 归一化 `did = drama_id[:64] ...` 计算后传给 storage 的却是 `drama_id` 原值——与 list_lines_by_character / character_profile / drama_detail_stats 等全部兄弟方法模式相悖，超长 id / 非 str 边界行为偏离。修复：传 `did`。契约：None/非 str/超长 id 三种入参门面结果与直连 storage 等价（test_v673_fixes.TestDramaBingeFacade）。
+- **K5（中）：检索阈值放宽降级不可观测。** v6.6.1「全候选弱相关放宽入榜线」的 `threshold_relaxed` 赋值后从未被读取（只留 debug 日志）——调用方拿到的 RecallResult 与正常检索无从区分，弱相关结果（~0.15 分）看起来像正常命中。修复：放宽触发时 `strategy_used` 追加 `+relaxed` 标注，与 `chain:`/`multi:` 系列同一可观测性契约。契约：弱相关场景 strategy_used 含 relaxed 且宁给弱相关不给空；正常命中不误标（test_v673_fixes.TestThresholdRelaxedAnnotation）。
+- **K6（性能）：vector_search 逐条解密结果从未消费。** 每条向量命中都执行 `decrypt_content()` 但结果赋给 `content_text` 后丢弃——加密库下每轮检索白做 top_k×3 次 AES-GCM 解密。修复：删除无效解密，entry 保持密文态返回（docstring 未承诺明文；唯一消费方 query.search 融合阶段只读 entry.id/score，chunk 构造时自行按需解密——v5.6.2 既有逻辑）。契约：返回结构与 strategy 字段保持（test_v673_fixes.TestVectorSearchNoDoubleDecrypt）。
+
+### 代码卫生（死代码清偿，均经人工复核非行为变更）
+
+- outcome_learning：`old_outcome` 死变量清理，`importance_before` 对外契约字段保持（test_v673_fixes.TestOutcomeLearningContract 钉住）。
+- memory_compressor：删除被实例方法同名覆盖的静态方法 `_idx_to_term`（类体顺序求值下前者不可达，唯一调用点走单参版本）。
+- storage/knowledge_graph/mindforge/query/evolution/share_conflict：15 处死赋值清理（evolve_memories 衰减配置死变量、import_json 的 new_id 死表达式、review_schedule 的 next_review 纯浪费计算、多起解包/统计死变量等），每处留注释说明为何删除。
+- CLI：7 处无占位 f-string 去 f 前缀、3 处循环体内重复 `from datetime import datetime` 上提循环外。
+- 保留项如实记录：`migrate_to_latest` 的 `current` 为未来迁移脚本占位（注释明确）；CLI argparse 的 `p_*` 子命令变量为风格噪音非缺陷，不动。
+
+### 安全复核（bandit 中高危逐条定性，全部不动）
+
+- B104（cli serve 绑 0.0.0.0）：告警点恰是**阻止**绑 0.0.0.0 的 SSRF 防护代码，误报。
+- B314（ElementTree fromstring）：已有 DOCTYPE/ENTITY 预检 + Python 3.12 expat 默认禁外部实体，防护完备。
+- B608 ×2（indexer/query）：FTS5 MATCH 实为参数化（拼接串是参数值且双引号已转义）、`",".join("?"*n)` 为标准占位符模式，均误报。
+- B310 ×5（urllib urlopen）：出站目标为用户自配的 OpenAI 兼容 api_base 与文档站 URL，标准 REST client 模式，非不可信输入。
+- B615（HF load_dataset 无 revision）：bench 的 `load_dataset` 为本地数据集加载器（smoke 内置 / locomo 自备本地文件），与 huggingface hub 同名不同物，彻底误报。
+
+### 诚实边界
+
+- 本版修复全部来自静态分析暴露 + 人工复核，无新增功能面；K1/K3 属「从未正确工作过的路径」——修复后行为与设计意图对齐，无既有用户数据兼容风险（合规报告新增字段为纯增量）。
+- pyflakes 余量：`bench/cli.py` 等处 unused import 为文档化常驻（`typing.Any` 预留接口），未在本版强清。
+
+### Tests
+
+- 新增 `tests/test_v673_fixes.py`：15 项契约（K1 logger 三态 / K2 注解解析 ×4 / K3 合规报告 ×2 / K4 did 归一 ×2 / K5 relaxed 标注 ×2 / K6 向量结果结构 / K7 outcome 契约）。
+- 全量 **1547 项**（1545 passed + 2 skipped，0 failed；2 项 skip 为设计内环境条件跳过），2026-11-22 实测，91 个测试文件分 4 批全绿。
+- bandit -lll 门禁档维持 0 High；`scripts/release.py bump 6.7.3 --count 1547` 预检全绿。
+
 ## [6.7.2] - 2026-11-21
 
 开发/构建依赖维护版：清偿全部 4 个开放依赖升级 Issues（#19 / #18 / #16 / #5），运行时依赖零变更（`cryptography==50.0.2` 锁定不动）。另随版发布 v6.7.1 tag 后的 Windows 3.12 CI 挂死取证补丁（pytest-timeout 180s 强制 fail 守护，3de69ff）。全量 1532 项测试通过（1530 passed + 2 skipped，0 failed，与 v6.7.1 基线完全一致）。

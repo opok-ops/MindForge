@@ -8959,8 +8959,8 @@ def cmd_random(args):
         return 0
 
     print(c(f"\n🎲 随机记忆闪卡（共 {len(entries)} 张）:", "cyan"))
+    from datetime import datetime  # v6.7.3：上提循环外（每轮 import 为无效重复）
     for idx, entry in enumerate(entries, 1):
-        from datetime import datetime
 
         created = datetime.fromtimestamp(entry.created_at).strftime("%Y-%m-%d")
         starred = "⭐" if entry.starred else "  "
@@ -9081,7 +9081,7 @@ def cmd_rekey(args):
     is_current = key_params.to_dict() == _KDFParams().to_dict()
     status = c("✅ 已是最新", "green") if is_current else c("⚠️  低于当前推荐", "yellow")
     print(f"  状态:            {status}")
-    print(f"  推荐算法:        scrypt (N=65,536 r=8 p=1, 64 MiB 内存墙, v6.3.1+)")
+    print("  推荐算法:        scrypt (N=65,536 r=8 p=1, 64 MiB 内存墙, v6.3.1+)")
     print()
 
     # 获取旧密码（P2 #20 修复：环境变量优先，防命令行参数泄露）
@@ -9132,8 +9132,8 @@ def cmd_rekey(args):
         print()
         print(c("⚠️  此操作将：", "yellow"))
         print(f"  1. 生成新的加密密钥（{target_desc}）")
-        print(f"  2. 重加密所有加密记忆（事务保障，失败自动回滚）")
-        print(f"  3. 备份旧密钥文件到 .key.bak")
+        print("  2. 重加密所有加密记忆（事务保障，失败自动回滚）")
+        print("  3. 备份旧密钥文件到 .key.bak")
         print()
         print(c(f"{COLORS['bold']}建议操作前先备份数据库！{COLORS['reset']}", "yellow"))
         try:
@@ -9197,7 +9197,7 @@ def cmd_rekey(args):
     new_algo = result.get("new_algorithm", "scrypt")
     if new_algo == "scrypt":
         print(f"  新 KDF:          scrypt N={result['new_iterations']:,} r=8 p=1")
-        print(f"  安全提升:        PBKDF2 → scrypt（64 MiB 内存墙，抗 GPU 并行破解）")
+        print("  安全提升:        PBKDF2 → scrypt（64 MiB 内存墙，抗 GPU 并行破解）")
     else:
         print(f"  新 KDF:          PBKDF2-SHA256 {result['new_iterations']:,} iter")
         improvement = (
@@ -9221,7 +9221,7 @@ def cmd_backup(args):
 
     print(
         c(
-            f"\n💾 创建记忆库备份...",
+            "\n💾 创建记忆库备份...",
             "cyan",
         )
     )
@@ -9803,7 +9803,7 @@ def cmd_gc(args):
     print(f"  归档候选:      {ad['candidates']}")
     print(f"  受保护跳过:    {ad['protected']}")
     if dry:
-        print(f"  实际归档:      0 (dry-run)")
+        print("  实际归档:      0 (dry-run)")
     else:
         print(f"  实际归档:      {ad['archived']}")
     print()
@@ -9811,7 +9811,7 @@ def cmd_gc(args):
     pa = report["purge_old_archives"]
     print(c("[4/4] 过期归档清除", "yellow"))
     if pa.get("skipped"):
-        print(f"  状态:          已跳过（--skip-purge）")
+        print("  状态:          已跳过（--skip-purge）")
     elif dry:
         print(f"  待清除:        {pa.get('to_purge', 0)} 条")
     else:
@@ -10023,8 +10023,8 @@ def cmd_search_history(args):
         cm.close()
         return 0
 
+    from datetime import datetime  # v6.7.3：上提循环外
     for i, item in enumerate(history, 1):
-        from datetime import datetime
 
         last_used = datetime.fromtimestamp(item["last_used"]).strftime("%Y-%m-%d %H:%M")
         print(f' {i}. "{item["query"]}"  ({item["count"]}次, 最近: {last_used})')
@@ -10167,8 +10167,8 @@ def cmd_db_backups(args):
         cm.close()
         return 0
 
+    from datetime import datetime  # v6.7.3：上提循环外
     for i, backup in enumerate(backups, 1):
-        from datetime import datetime
 
         created = datetime.fromtimestamp(backup["created_at"]).strftime(
             "%Y-%m-%d %H:%M:%S"

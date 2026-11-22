@@ -162,9 +162,10 @@ class MemoryEvolution:
             current_strength = self.forgetting_curve.calculate_strength(
                 entry.strength, elapsed_hours, entry.importance
             )
-            next_review = self.forgetting_curve.next_review_time(
-                current_strength, 0.6, entry.importance
-            )
+            # v6.7.3 清理：next_review 计算结果从未被消费（返回值契约
+            # 一直是 (entry, urgency) 二元组，review 队列按 urgency 排序
+            # 截断）。去掉这次纯浪费的 per-entry 计算；若未来要把建议
+            # 复习时间带出，应改返回值契约并同步调用方。
             urgency = 1.0 - current_strength
             if urgency > 0.3:
                 schedule.append((entry, urgency))

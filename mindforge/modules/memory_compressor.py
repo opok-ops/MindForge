@@ -551,16 +551,10 @@ class MemoryCompressor:
         if not self.index._fitted and self.index._doc_texts:
             self.index._fit_vectorizer()
 
-    @staticmethod
-    def _idx_to_term(idx: int, vectorizer=None):
-        """TFIDFVectorizer 反向查找：从 vocab 索引取词"""
-        if vectorizer is None:
-            return None
-        for term, i in vectorizer.vocab.items():
-            if i == idx:
-                return term
-        return None
-
+    # v6.7.3 清理：删除静态方法版 _idx_to_term(idx, vectorizer)——
+    # 类体内紧随其后的实例方法同名定义将其完全覆盖（Python 类体
+    # 顺序求值，前者不可达），唯一调用点（compress 主路径）走的
+    # 始终是实例方法单参版本。
     def _idx_to_term(self, idx: int) -> Optional[str]:
         """Instance-level reverse lookup using self.index.vectorizer"""
         for term, i in self.index.vectorizer.vocab.items():

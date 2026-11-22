@@ -773,7 +773,8 @@ class QueryEngine:
         start_ids = {eid for eid, _ in matched}
         frontier = {eid: (0.55, 1) for eid in start_ids}
         visited = set(start_ids)
-        collected_rel_ids: set = set()
+        # v6.7.3 清理：collected_rel_ids 定义后从未被读写（pyflakes F841
+        # 死变量），v6.6.3 引入图路径感知时的残留，删除。
         # v6.6.3（检索增强 · 图路径感知）：query 命中 ≥2 实体时尝试
         # 找实体对最短路径；路径上的桥接记忆加权 0.65（高于普通 1 跳
         # 0.55、低于四路典型命中，仍走补位语义不挤主排序）——
@@ -1245,6 +1246,13 @@ class QueryEngine:
                 _six_used.add("temporal")
         if _six_used:
             strategy_used = strategy_used + "+" + "+".join(sorted(_six_used))
+        # v6.7.3 修复：threshold_relaxed 此前赋值后从未被读取（pyflakes
+        # F841 暴露的功能缺失）——v6.6.1 的「全候选弱相关放宽入榜线」
+        # 降级只留了 debug 日志，调用方拿到的 RecallResult 与正常检索
+        # 无从区分，弱相关结果（~0.15 分）看起来像正常命中。如实标注
+        # 到 strategy_used，与 chain:/multi: 系列同一可观测性契约。
+        if threshold_relaxed:
+            strategy_used = strategy_used + "+relaxed"
 
         # v5.7.0 P2：记录搜索历史（审计写入失败不阻断主路径）
         if _record_search:

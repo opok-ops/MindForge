@@ -4,6 +4,7 @@ MindForge v5.0 类型定义
 
 from enum import Enum
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import List, Optional, Dict, Any
 
 
@@ -85,7 +86,11 @@ class MemoryLayer(Enum):
 class MemoryConfig:
     """记忆系统配置"""
     db_path: str = "./data/memory.db"
-    key_file: str = "./data/.key"
+    # v6.7.4 环境事故根治：旧默认 "./data/.key" 依赖 cwd——db 在临时目录而
+    # key 落进 cwd/data 的错位曾致本地 8 例 CLI 测试误判加密态（CHANGELOG
+    # v6.7.4 环境事故小节）。None = 未显式指定，__post_init__ 锚定 db_path
+    # 同目录 ".key"；显式传参者（含旧值 "./data/.key"）行为完全不变。
+    key_file: Optional[str] = None
     encrypted: bool = True
     default_privacy: PrivacyLevel = PrivacyLevel.INTERNAL
     default_importance: Importance = Importance.MEDIUM
@@ -106,6 +111,13 @@ class MemoryConfig:
     webhooks: Optional[List[Dict[str, Any]]] = None
     webhook_secret: str = ""
     event_bus_enabled: bool = True
+
+    def __post_init__(self):
+        # v6.7.4 环境事故根治：key_file 未显式指定时锚定 db_path 同目录。
+        # 键文件与库文件同处是加密库的合理默认（错位会导致「key 找得到、
+        # 库换位置就解不开」的 cwd 陷阱）；显式传参者行为不变。
+        if self.key_file is None:
+            self.key_file = str(Path(self.db_path).parent / ".key")
 
 
 class DramaGenre(Enum):

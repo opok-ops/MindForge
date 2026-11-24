@@ -29,6 +29,9 @@ from .encryption import (
     SecurityError,
     init_engine as _init_engine,
     get_key_params,
+    # v6.7.4 恢复：PBKDF2_ITERATIONS_CURRENT 在 rekey 相关路径真实使用
+    # （legacy 密钥文件验证构造 KDFParams）——pyflakes 原告警是 598 行
+    # 局部冗余 redefinition（遮蔽顶层且局部未用），顶层导入本身合法。
     PBKDF2_ITERATIONS_CURRENT,
 )
 # v6.6.2（C9）：删除死 import rekey_engine——全仓无生产调用点，且
@@ -225,6 +228,20 @@ class MindForge:
         """
 
         key_file = Path(self.config.key_file)
+        # v6.7.4 兼容探测：key_file 锚定 db 同目录后，v6.7.3 及以前的老
+        # 用户 key 可能仍在旧默认位置（cwd 下 ./data/.key）。新路径不存在
+        # 而旧路径存在时，自动沿用旧路径（保证升级后老库可解密）并给出
+        # 迁移指引——只读沿用，不做静默移动（move 让用户显式决定）。
+        if not key_file.exists():
+            legacy = Path.cwd() / "data" / ".key"
+            if legacy.exists() and legacy != key_file:
+                logger.warning(
+                    "key file not found at %s (new default: alongside the db); "
+                    "falling back to legacy location %s. "
+                    "To migrate: move it to %s, or pass --key-file explicitly.",
+                    key_file, legacy, key_file)
+                self.config.key_file = str(legacy)
+                key_file = legacy
         key_file.parent.mkdir(parents=True, exist_ok=True)
 
         if not key_file.exists():
@@ -595,7 +612,7 @@ class MindForge:
         #    P1 修复：**先重加密数据库，成功后再换密钥文件和引擎**。
         #    原顺序（先换密钥再重加密）有数据丢失风险：若重加密中途崩溃，
         #    数据库事务回滚（旧密文）但密钥文件已是新的 → 重启后全量解密失败。
-        from mindforge.core.encryption import SecurityError, EncryptionEngine, PBKDF2_ITERATIONS_CURRENT
+        from mindforge.core.encryption import SecurityError, EncryptionEngine
         from mindforge.core.encryption import _set_global_engine, _verify_key_password
         from mindforge.core.encryption import KDFParams, KDF_ALGORITHM_LEGACY
         import os as _os

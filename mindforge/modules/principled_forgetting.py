@@ -18,7 +18,7 @@ MindForge v6.0.0 功能 7：有原则的遗忘（可解释）
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 _HALF_LIFE_DAYS = 30.0
 

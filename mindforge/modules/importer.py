@@ -18,11 +18,10 @@ MindForge v6.0.0 功能 1：一键导入记忆（ChatGPT / Claude 对话记录�
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 

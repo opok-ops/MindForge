@@ -12,7 +12,6 @@ MindForge v6.0.0 功能 2：记忆时间线可视化
 
 from __future__ import annotations
 
-import re
 import time
 from collections import OrderedDict
 from datetime import datetime, timedelta

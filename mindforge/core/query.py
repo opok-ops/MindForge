@@ -1304,7 +1304,7 @@ class QueryEngine:
         无坐标或组内邻居缺失时该 chunk 字段保持 None（降级安全）。
         窗口 = [seq-radius, seq+radius]（含命中轮），升序输出。
         """
-        import json as _json
+        # v6.7.4 清理：json as _json 死 import（pyflakes F401）——本函数未消费 json
         for chunk in chunks:
             if chunk.context_expansion is not None:
                 continue

@@ -16,7 +16,7 @@ MindForge v6.0.0 功能 5：按结果学习的记忆
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 _OUTCOME_IMPORTANCE_MAP = {
     "success": {"HIGH": 0, "MEDIUM": 1, "LOW": 1},    # 成功 → 上调

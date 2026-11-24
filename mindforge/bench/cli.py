@@ -18,7 +18,7 @@ import argparse
 import json
 import os
 import sys
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from mindforge.bench.backends import BACKEND_REGISTRY
 from mindforge.bench.datasets import load_dataset

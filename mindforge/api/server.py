@@ -71,7 +71,7 @@ from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 from collections import defaultdict
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 from mindforge import __version__ as MF_VERSION
 
 try:

@@ -7444,7 +7444,7 @@ class StorageEngine:
         Returns:
             写入完成的目标 Path（与入参一致）
         """
-        import hashlib
+        # v6.7.4 清理：hashlib 死 import（pyflakes F401）——拷贝路径不做哈希
         dest_path = Path(dest_path)
         tmp_path = dest_path.with_suffix(dest_path.suffix + ".tmp")
         if tmp_path.exists():
@@ -8337,6 +8337,9 @@ class StorageEngine:
         conn.commit()
 
         return {
+            # v6.7.4：current 此前为死赋值（pyflakes F841）——迁移起点
+            # 版本本就该进返回体（迁移可观测），消费化而非删除。
+            "from_version": current,
             "scripts_applied": scripts_applied,
             "duration_ms": round((_time.time() - start) * 1000, 2),
             "final_version": self._LATEST_DB_VERSION,
@@ -11820,7 +11823,7 @@ class StorageEngine:
         Returns:
             {path, size_mb, timestamp, success}
         """
-        import shutil
+        # v6.7.4 清理：shutil 死 import（pyflakes F401）——备份走纯 Path 拷贝
         # v5.4.8 安全修复：路径遍历防护
         backup_dir = _safe_path(backup_dir, allowed_exts=None)
         backup_path = Path(backup_dir)
@@ -13368,12 +13371,15 @@ class StorageEngine:
         # save_evolution 里 `to_preview[:200]` 对原始 dict 求切片抛 TypeError，
         # 该异常又被当成 error 文案返回。结果是一条内容已被改写、却又报失败的
         # 「半途失败」，且错误文案是不可读的内部异常串。改为在校验阶段直接拒绝。
-        for field, value in (("content", content), ("reason", reason),
+        # v6.7.4 清理：循环变量 field 改名 fname——此前 shadow 顶层
+        # `from dataclasses import field`（dataclass 定义在 434/453/503
+        # 行真实使用 field()），pyflakes shadowing 告警。
+        for fname, value in (("content", content), ("reason", reason),
                              ("category", category)):
             if value is not None and not isinstance(value, str):
                 return {"success": False,
                         "error": "%s 必须是字符串，收到 %s"
-                                 % (field, type(value).__name__)}
+                                 % (fname, type(value).__name__)}
         conn = self._get_conn()
         try:
             row = conn.execute(

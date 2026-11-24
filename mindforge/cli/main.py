@@ -2609,7 +2609,7 @@ def cmd_serve(args):
         import http.server
         import socketserver
         import base64 as _b64
-        import hashlib as _hl
+        # v6.7.4 清理：hashlib as _hl 死 import（pyflakes F401）
         import hmac as _hmac
         import time as _time
         import threading as _threading
@@ -3659,7 +3659,9 @@ def main(argv=None):
     # 用户级路径（~/.MindForge/data/store/memory.db），与 MCP 入口一致；
     # 仍可用 --db-path 或 MINDFORGE_DB_PATH 覆盖。
     parser.add_argument("--db-path", default=None, help="数据库路径")
-    parser.add_argument("--key-file", default="./data/.key", help="密钥文件路径")
+    # v6.7.4：默认 None 交给 MemoryConfig 锚定 db 同目录（旧默认
+    # "./data/.key" 依赖 cwd，见 CHANGELOG v6.7.4 环境事故）
+    parser.add_argument("--key-file", default=None, help="密钥文件路径（默认与数据库同目录）")
     parser.add_argument(
         "--json",
         action="store_true",
@@ -3885,10 +3887,10 @@ def main(argv=None):
     p_valid_at.add_argument("--agent", default="", help="Agent ID")
     p_valid_at.add_argument("--session", default="", help="会话 ID")
 
-    p_gdpr_report = sub.add_parser(
+    sub.add_parser(
         "gdpr-report", help="GDPR 数据合规报告（v5.7.6 新增）", parents=[json_parser]
     )
-    p_privacy_report = sub.add_parser(
+    sub.add_parser(
         "privacy-report",
         help="隐私健康体检（隐私等级分布/审计事件/加密状态，v5.9.2 新增）",
         parents=[json_parser],
@@ -3951,7 +3953,7 @@ def main(argv=None):
     p_agent_decay_boost.add_argument("--agent", default="cli", help="Agent ID")
     p_agent_decay_boost.add_argument("--session", default="cli", help="会话 ID")
 
-    p_connector_list = sub.add_parser(
+    sub.add_parser(
         "connector-list", help="列出可用数据连接器（v5.7.7 新增）"
     )
 
@@ -4028,7 +4030,7 @@ def main(argv=None):
     p_compress.add_argument("--min-cluster-size", type=int, default=3,
                             help="最小簇大小（默认 3）")
 
-    p_compress_list = sub.add_parser(
+    sub.add_parser(
         "compress-list", help="列出全部压缩簇（v6.3.5）", parents=[json_parser]
     )
 
@@ -4130,7 +4132,7 @@ def main(argv=None):
         help="分组维度（默认 category）",
     )
 
-    p_vacuum = sub.add_parser(
+    sub.add_parser(
         "vacuum", help="重建 FTS 索引 + 数据库优化（v5.0.6 新增）"
     )
 
@@ -4228,7 +4230,7 @@ def main(argv=None):
         "--purge-after-days", type=int, help="归档保留天数（覆盖策略默认值）"
     )
 
-    p_analyze = sub.add_parser("analyze", help="记忆深度分析（v5.0.8 新增）")
+    sub.add_parser("analyze", help="记忆深度分析（v5.0.8 新增）")
 
     p_import_md = sub.add_parser(
         "import-md", help="从 Markdown 导入记忆（v5.0.8 新增）"
@@ -4360,7 +4362,7 @@ def main(argv=None):
     p_rename_cat.add_argument("new", help="新分类名")
     p_rename_cat.add_argument("--force", "-f", action="store_true", help="强制确认")
 
-    p_config = sub.add_parser("config", help="查看配置（v5.1.7 新增）")
+    sub.add_parser("config", help="查看配置（v5.1.7 新增）")
 
     p_doctor = sub.add_parser("doctor", help="全面诊断数据库（v5.1.8 新增）")
     p_doctor.add_argument("--fix", action="store_true", help="自动修复可修复的问题")
@@ -4595,7 +4597,7 @@ def main(argv=None):
     p_drama_delete.add_argument("id", help="短剧 ID")
     p_drama_delete.add_argument("--force", action="store_true", help="确认删除")
 
-    p_drama_stats = sub.add_parser("drama-stats", help="短剧统计（v5.2.1 新增）")
+    sub.add_parser("drama-stats", help="短剧统计（v5.2.1 新增）")
 
     # v5.2.2 新增命令
     p_drama_recommend = sub.add_parser(
@@ -4625,7 +4627,7 @@ def main(argv=None):
     )
     p_drama_recommend.add_argument("--exclude", nargs="+", help="排除的短剧 ID")
 
-    p_drama_progress = sub.add_parser(
+    sub.add_parser(
         "drama-progress", help="观看进度统计（v5.2.2 新增）"
     )
 
@@ -5407,7 +5409,7 @@ def main(argv=None):
         "--max-nags", type=int, default=3, help="单条事项催办次数上限")
     p_follow_up_nag.add_argument("--json", action="store_true", help="输出 JSON")
 
-    p_compliance = sub.add_parser("compliance", help="合规报告")
+    sub.add_parser("compliance", help="合规报告")
 
     p_serve = sub.add_parser("serve", help="启动 Web UI 或 REST API")
     p_serve.add_argument("--port", type=int, default=8080, help="端口")
@@ -5642,7 +5644,7 @@ def main(argv=None):
     p_space_stats.add_argument("--agent", default="cli", help="Agent ID")
 
     # ===== v6.0.0 正式版：v6 端口 + 6G AI 记忆预览命令 =====
-    p_v6_status = sub.add_parser(
+    sub.add_parser(
         "v6-status", help="查看 v6 端口总览（多 Agent 协作 + 6G AI 记忆预览，正式版）"
     )
 
@@ -5676,7 +5678,7 @@ def main(argv=None):
         "--max-tokens", "-t", type=int, default=2000, help="Token 预算上限"
     )
 
-    p_preview_index = sub.add_parser(
+    sub.add_parser(
         "preview-index", help="6G 增量索引统计（写入即索引的近实时召回指标）"
     )
 
@@ -5859,7 +5861,7 @@ def main(argv=None):
         "--tags", nargs="+", default=None, help="记忆标签（参与 tag 规则匹配）"
     )
 
-    p_acl_stats = sub.add_parser("fed-acl-stats", help="联邦 ACL：统计（v5.4.2 新增）")
+    sub.add_parser("fed-acl-stats", help="联邦 ACL：统计（v5.4.2 新增）")
 
     # ===== v5.4.2 新增共享冲突命令 =====
     p_cfl_list = sub.add_parser("share-conflicts", help="共享冲突：列表（v5.4.2 新增）")
@@ -5889,7 +5891,7 @@ def main(argv=None):
     p_cfl_dismiss.add_argument("conflict_id", help="冲突 ID")
     p_cfl_dismiss.add_argument("--actor", "-a", default="", help="操作者")
 
-    p_cfl_stats = sub.add_parser(
+    sub.add_parser(
         "share-conflict-stats", help="共享冲突：统计（v5.4.2 新增）"
     )
 
@@ -6014,7 +6016,7 @@ def main(argv=None):
         "--full", action="store_true", help="全量重建（默认仅处理缺失项）"
     )
 
-    p_emb_status = sub.add_parser(
+    sub.add_parser(
         "embedding-status", help="查看嵌入向量状态（v5.4.5 新增）"
     )
 
@@ -9047,7 +9049,7 @@ def cmd_rekey(args):
     # v5.6.8 修复：原为 `from ..core.encryption import ...`——`core` 已是顶层包，
     # `..` 越界相对导入直接抛 ImportError，使 rekey 命令必然崩溃。
     # 改为与其余命令一致的绝对导入。
-    from mindforge.core.encryption import get_key_params, PBKDF2_ITERATIONS_CURRENT
+    from mindforge.core.encryption import get_key_params  # v6.7.4: PBKDF2_ITERATIONS_CURRENT 死导入移除（F401）
 
     # 先拿到配置判断加密状态
     # v5.6.8 修复：原调用 `_build_config(args)`，该函数从未定义（NameError）。
@@ -9315,7 +9317,7 @@ def cmd_backup_restore(args):
     print()
 
     # 警告：覆盖
-    import os as _os
+        # v6.7.4 清理：os as _os 死 import（pyflakes F401）——覆盖逻辑不触碰环境路径
 
     target_db = Path(db_path)
     target_key = Path(key_file) if manifest.get("encrypted") else None
@@ -9479,18 +9481,28 @@ def cmd_deploy(args):
 
     # 加密依赖
     try:
-        import cryptography  # noqa: F401
-        _add("crypto", True, "cryptography 可用（AES-256-GCM 端侧加密就绪）")
+        # v6.7.4：find_spec 探测替代 try-import——import 本身即目的的场景
+        # 用 find_spec（不执行模块代码，doctor 提速；pyflakes 静默）。
+        # ModuleNotFoundError 是 ImportError 子类，异常契约不变。
+        import importlib.util
+        if importlib.util.find_spec("cryptography") is not None:
+            _add("crypto", True, "cryptography 可用（AES-256-GCM 端侧加密就绪）")
+        else:
+            _add("crypto", False, "未安装 cryptography",
+                 "pip install mindforge-memory[full] 或 pip install cryptography")
     except ImportError:
-        _add("crypto", False, "未安装 cryptography",
+        _add("crypto", False, "cryptography 探测失败（依赖损坏）",
              "pip install mindforge-memory[full] 或 pip install cryptography")
 
     # 嵌入引擎（可选增强，缺失=降级三路检索）
     try:
-        import sentence_transformers  # noqa: F401
-        _add("embedding", True, "sentence-transformers 可用（向量路增强）")
+        if importlib.util.find_spec("sentence_transformers") is not None:
+            _add("embedding", True, "sentence-transformers 可用（向量路增强）")
+        else:
+            _add("embedding", True, "未安装（降级 TF-IDF+FTS5+fuzzy 三路检索，功能可用）",
+                 "可选：pip install sentence-transformers")
     except ImportError:
-        _add("embedding", True, "未安装（降级 TF-IDF+FTS5+fuzzy 三路检索，功能可用）",
+        _add("embedding", True, "sentence-transformers 探测失败（降级三路检索，功能可用）",
              "可选：pip install sentence-transformers")
 
     ok_all = all(c["ok"] for c in checks)

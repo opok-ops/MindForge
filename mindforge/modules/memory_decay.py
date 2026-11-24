@@ -22,7 +22,7 @@ MindForge 记忆衰减引擎
 import math
 import time
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 from enum import Enum
 
 from mindforge.core.types import MemoryLayer, Importance

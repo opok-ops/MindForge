@@ -3,6 +3,35 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.7.4] - 2026-11-24
+
+静态卫生终清版：pyflakes 残留告警 **42 → 0 全量归零**（含 doctor 探测块 find_spec 化）。40 处修复全部经人工定性——15 处 argparse 无参子命令裸调用化、20 处死 import 清偿、field shadowing 清偿、死赋值消费化；另含一次发版前全量测试暴露的环境污染事故的根因记录与根治（key_file 默认锚定 db 同目录，含老用户兼容探测）。全量 1547 项测试通过（1545 passed + 2 skipped，0 failed）。
+
+### 代码卫生（pyflakes 残留终清，均经人工复核非行为变更）
+
+- **argparse 无参子命令 parser 变量裸调用化（15 处）**：`p_analyze = sub.add_parser(...)` 等——注册必须调用但返回值从未被引用（无参子命令没有 add_argument 链），pyflakes F841。裸调用语义完全等价，CLI 注册表行为不变。
+- **死 import 全量清偿（20 处）**：typing.Tuple ×4 / Optional ×4 / Any ×2 / Dict / List 精简，json ×2 / re / shutil / hashlib ×2 / os as _os / json as _json / PBKDF2 局部冗余 redefinition 逐一删除。防误删机制：删除前对每个名字扫描全文件非 import 行引用（含字符串注解形态），借此检出 pyflakes 漏报——Any 在 memory_passport / follow_up / principled_forgetting 真实使用，避免误删。
+- **doctor 环境探测块 find_spec 化（最后 2 条告警）**：`import cryptography` / `import sentence_transformers` 的 try-import 探测改为 `importlib.util.find_spec()`——探测语义下不执行模块代码（doctor 提速：sentence_transformers 真实 import 需数秒），ModuleNotFoundError 是 ImportError 子类故异常契约不变。pyflakes 不识别 noqa 的遗留告警就此清零。
+- **storage.migrate_to_latest 的 current 消费化**：v6.7.3 如实记录为"未来迁移脚本占位"的死赋值，本版消费化——迁移起点版本 `from_version` 进返回体（迁移可观测，纯增量字段）。
+- **storage.update_evolution 的 field 循环变量改名 fname**：此前 shadow 顶层 `from dataclasses import field`（dataclass 字段定义在 434/453/503 行真实使用 field()），shadowing 告警清偿，校验行为不变。
+- **mindforge.rekey_from_password 的 PBKDF2_ITERATIONS_CURRENT 局部导入删除**：v5.7 时代局部导入遮蔽顶层同名导入且局部未用（pyflakes "redefinition of unused"）。教训如实记录：该告警语义是"局部定义冗余"而非"名字无引用"——首次修复误删顶层导入触发 F821（legacy 密钥文件验证路径真实使用），pyflakes 复扫立即暴露并恢复，顶层导入保留并补注释。
+
+### 行为变更：key_file 默认锚定数据库同目录（环境事故根治）
+
+- **MemoryConfig.key_file 默认值 `"./data/.key"` → `None`（锚定 db_path 同目录 `.key`）**：旧默认依赖 cwd，是 11-23 环境事故（见下）的根因——db 与 key 分处导致"库在临时目录、key 落进 cwd/data"的错位。新默认下键文件始终与库文件同处，跨 cwd 稳定；CLI `--key-file` 默认同步改为 None。**显式传 key_file 者（含旧值 `"./data/.key"`）行为完全不变**；encryption.py 底层 API 的函数级默认值不动（门面总是显式传参）。
+- **老用户兼容探测（升级可解密保证）**：v6.7.3 及以前从固定 cwd 运行的部署，key 可能仍在 `cwd/data/.key`。初始化守卫在新 key 路径不存在而旧默认位置存在时，自动沿用旧路径（写回 config，后续 rekey/doctor 等消费点一致）并输出迁移指引日志——只读沿用不做静默移动，move 由用户显式决定。
+- **升级注意事项**：若您此前显式传过 key_file，无任何影响；若依赖默认值，新库的 key 将建在库旁而非 cwd/data，旧库通过兼容探测自动沿用旧 key 位置。
+
+### 环境事故（发版前全量测试暴露，如实记录）
+
+- **data/.key 工作区污染**：v6.7.3 发布日（11-23 上午）加密库端到端抽查在仓库根 cwd 下运行，旧默认 `key_file="./data/.key"` 为相对路径——抽查的加密密钥文件落进仓库工作区。此后本地 CLI 类测试（v576 bitemporal / gdpr、v577 agent governance 共 8 例）读到该文件误判"加密库未提供密码"而失败。v6.7.3 发布前仅跑核心批次未跑全量故未暴露；本版全量测试暴露后清理（`rm data/.key`），8 例复绿，无数据损坏（该 key 无关联密文库）。根治见上方「行为变更」。
+
+### 诚实边界
+
+- pyflakes 全量归零（42 → 0），无保留项。剩余告警治理依赖上游 pyflakes 版本。
+- `key_file` 锚定为本版唯一行为变更（默认值场景），已含兼容探测与升级说明；显式传参者零影响。
+- `from_version` 为纯增量返回体字段；无新增契约文件（探测块 find_spec 化沿用既有 doctor 断言）。
+
 ## [6.7.3] - 2026-11-22
 
 终极修 bug 版：全仓静态审查（pyflakes F821/F841 全量清偿）+ 安全扫描逐条复核 + 死代码清理。8 处未定义名（运行时 NameError 级）与 20+ 处死赋值全部修复/清偿，bandit 中高危告警逐条人工定性（全部为误报或防护已完备）。15 项新契约（tests/test_v673_fixes.py），全量 1547 项测试通过。

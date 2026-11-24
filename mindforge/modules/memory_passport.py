@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 PASSPORT_FORMAT = "mindforge-memory-passport"
 FORMAT_VERSION = 1

@@ -244,7 +244,7 @@ def _derive_key(password: str, salt: bytes, params: KDFParams) -> bytes:
     except SecurityError:
         raise
     except Exception as exc:  # 参数非法 / OpenSSL 资源不足等
-        raise SecurityError(f"密钥派生失败（KDF 参数非法或资源不足）：{exc}")
+        raise SecurityError(f"密钥派生失败（KDF 参数非法或资源不足）：{exc}") from exc
 
 
 class SecurityError(Exception):
@@ -432,8 +432,8 @@ class EncryptionEngine:
             # salt 作为 AAD 参与解密，篡改 salt 会导致认证失败
             plaintext = self._aesgcm.decrypt(blob.nonce, blob.ciphertext, blob.salt)
             return plaintext.decode("utf-8")
-        except Exception:
-            raise SecurityError("解密失败：数据损坏或密钥不正确")
+        except Exception as exc:
+            raise SecurityError("解密失败：数据损坏或密钥不正确") from exc
 
     def hash(self, data: str) -> str:
         """计算数据哈希"""

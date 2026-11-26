@@ -3,6 +3,20 @@
 All notable changes to MindForge will be documented in this file.
 
 
+## [6.7.5] - 2026-11-25
+
+缺陷清扫维护版：本版遵循「先清空缺陷、再进入功能新增」的策略，不新增功能面。全量 1547 项测试通过（1545 passed + 2 skipped，0 failed）；pyflakes 源码包无残留，bandit `-lll` High 级 0；MCP 工具 90、REST 路由 65，docs consistency guard 94 项断言 PASS。
+
+### 修复与清理
+
+- **停用词集合重复字面量移除（indexer）**：停用词集合中 `"的"`、`"什么"` 各重复一次；集合成员与检索行为不变，仅消除静态告警（B033）与源码噪音。
+- **加密异常保留原始异常链（encryption）**：KDF 派生失败与解密失败包装为 `SecurityError` 时补 `raise ... from exc`；对外异常类型与错误消息不变，仅改善排查时的 traceback 因果链。
+
+### 审计备注（非运行时缺陷）
+
+- `pytest` 为开发/CI 工具链（非运行时依赖）：`PYSEC-2026-1845` 修复版本为 9.0.3；升级需在 CI 矩阵上先验证 `pytest-cov` / `pytest-timeout` 兼容。运行时依赖 `cryptography==50.0.2` 未变动。
+- dsh-mindforge 桥接 e2e 26 项在本地安装 MindForge CLI 后全绿；本次未改桥接协议。
+
 ## [6.7.4] - 2026-11-24
 
 静态卫生终清版：pyflakes 残留告警 **42 → 0 全量归零**（含 doctor 探测块 find_spec 化）。40 处修复全部经人工定性——15 处 argparse 无参子命令裸调用化、20 处死 import 清偿、field shadowing 清偿、死赋值消费化；另含一次发版前全量测试暴露的环境污染事故的根因记录与根治（key_file 默认锚定 db 同目录，含老用户兼容探测）。全量 1547 项测试通过（1545 passed + 2 skipped，0 failed）。
